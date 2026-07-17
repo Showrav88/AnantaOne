@@ -254,13 +254,16 @@ model SalesOrder {
 }
 
 model OrderLine {
-  id          String  @id @default(cuid())
-  orderId     String
-  productId   String
-  batchId     String
-  qty         Decimal @db.Decimal(12, 2)
-  unitPriceBdt Decimal @db.Decimal(12, 2)
-  lineTotalBdt Decimal @db.Decimal(14, 2)
+  id             String  @id @default(cuid())
+  orderId        String
+  productId      String
+  batchId        String
+  qty            Decimal @db.Decimal(12, 2)
+  /// Catalog list price at the moment of sale (reference).
+  catalogPriceBdt Decimal @db.Decimal(12, 2)
+  /// Actual unit price charged (may differ from catalog).
+  unitPriceBdt   Decimal @db.Decimal(12, 2)
+  lineTotalBdt   Decimal @db.Decimal(14, 2)
 
   order   SalesOrder      @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product         @relation(fields: [productId], references: [id])

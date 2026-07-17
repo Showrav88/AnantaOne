@@ -208,6 +208,41 @@ ownerSellRouter.get("/orders/:id", async (req, res) => {
   res.json({ ok: true, order: serializeOrder(order) });
 });
 
+ownerSellRouter.get("/orders/:id/invoice", async (req, res) => {
+  const order = await prisma.salesOrder.findFirst({
+    where: { id: String(req.params.id), tenantId: tid(req) },
+    include: {
+      source: true,
+      status: true,
+      buyer: true,
+      lines: { include: { product: true, batch: true } },
+    },
+  });
+  if (!order) {
+    res.status(404).json({ ok: false, message: "Order not found" });
+    return;
+  }
+
+  const company = await prisma.company.findUniqueOrThrow({
+    where: { id: tid(req) },
+  });
+
+  const serialized = serializeOrder(order);
+  res.json({
+    ok: true,
+    invoice: {
+      ...serialized,
+      company: {
+        name: company.name,
+        phone: company.phone,
+        address: company.address,
+        tagline: company.tagline,
+      },
+      printedAt: new Date().toISOString(),
+    },
+  });
+});
+
 const sellSchema = z.object({
   sourceCode: z
     .enum(["PHONE", "ONLINE", "WALK_IN", "COUNTER"])

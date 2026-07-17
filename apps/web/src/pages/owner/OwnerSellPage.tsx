@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import { SalesInvoiceView } from "../../components/SalesInvoiceView";
 import {
   api,
   type Product,
   type ProductionBatch,
+  type SalesInvoice,
   type SalesOrder,
 } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
@@ -17,6 +19,7 @@ type CartLine = {
   productLabel: string;
   sku: string;
   qty: string;
+  catalogPriceBdt: number;
   unitPriceBdt: string;
   batchId: string;
 };
@@ -40,9 +43,10 @@ export function OwnerSellPage({ locale }: Props) {
   const [note, setNote] = useState("");
   const [pickProductId, setPickProductId] = useState("");
   const [pickQty, setPickQty] = useState("1");
+  const [pickPrice, setPickPrice] = useState("");
   const [pickBatchId, setPickBatchId] = useState("");
   const [lines, setLines] = useState<CartLine[]>([]);
-  const [lastOrder, setLastOrder] = useState<SalesOrder | null>(null);
+  const [invoice, setInvoice] = useState<SalesInvoice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -60,6 +64,7 @@ export function OwnerSellPage({ locale }: Props) {
     setOrders(orderRes.orders.slice(0, 12));
     if (!pickProductId && prod.products[0]) {
       setPickProductId(prod.products[0].id);
+      setPickPrice(String(prod.products[0].priceBdt));
     }
   }
 
@@ -70,6 +75,8 @@ export function OwnerSellPage({ locale }: Props) {
       );
     });
   }, []);
+
+  const selectedProduct = products.find((p) => p.id === pickProductId);
 
   const productBatches = useMemo(
     () =>
@@ -83,6 +90,12 @@ export function OwnerSellPage({ locale }: Props) {
     if (productBatches[0]) setPickBatchId(productBatches[0].id);
     else setPickBatchId("");
   }, [pickProductId, productBatches]);
+
+  useEffect(() => {
+    if (selectedProduct) {
+      setPickPrice(String(selectedProduct.priceBdt));
+    }
+  }, [pickProductId]);
 
   const total = lines.reduce(
     (s, l) => s + Number(l.qty || 0) * Number(l.unitPriceBdt || 0),
@@ -99,6 +112,11 @@ export function OwnerSellPage({ locale }: Props) {
     const qty = Number(pickQty);
     if (!(qty > 0)) {
       setError(t.owner.sellNeedQty);
+      return;
+    }
+    const sellPrice = Number(pickPrice);
+    if (!(sellPrice >= 0)) {
+      setError(t.owner.sellNeedPrice);
       return;
     }
     const batch =
@@ -120,7 +138,8 @@ export function OwnerSellPage({ locale }: Props) {
           locale === "bn" && product.nameBn ? product.nameBn : product.name,
         sku: product.sku,
         qty: String(qty),
-        unitPriceBdt: String(product.priceBdt),
+        catalogPriceBdt: product.priceBdt,
+        unitPriceBdt: String(sellPrice),
         batchId: batch.id,
       },
     ]);
@@ -150,7 +169,8 @@ export function OwnerSellPage({ locale }: Props) {
           batchId: l.batchId || null,
         })),
       });
-      setLastOrder(res.order);
+      const inv = await api.owner.orderInvoice(res.order.id);
+      setInvoice(inv.invoice);
       setOkMsg(
         `${t.owner.sellConfirmed} ৳${res.order.totalBdt.toLocaleString()}`,
       );
@@ -172,22 +192,52 @@ export function OwnerSellPage({ locale }: Props) {
 
   return (
     <div className="owner-page">
-      <header className="owner-header">
+      <header className="owner-header no-print">
         <div>
           <p className="eyebrow">{t.owner.navSell}</p>
           <h1>{t.owner.sellTitle}</h1>
           <p className="muted">{t.owner.sellHint}</p>
+          <p className="muted tiny">{t.owner.priceOverrideHint}</p>
         </div>
         <div className="header-links">
+          <Link to="/owner/history">{t.owner.navHistory}</Link>
           <Link to="/owner/batches">{t.owner.navBatches}</Link>
           <Link to="/owner/tags">{t.owner.navTags}</Link>
         </div>
       </header>
 
-      {error ? <p className="error-banner">{error}</p> : null}
-      {okMsg ? <p className="ok-banner">{okMsg}</p> : null}
+      {error ? <p className="error-banner no-print">{error}</p> : null}
+      {okMsg ? <p className="ok-banner no-print">{okMsg}</p> : null}
 
-      <form className="sell-layout" onSubmit={onConfirm}>
+      {invoice ? (
+        <div className="post-sell-invoice">
+          <div className="invoice-actions no-print">
+            <button
+              type="button"
+              className="cta"
+              onClick={() => window.print()}
+            >
+              {t.owner.printInvoice}
+            </button>
+            <Link
+              className="cta secondary"
+              to={`/owner/history?order=${invoice.id}`}
+            >
+              {t.owner.openHistory}
+            </Link>
+            <button
+              type="button"
+              className="linkish"
+              onClick={() => setInvoice(null)}
+            >
+              {t.owner.newSale}
+            </button>
+          </div>
+          <SalesInvoiceView locale={locale} invoice={invoice} />
+        </div>
+      ) : null}
+
+      <form className="sell-layout no-print" onSubmit={onConfirm}>
         <section className="sell-panel">
           <h2>{t.owner.sellOrderMeta}</h2>
           <div className="owner-form compact">
@@ -196,9 +246,7 @@ export function OwnerSellPage({ locale }: Props) {
               <select
                 value={sourceCode}
                 onChange={(e) =>
-                  setSourceCode(
-                    e.target.value as typeof sourceCode,
-                  )
+                  setSourceCode(e.target.value as typeof sourceCode)
                 }
               >
                 <option value="COUNTER">{t.owner.sourceCounter}</option>
@@ -241,7 +289,7 @@ export function OwnerSellPage({ locale }: Props) {
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
                     {locale === "bn" && p.nameBn ? p.nameBn : p.name} —{" "}
-                    {p.sku} (৳{p.priceBdt})
+                    {p.sku} ({t.owner.catalogShort} ৳{p.priceBdt})
                   </option>
                 ))}
               </select>
@@ -276,6 +324,21 @@ export function OwnerSellPage({ locale }: Props) {
                 onChange={(e) => setPickQty(e.target.value)}
               />
             </label>
+            <label>
+              {t.owner.soldPrice}
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={pickPrice}
+                onChange={(e) => setPickPrice(e.target.value)}
+              />
+              {selectedProduct ? (
+                <span className="muted tiny">
+                  {t.owner.catalogPrice}: ৳{selectedProduct.priceBdt}
+                </span>
+              ) : null}
+            </label>
             <button
               type="button"
               className="cta"
@@ -292,7 +355,8 @@ export function OwnerSellPage({ locale }: Props) {
                 <tr>
                   <th>{t.owner.fieldProduct}</th>
                   <th>{t.owner.fieldQty}</th>
-                  <th>{t.owner.fieldPrice}</th>
+                  <th>{t.owner.catalogPrice}</th>
+                  <th>{t.owner.soldPrice}</th>
                   <th>{t.owner.fieldLineTotal}</th>
                   <th />
                 </tr>
@@ -300,70 +364,77 @@ export function OwnerSellPage({ locale }: Props) {
               <tbody>
                 {lines.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="muted">
+                    <td colSpan={6} className="muted">
                       {t.owner.cartEmpty}
                     </td>
                   </tr>
                 ) : (
-                  lines.map((l) => (
-                    <tr key={l.key}>
-                      <td>
-                        <strong>{l.productLabel}</strong>
-                        <div className="muted tiny">{l.sku}</div>
-                      </td>
-                      <td>
-                        <input
-                          className="qty-input"
-                          type="number"
-                          min={0.01}
-                          step="0.01"
-                          value={l.qty}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((x) =>
-                                x.key === l.key
-                                  ? { ...x, qty: e.target.value }
-                                  : x,
-                              ),
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="qty-input"
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={l.unitPriceBdt}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((x) =>
-                                x.key === l.key
-                                  ? { ...x, unitPriceBdt: e.target.value }
-                                  : x,
-                              ),
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        ৳
-                        {(
-                          Number(l.qty || 0) * Number(l.unitPriceBdt || 0)
-                        ).toLocaleString()}
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="linkish"
-                          onClick={() => removeLine(l.key)}
-                        >
-                          {t.owner.removeLine}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  lines.map((l) => {
+                    const sold = Number(l.unitPriceBdt || 0);
+                    const overridden = Math.abs(sold - l.catalogPriceBdt) > 0.0001;
+                    return (
+                      <tr key={l.key}>
+                        <td>
+                          <strong>{l.productLabel}</strong>
+                          <div className="muted tiny">{l.sku}</div>
+                        </td>
+                        <td>
+                          <input
+                            className="qty-input"
+                            type="number"
+                            min={0.01}
+                            step="0.01"
+                            value={l.qty}
+                            onChange={(e) =>
+                              setLines((prev) =>
+                                prev.map((x) =>
+                                  x.key === l.key
+                                    ? { ...x, qty: e.target.value }
+                                    : x,
+                                ),
+                              )
+                            }
+                          />
+                        </td>
+                        <td>৳{l.catalogPriceBdt.toLocaleString()}</td>
+                        <td>
+                          <input
+                            className="qty-input"
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={l.unitPriceBdt}
+                            onChange={(e) =>
+                              setLines((prev) =>
+                                prev.map((x) =>
+                                  x.key === l.key
+                                    ? { ...x, unitPriceBdt: e.target.value }
+                                    : x,
+                                ),
+                              )
+                            }
+                          />
+                          {overridden ? (
+                            <div className="muted tiny price-override">
+                              {t.owner.overridden}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td>
+                          ৳{(Number(l.qty || 0) * sold).toLocaleString()}
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="linkish"
+                            onClick={() => removeLine(l.key)}
+                          >
+                            {t.owner.removeLine}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -371,7 +442,11 @@ export function OwnerSellPage({ locale }: Props) {
 
           <div className="sell-footer">
             <p className="wallet-amount">৳{total.toLocaleString()}</p>
-            <button type="submit" className="cta" disabled={pending || !lines.length}>
+            <button
+              type="submit"
+              className="cta"
+              disabled={pending || !lines.length}
+            >
               {t.owner.confirmSell}
             </button>
           </div>
@@ -385,32 +460,19 @@ export function OwnerSellPage({ locale }: Props) {
             ) : (
               orders.map((o) => (
                 <li key={o.id}>
-                  <span>
-                    {o.buyerName ?? t.owner.walkInBuyer}
-                    <div className="muted tiny">
-                      {o.source?.code} · {o.lines.length} SKU
-                    </div>
-                  </span>
-                  <span>৳{o.totalBdt.toLocaleString()}</span>
+                  <Link to={`/owner/history?order=${o.id}`}>
+                    <span>
+                      {o.buyerName ?? t.owner.walkInBuyer}
+                      <div className="muted tiny">
+                        {o.source?.code} · {o.lines.length} SKU
+                      </div>
+                    </span>
+                    <span>৳{o.totalBdt.toLocaleString()}</span>
+                  </Link>
                 </li>
               ))
             )}
           </ul>
-
-          {lastOrder ? (
-            <div className="last-order">
-              <h2>{t.owner.lastSale}</h2>
-              <p className="muted">
-                {lastOrder.lines
-                  .map(
-                    (l) =>
-                      `${l.product?.sku ?? "?"}×${l.qty} (${l.batch?.batchCode ?? ""})`,
-                  )
-                  .join(", ")}
-              </p>
-              <Link to="/owner/tags">{t.owner.printTagsHint}</Link>
-            </div>
-          ) : null}
         </aside>
       </form>
     </div>

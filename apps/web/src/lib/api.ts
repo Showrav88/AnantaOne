@@ -187,8 +187,10 @@ export type SalesOrderLine = {
   productId: string;
   batchId: string;
   qty: number;
+  catalogPriceBdt: number;
   unitPriceBdt: number;
   lineTotalBdt: number;
+  priceOverridden?: boolean;
   product: {
     name: string;
     nameBn: string | null;
@@ -204,6 +206,7 @@ export type SalesOrderLine = {
 
 export type SalesOrder = {
   id: string;
+  invoiceNo?: string;
   buyerId: string | null;
   buyerName: string | null;
   totalBdt: number;
@@ -213,6 +216,17 @@ export type SalesOrder = {
   source: { code: string; nameEn: string; nameBn: string } | null;
   status: { code: string; nameEn: string; nameBn: string } | null;
   lines: SalesOrderLine[];
+};
+
+export type SalesInvoice = SalesOrder & {
+  company: {
+    name: string;
+    phone: string | null;
+    address: string | null;
+    tagline: string | null;
+  };
+  buyer: { id: string; shopName: string; phone: string } | null;
+  printedAt?: string;
 };
 
 export type TagTemplate = {
@@ -547,6 +561,13 @@ export const api = {
     orders: () =>
       getJson<{ ok: boolean; orders: SalesOrder[] }>(
         "/api/v1/owner/orders",
+        2,
+        undefined,
+        true,
+      ),
+    orderInvoice: (id: string) =>
+      getJson<{ ok: boolean; invoice: SalesInvoice }>(
+        `/api/v1/owner/orders/${id}/invoice`,
         2,
         undefined,
         true,

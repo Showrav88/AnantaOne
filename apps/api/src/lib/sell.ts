@@ -66,6 +66,7 @@ export function serializeOrder(order: {
     productId: string;
     batchId: string;
     qty: { toString(): string } | number | string;
+    catalogPriceBdt?: { toString(): string } | number | string;
     unitPriceBdt: { toString(): string } | number | string;
     lineTotalBdt: { toString(): string } | number | string;
     product?: {
@@ -83,6 +84,7 @@ export function serializeOrder(order: {
 }) {
   return {
     id: order.id,
+    invoiceNo: `INV-${order.orderedAt.toISOString().slice(0, 10).replace(/-/g, "")}-${order.id.slice(-6).toUpperCase()}`,
     tenantId: order.tenantId,
     buyerId: order.buyerId,
     buyerName: order.buyerName,
@@ -112,29 +114,36 @@ export function serializeOrder(order: {
           phone: order.buyer.phone,
         }
       : null,
-    lines: (order.lines ?? []).map((line) => ({
-      id: line.id,
-      productId: line.productId,
-      batchId: line.batchId,
-      qty: Number(line.qty),
-      unitPriceBdt: Number(line.unitPriceBdt),
-      lineTotalBdt: Number(line.lineTotalBdt),
-      product: line.product
-        ? {
-            name: line.product.name,
-            nameBn: line.product.nameBn,
-            sku: line.product.sku,
-            description: line.product.description,
-          }
-        : null,
-      batch: line.batch
-        ? {
-            batchCode: line.batch.batchCode,
-            manufacturedAt: line.batch.manufacturedAt,
-            expiresAt: line.batch.expiresAt,
-          }
-        : null,
-    })),
+    lines: (order.lines ?? []).map((line) => {
+      const sold = Number(line.unitPriceBdt);
+      const catalog =
+        line.catalogPriceBdt != null ? Number(line.catalogPriceBdt) : sold;
+      return {
+        id: line.id,
+        productId: line.productId,
+        batchId: line.batchId,
+        qty: Number(line.qty),
+        catalogPriceBdt: catalog,
+        unitPriceBdt: sold,
+        lineTotalBdt: Number(line.lineTotalBdt),
+        priceOverridden: Math.abs(catalog - sold) > 0.0001,
+        product: line.product
+          ? {
+              name: line.product.name,
+              nameBn: line.product.nameBn,
+              sku: line.product.sku,
+              description: line.product.description,
+            }
+          : null,
+        batch: line.batch
+          ? {
+              batchCode: line.batch.batchCode,
+              manufacturedAt: line.batch.manufacturedAt,
+              expiresAt: line.batch.expiresAt,
+            }
+          : null,
+      };
+    }),
   };
 }
 
@@ -229,6 +238,7 @@ export async function confirmSell(input: ConfirmSellInput) {
       productId: string;
       batchId: string;
       qty: number;
+      catalogPriceBdt: number;
       unitPriceBdt: number;
       lineTotalBdt: number;
     }> = [];
@@ -252,10 +262,9 @@ export async function confirmSell(input: ConfirmSellInput) {
         line.batchId,
       );
 
+      const catalogPrice = Number(product.priceBdt);
       const unitPrice =
-        line.unitPriceBdt != null
-          ? line.unitPriceBdt
-          : Number(product.priceBdt);
+        line.unitPriceBdt != null ? line.unitPriceBdt : catalogPrice;
 
       await tx.productionBatch.update({
         where: { id: batch.id },
@@ -273,6 +282,7 @@ export async function confirmSell(input: ConfirmSellInput) {
         productId: product.id,
         batchId: batch.id,
         qty: line.qty,
+        catalogPriceBdt: catalogPrice,
         unitPriceBdt: unitPrice,
         lineTotalBdt: unitPrice * line.qty,
       });
@@ -296,6 +306,7 @@ export async function confirmSell(input: ConfirmSellInput) {
             productId: l.productId,
             batchId: l.batchId,
             qty: l.qty,
+            catalogPriceBdt: l.catalogPriceBdt,
             unitPriceBdt: l.unitPriceBdt,
             lineTotalBdt: l.lineTotalBdt,
           })),

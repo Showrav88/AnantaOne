@@ -16,6 +16,7 @@ import { OwnerPaymentsPage } from "./pages/owner/OwnerPaymentsPage";
 import { OwnerSellPage } from "./pages/owner/OwnerSellPage";
 import { OwnerBatchesPage } from "./pages/owner/OwnerBatchesPage";
 import { OwnerTagsPage } from "./pages/owner/OwnerTagsPage";
+import { OwnerSalesHistoryPage } from "./pages/owner/OwnerSalesHistoryPage";
 import { PublicTagPage } from "./pages/PublicTagPage";
 import {
   AdminCompaniesPage,
@@ -61,6 +62,10 @@ export function App() {
           <Route index element={<OwnerDashboardPage locale={locale} />} />
           <Route path="company" element={<OwnerCompanyPage locale={locale} />} />
           <Route path="sell" element={<OwnerSellPage locale={locale} />} />
+          <Route
+            path="history"
+            element={<OwnerSalesHistoryPage locale={locale} />}
+          />
           <Route path="batches" element={<OwnerBatchesPage locale={locale} />} />
           <Route path="tags" element={<OwnerTagsPage locale={locale} />} />
           <Route path="staff" element={<OwnerStaffPage locale={locale} />} />
