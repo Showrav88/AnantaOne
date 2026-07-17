@@ -28,7 +28,7 @@ npm run dev
 
 ## Cloud + local workflow
 
-Use **GitHub as the single source of truth**. Work on cloud (Cursor Cloud Agent) and local at the same time by syncing through branches.
+Use **GitHub as the single source of truth**. Work from any location (cloud VMs, remote agents, or local machines) by syncing through branches. The **cloud-dev** lane is fully cloud-based: remote-first, push often, continue the same branch from another environment.
 
 ### Branch strategy
 
@@ -36,16 +36,18 @@ Use **GitHub as the single source of truth**. Work on cloud (Cursor Cloud Agent)
 |---|---|
 | `main` | Stable, deployable code |
 | `develop` | Daily integration branch |
+| `cloud-dev` | Full cloud-based working lane (multi-location / remote-first) |
 | `feature/*` | One feature per branch (e.g. `feature/auth`, `feature/orders`) |
 
 ### Daily rules
 
-1. **Pull before you start** — `git pull origin develop`
-2. **Work on a feature branch** — never commit directly to `main`
-3. **Push often** — keeps cloud and local in sync
-4. **Never commit `.env`** — secrets stay local / cloud env vars only
+1. **Pull before you start** — `git pull origin develop` (or your active cloud-dev / feature branch)
+2. **Work on a dedicated branch** — never commit directly to `main`
+3. **Push often** — keeps every location in sync
+4. **Never commit `.env`** — secrets stay in each environment’s vars only
+5. **No vendor traces in code** — do not add AI IDE names, logos, co-author trailers, or “made with” watermarks to source, commits, or product docs (see `.cursor/rules/cloud-dev.md`)
 
-### Local → Cloud
+### Continue the same branch from another location
 
 ```bash
 git checkout -b feature/my-work
@@ -55,23 +57,13 @@ git commit -m "describe your change"
 git push -u origin feature/my-work
 ```
 
-Open a **Cursor Cloud Agent** on the same repo + branch to continue there.
-
-### Cloud → Local
+On another machine or cloud environment:
 
 ```bash
 git fetch origin
 git checkout feature/my-work
 git pull origin feature/my-work
 ```
-
-### Cursor Cloud Agent
-
-1. Push your branch to GitHub
-2. In Cursor: **Agents → New Cloud Agent**
-3. Select repo: `Showrav88/AnantaOne`
-4. Pick the same branch you use locally
-5. Cloud agent edits → commit → push → pull locally
 
 ## Repo structure (planned)
 
@@ -95,7 +87,7 @@ git remote -v
 # origin  https://github.com/Showrav88/AnantaOne.git
 ```
 
-## Git identity (AnantaOne — not personal account branding)
+## Git identity (AnantaOne — project branding only)
 
 Set **local repo identity** once (only affects this project):
 
@@ -105,10 +97,10 @@ git config user.email "dev@anantaone.local"
 git config core.hooksPath .githooks
 ```
 
-This keeps commits under the **project name**, not your personal GitHub username in commit metadata.
+This keeps commits under the **project name**, not a personal GitHub username in commit metadata.
 
-## Disable Cursor co-author on commits
+## Strip third-party commit attribution
 
-1. **Cursor Settings → Git & PRs → Attribution** → turn **OFF**
-2. Run `git config core.hooksPath .githooks` (see above) — strips any Cursor co-author lines locally
-3. Cloud Agent may still add co-author server-side; pull locally and amend/squash before merging to `main` if needed
+1. Turn off any IDE/git setting that appends co-author or “made with” trailers
+2. Run `git config core.hooksPath .githooks` — the prepare-commit-msg hook strips known vendor attribution lines
+3. If a remote agent still injects trailers server-side, amend or squash before merging to `main`

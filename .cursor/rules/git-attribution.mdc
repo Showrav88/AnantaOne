@@ -1,8 +1,10 @@
 ---
-description: Git commit rules for AnantaOne — no Cursor attribution
+description: Git commit rules for AnantaOne — no vendor attribution
 alwaysApply: true
 ---
 
-Never add "Made-with: Cursor", "Co-authored-by: Cursor", "Co-authored-by: cursoragent@cursor.com", or any Cursor attribution trailer to commits, PRs, or code comments.
+Never add "Made-with: Cursor", "Co-authored-by: Cursor", "Co-authored-by: cursoragent@cursor.com", or any other AI IDE / coding-agent attribution trailer to commits, PRs, or code comments.
+
+Do not put Cursor (or any IDE vendor) names, logos, badges, or watermarks in source, UI, or product-facing docs. See `cloud-dev.md` for the full cloud-based / zero-trace rules.
 
 Commits should use the project identity only (AnantaOne / company email), not personal Showrav88 branding in messages or trailers.
