@@ -1,9 +1,11 @@
 {
   "app": {
     "name": "AnantaOne",
-    "tagline": "Distilled water production & B2B ordering"
+    "tagline": "Distilled water production & B2B ordering",
+    "pulse": "Bangladesh pulse — shops, stock, and delivery in one flow"
   },
   "nav": {
+    "home": "Home",
     "dashboard": "Dashboard",
     "orders": "Orders",
     "inventory": "Inventory",
@@ -12,6 +14,22 @@
   "common": {
     "loading": "Loading…",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "online": "Online",
+    "offline": "Offline",
+    "language": "বাংলা"
+  },
+  "home": {
+    "ctaPrimary": "Open live dashboard",
+    "ctaSecondary": "Check connection",
+    "apiLabel": "API",
+    "dbLabel": "Database",
+    "companyLabel": "Company",
+    "buyersLabel": "Active shops",
+    "branchesLabel": "Branches",
+    "emptyBuyers": "No shops yet — run seed or add a buyer.",
+    "connected": "Frontend ↔ Backend connected",
+    "notConnected": "Waiting for API…"
   }
 }
