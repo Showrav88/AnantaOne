@@ -19,13 +19,17 @@ export function SalesInvoiceView({ locale, invoice }: Props) {
       setQrDataUrl(null);
       return;
     }
-    void QRCode.toDataURL(value, { margin: 1, width: 140 }).then(setQrDataUrl);
+    void QRCode.toDataURL(value, {
+      margin: 0,
+      width: 72,
+      errorCorrectionLevel: "M",
+    }).then(setQrDataUrl);
   }, [invoice.qrValue]);
 
   return (
     <div className="invoice-sheet" id="invoice-print">
       <header className="invoice-head">
-        <div>
+        <div className="invoice-brand-block">
           <p className="invoice-brand">{invoice.company.name}</p>
           {invoice.company.tagline ? (
             <p className="muted tiny">{invoice.company.tagline}</p>
@@ -38,36 +42,44 @@ export function SalesInvoiceView({ locale, invoice }: Props) {
           ) : null}
         </div>
         <div className="invoice-meta">
-          <p className="eyebrow">{t.owner.invoiceLabel}</p>
-          <strong>{invoice.invoiceNo ?? invoice.invoiceCode}</strong>
-          {invoice.isReversed ? (
-            <p className="price-override">{t.owner.statusReversed}</p>
-          ) : null}
-          <p className="muted tiny">
-            {new Date(invoice.confirmedAt ?? invoice.orderedAt).toLocaleString()}
-          </p>
-          <p className="muted tiny">
-            {invoice.source
-              ? locale === "bn"
-                ? invoice.source.nameBn
-                : invoice.source.nameEn
-              : ""}
-          </p>
+          <div className="invoice-meta-text">
+            <p className="eyebrow">{t.owner.invoiceLabel}</p>
+            <p className="invoice-number">
+              {invoice.invoiceNo ?? invoice.invoiceCode}
+            </p>
+            {invoice.isReversed ? (
+              <p className="price-override">{t.owner.statusReversed}</p>
+            ) : null}
+            <p className="muted tiny">
+              {new Date(
+                invoice.confirmedAt ?? invoice.orderedAt,
+              ).toLocaleString()}
+            </p>
+            <p className="muted tiny">
+              {invoice.source
+                ? locale === "bn"
+                  ? invoice.source.nameBn
+                  : invoice.source.nameEn
+                : ""}
+            </p>
+          </div>
           {qrDataUrl ? (
-            <img className="invoice-qr" src={qrDataUrl} alt="Invoice QR" />
+            <figure className="invoice-qr-block">
+              <img className="invoice-qr" src={qrDataUrl} alt="Invoice QR" />
+              <figcaption className="muted tiny">
+                {t.owner.invoiceQrHint}
+              </figcaption>
+            </figure>
           ) : null}
-          <p className="muted tiny">{t.owner.invoiceQrHint}</p>
         </div>
       </header>
 
       <section className="invoice-party">
         <p className="eyebrow">{t.owner.billTo}</p>
-        <p>
-          <strong>
-            {invoice.buyerName ??
-              invoice.buyer?.shopName ??
-              t.owner.walkInBuyer}
-          </strong>
+        <p className="invoice-party-name">
+          {invoice.buyerName ??
+            invoice.buyer?.shopName ??
+            t.owner.walkInBuyer}
         </p>
         {invoice.buyer?.phone ? (
           <p className="muted tiny">{invoice.buyer.phone}</p>
@@ -80,42 +92,48 @@ export function SalesInvoiceView({ locale, invoice }: Props) {
         ) : null}
       </section>
 
-      <table className="invoice-table">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>{t.owner.fieldProduct}</th>
-            <th>{t.owner.fieldBatch}</th>
-            <th>{t.owner.fieldQty}</th>
-            <th>{t.owner.catalogPrice}</th>
-            <th>{t.owner.soldPrice}</th>
-            <th>{t.owner.fieldLineTotal}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {invoice.lines.map((line, idx) => (
-            <tr key={line.id}>
-              <td>{idx + 1}</td>
-              <td>
-                {locale === "bn" && line.product?.nameBn
-                  ? line.product.nameBn
-                  : (line.product?.name ?? "—")}
-                <div className="muted tiny">{line.product?.sku}</div>
-              </td>
-              <td>{line.batch?.batchCode ?? "—"}</td>
-              <td>{line.qty}</td>
-              <td>৳{line.catalogPriceBdt.toLocaleString()}</td>
-              <td>
-                ৳{line.unitPriceBdt.toLocaleString()}
-                {line.priceOverridden ? (
-                  <span className="price-override"> *</span>
-                ) : null}
-              </td>
-              <td>৳{line.lineTotalBdt.toLocaleString()}</td>
+      <div className="invoice-table-wrap">
+        <table className="invoice-table">
+          <thead>
+            <tr>
+              <th className="col-num">#</th>
+              <th>{t.owner.fieldProduct}</th>
+              <th>{t.owner.fieldBatch}</th>
+              <th className="col-qty">{t.owner.fieldQty}</th>
+              <th className="col-money">{t.owner.catalogPrice}</th>
+              <th className="col-money">{t.owner.soldPrice}</th>
+              <th className="col-money">{t.owner.fieldLineTotal}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {invoice.lines.map((line, idx) => (
+              <tr key={line.id}>
+                <td className="col-num">{idx + 1}</td>
+                <td>
+                  {locale === "bn" && line.product?.nameBn
+                    ? line.product.nameBn
+                    : (line.product?.name ?? "—")}
+                  <div className="muted tiny">{line.product?.sku}</div>
+                </td>
+                <td>{line.batch?.batchCode ?? "—"}</td>
+                <td className="col-qty">{line.qty}</td>
+                <td className="col-money">
+                  ৳{line.catalogPriceBdt.toLocaleString()}
+                </td>
+                <td className="col-money">
+                  ৳{line.unitPriceBdt.toLocaleString()}
+                  {line.priceOverridden ? (
+                    <span className="price-override"> *</span>
+                  ) : null}
+                </td>
+                <td className="col-money">
+                  ৳{line.lineTotalBdt.toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {invoice.lines.some((l) => l.priceOverridden) ? (
         <p className="muted tiny invoice-note">
@@ -124,10 +142,11 @@ export function SalesInvoiceView({ locale, invoice }: Props) {
       ) : null}
 
       <footer className="invoice-foot">
-        <p className="invoice-total">
-          {t.owner.invoiceTotal}: ৳{invoice.totalBdt.toLocaleString()}
-        </p>
-        <p className="muted tiny">{t.owner.invoiceThanks}</p>
+        <div className="invoice-total-row">
+          <span>{t.owner.invoiceTotal}</span>
+          <strong>৳{invoice.totalBdt.toLocaleString()}</strong>
+        </div>
+        <p className="muted tiny invoice-thanks">{t.owner.invoiceThanks}</p>
       </footer>
     </div>
   );
