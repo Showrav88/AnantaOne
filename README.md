@@ -2,11 +2,20 @@
 
 PERN-based SaaS platform for distilled water production, inventory, B2B ordering, and Bangladesh payments.
 
-## Stack
+## Stack (latest stable — July 2026)
 
-- **P**ostgreSQL · **E**xpress · **R**eact · **N**ode.js
-- React Native (Expo) for mobile
-- Redis + Socket.io for realtime stock
+- **P**ostgreSQL **18.4** · **E**xpress **5.2** · **R**eact **19.2** · **N**ode.js **26**
+- TypeScript **7.0** · Vite **8** · Prisma **7.8** · Expo SDK **57**
+- Redis **8** · Tailwind **4** · Socket.io for realtime stock
+
+## Project docs
+
+| Doc | Purpose |
+|---|---|
+| [docs/STACK.md](docs/STACK.md) | Locked tech versions |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modules, SaaS design, payments |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Build phases + checklist |
+| [docs/CLOUD-AGENT.md](docs/CLOUD-AGENT.md) | Start coding from mobile/cloud |
 
 ## Quick start (local)
 
