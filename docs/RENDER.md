@@ -102,6 +102,16 @@ https://anantaoneapi.onrender.com/health/db
 
 After API `/health` works, refresh the static site (rebuild only if you change `VITE_API_URL`).
 
+### SPA rewrite (required for `/owner` routes)
+
+Static Site → **Redirects/Rewrites** → add:
+
+| Source | Destination | Action |
+|---|---|---|
+| `/*` | `/index.html` | Rewrite |
+
+Without this, opening/refreshing `/owner/products` returns 404 on Render.
+
 ---
 
 ## Wire-up checklist

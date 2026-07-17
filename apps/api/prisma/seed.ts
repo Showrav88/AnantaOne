@@ -48,17 +48,63 @@ const mockShops = [
   },
 ] as const;
 
+const mockProducts = [
+  {
+    name: "Battery Water 1L",
+    nameBn: "ব্যাটারি ওয়াটার ১ লিটার",
+    sku: "BW-1L",
+    category: "water",
+    unit: "BOTTLE" as const,
+    priceBdt: 35,
+    stockQty: 420,
+    minStock: 80,
+    description: "Mineral-mixed battery water",
+  },
+  {
+    name: "Drinking Water 20L",
+    nameBn: "পানীয় জল ২০ লিটার",
+    sku: "DW-20L",
+    category: "water",
+    unit: "DRUM" as const,
+    priceBdt: 90,
+    stockQty: 65,
+    minStock: 30,
+    description: "R/O drinking water jar",
+  },
+  {
+    name: "Drinking Water 500ml",
+    nameBn: "পানীয় জল ৫০০ মি.লি.",
+    sku: "DW-500",
+    category: "water",
+    unit: "BOTTLE" as const,
+    priceBdt: 18,
+    stockQty: 12,
+    minStock: 100,
+    description: "Low stock demo SKU",
+  },
+] as const;
+
 async function main() {
   const company = await prisma.company.upsert({
     where: { slug: "ananta-water" },
     update: {
       name: "Ananta Water",
       locale: "bn",
+      phone: "01700000000",
+      address: "Lakshmipur, Bangladesh",
+      tagline: "বাংলাদেশের পালস — দোকান, স্টক ও ডেলিভারি",
+      description:
+        "Distilled / R/O water production and B2B distribution for Lakshmipur shops.",
     },
     create: {
       name: "Ananta Water",
       slug: "ananta-water",
       locale: "bn",
+      phone: "01700000000",
+      address: "Lakshmipur, Bangladesh",
+      tagline: "বাংলাদেশের পালস — দোকান, স্টক ও ডেলিভারি",
+      description:
+        "Distilled / R/O water production and B2B distribution for Lakshmipur shops.",
       branches: {
         create: {
           name: "Lakshmipur HQ",
@@ -129,8 +175,34 @@ async function main() {
     });
   }
 
+  for (const product of mockProducts) {
+    await prisma.product.upsert({
+      where: {
+        tenantId_sku: {
+          tenantId: company.id,
+          sku: product.sku,
+        },
+      },
+      update: {
+        name: product.name,
+        nameBn: product.nameBn,
+        category: product.category,
+        unit: product.unit,
+        priceBdt: product.priceBdt,
+        stockQty: product.stockQty,
+        minStock: product.minStock,
+        description: product.description,
+        isActive: true,
+      },
+      create: {
+        tenantId: company.id,
+        ...product,
+      },
+    });
+  }
+
   console.log(
-    `Seeded company=${company.slug} shops=${mockShops.length} branch=${branchId}`,
+    `Seeded company=${company.slug} shops=${mockShops.length} products=${mockProducts.length}`,
   );
 }
 

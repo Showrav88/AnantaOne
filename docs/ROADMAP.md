@@ -93,6 +93,7 @@ git add . && git commit -m "message" && git push -u origin feature/my-task
 | Neon / cloud DB docs | Done — `docs/DATABASE.md` |
 | Monorepo scaffold | Done — `apps/api`, `apps/web`, `apps/mobile` (placeholder), packages |
 | Prisma tenant base + init migration | Done |
+| Owner dashboard (company, products, shops) | Done (demo owner context; JWT next) |
 | Auth: JWT + refresh + RBAC | **Next** |
 | CI pipeline | Pending |
 | Production deploy | Pending |
