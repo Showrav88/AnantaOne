@@ -13,10 +13,14 @@ You can deploy from PR branch `Cloudenv-setup-neon-d75c` (no merge required). Se
 | Service | URL |
 |---|---|
 | Static Site | `https://anantaone.onrender.com` |
-| Web Service (API) | `https://anantaone-api.onrender.com` |
+| Web Service (API) | `https://anantaoneapi.onrender.com` (**no hyphen**) |
+
+> Important: Render names map to hostnames without extra hyphens.  
+> Wrong: `https://anantaoneapi.onrender.com` → 404 / fake CORS errors  
+> Right: `https://anantaoneapi.onrender.com`
 
 If the static page says **Waiting for API…** but `VITE_API_URL` is correct, the **API Web Service is not running**.  
-`https://anantaone-api.onrender.com/health` must return JSON `{"ok":true}` — if you see Render “Not Found” / `no-server`, fix the **Web Service** deploy (not the Static Site).
+`https://anantaoneapi.onrender.com/health` must return JSON `{"ok":true}` — if you see Render “Not Found” / `no-server`, fix the **Web Service** deploy (not the Static Site).
 
 ---
 
@@ -75,9 +79,9 @@ Build logs must show:
 Verify:
 
 ```text
-https://anantaone-api.onrender.com/
-https://anantaone-api.onrender.com/health
-https://anantaone-api.onrender.com/health/db
+https://anantaoneapi.onrender.com/
+https://anantaoneapi.onrender.com/health
+https://anantaoneapi.onrender.com/health/db
 ```
 
 ---
@@ -94,7 +98,7 @@ https://anantaone-api.onrender.com/health/db
 | Key | Value |
 |---|---|
 | `NODE_VERSION` | `26` |
-| `VITE_API_URL` | `https://anantaone-api.onrender.com` |
+| `VITE_API_URL` | `https://anantaoneapi.onrender.com` |
 
 After API `/health` works, refresh the static site (rebuild only if you change `VITE_API_URL`).
 
