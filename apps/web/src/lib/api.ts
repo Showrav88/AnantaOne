@@ -594,7 +594,13 @@ export const api = {
         true,
       ),
     reverseOrder: (id: string, reason: string) =>
-      getJson<{ ok: boolean; order: SalesOrder; wallet: WalletSummary | null }>(
+      getJson<{
+        ok: boolean;
+        order: SalesOrder;
+        cashDebitedBdt?: number;
+        restocked?: Array<{ productId: string; batchId: string; qty: number }>;
+        wallet: WalletSummary | null;
+      }>(
         `/api/v1/owner/orders/${id}/reverse`,
         1,
         { method: "POST", body: JSON.stringify({ reason }) },

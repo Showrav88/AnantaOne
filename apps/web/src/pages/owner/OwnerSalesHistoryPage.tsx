@@ -128,9 +128,11 @@ export function OwnerSalesHistoryPage({ locale }: Props) {
     setError(null);
     setOkMsg(null);
     try {
-      await api.owner.reverseOrder(invoice.id, reason);
+      const res = await api.owner.reverseOrder(invoice.id, reason);
       setReason("");
-      setOkMsg(t.owner.reverseDone);
+      setOkMsg(
+        `${t.owner.reverseDone} · ${t.owner.cashDebited}: ৳${(res.cashDebitedBdt ?? invoice.totalBdt).toLocaleString()}`,
+      );
       await loadList();
       await openById(invoice.id);
     } catch (err) {

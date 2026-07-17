@@ -27,7 +27,47 @@ export type RecordWalletInput = {
   reference?: string | null;
   occurredAt?: Date;
   createdBy?: string | null;
+  /** Allow drawer to go negative (needed for sale reverse/refund). */
+  allowNegative?: boolean;
+  /** Run inside an existing transaction when provided. */
+  tx?: TxClient;
 };
+
+async function applyWalletTxn(input: RecordWalletInput, tx: TxClient) {
+  const type = await getTxnType(input.typeCode, tx);
+  const wallet = await ensureCashWallet(input.tenantId, tx);
+
+  const current = Number(wallet.balanceBdt);
+  const delta =
+    type.direction === "credit" ? input.amountBdt : -input.amountBdt;
+  const next = current + delta;
+
+  if (type.direction === "debit" && next < 0 && !input.allowNegative) {
+    throw new Error("Insufficient cash drawer balance");
+  }
+
+  const updated = await tx.cashWallet.update({
+    where: { id: wallet.id },
+    data: { balanceBdt: next },
+  });
+
+  const txn = await tx.cashTransaction.create({
+    data: {
+      tenantId: input.tenantId,
+      walletId: wallet.id,
+      typeId: type.id,
+      amountBdt: input.amountBdt,
+      balanceAfter: next,
+      note: input.note ?? null,
+      reference: input.reference ?? null,
+      occurredAt: input.occurredAt ?? new Date(),
+      createdBy: input.createdBy ?? null,
+    },
+    include: { type: true },
+  });
+
+  return { wallet: updated, transaction: txn, type };
+}
 
 /** Atomically credit/debit the company cash drawer and append a ledger row. */
 export async function recordWalletTxn(input: RecordWalletInput) {
@@ -35,41 +75,11 @@ export async function recordWalletTxn(input: RecordWalletInput) {
     throw new Error("Amount must be greater than zero");
   }
 
-  return prisma.$transaction(async (tx) => {
-    const type = await getTxnType(input.typeCode, tx);
-    const wallet = await ensureCashWallet(input.tenantId, tx);
+  if (input.tx) {
+    return applyWalletTxn(input, input.tx);
+  }
 
-    const current = Number(wallet.balanceBdt);
-    const delta =
-      type.direction === "credit" ? input.amountBdt : -input.amountBdt;
-    const next = current + delta;
-
-    if (type.direction === "debit" && next < 0) {
-      throw new Error("Insufficient cash drawer balance");
-    }
-
-    const updated = await tx.cashWallet.update({
-      where: { id: wallet.id },
-      data: { balanceBdt: next },
-    });
-
-    const txn = await tx.cashTransaction.create({
-      data: {
-        tenantId: input.tenantId,
-        walletId: wallet.id,
-        typeId: type.id,
-        amountBdt: input.amountBdt,
-        balanceAfter: next,
-        note: input.note ?? null,
-        reference: input.reference ?? null,
-        occurredAt: input.occurredAt ?? new Date(),
-        createdBy: input.createdBy ?? null,
-      },
-      include: { type: true },
-    });
-
-    return { wallet: updated, transaction: txn, type };
-  });
+  return prisma.$transaction(async (tx) => applyWalletTxn(input, tx));
 }
 
 export function serializeTxn(txn: {

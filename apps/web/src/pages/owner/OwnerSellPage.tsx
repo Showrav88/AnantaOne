@@ -47,6 +47,7 @@ export function OwnerSellPage({ locale }: Props) {
   const [pickBatchId, setPickBatchId] = useState("");
   const [lines, setLines] = useState<CartLine[]>([]);
   const [invoice, setInvoice] = useState<SalesInvoice | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -171,6 +172,7 @@ export function OwnerSellPage({ locale }: Props) {
       });
       const inv = await api.owner.orderInvoice(res.order.id);
       setInvoice(inv.invoice);
+      setCancelReason("");
       setOkMsg(
         `${t.owner.sellConfirmed} ৳${res.order.totalBdt.toLocaleString()}`,
       );
@@ -179,6 +181,26 @@ export function OwnerSellPage({ locale }: Props) {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
+  async function onCancelSale(e: FormEvent) {
+    e.preventDefault();
+    if (!invoice || invoice.isReversed) return;
+    setError(null);
+    setOkMsg(null);
+    try {
+      const res = await api.owner.reverseOrder(invoice.id, cancelReason);
+      const restockQty = (res.restocked ?? []).reduce((s, r) => s + r.qty, 0);
+      setOkMsg(
+        `${t.owner.reverseDone} · ${t.owner.cashDebited}: ৳${(res.cashDebitedBdt ?? invoice.totalBdt).toLocaleString()}${restockQty > 0 ? ` · +${restockQty} stock` : ""}`,
+      );
+      setCancelReason("");
+      const inv = await api.owner.orderInvoice(invoice.id);
+      setInvoice(inv.invoice);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Cancel failed");
     }
   }
 
@@ -228,17 +250,43 @@ export function OwnerSellPage({ locale }: Props) {
             <button
               type="button"
               className="linkish"
-              onClick={() => setInvoice(null)}
+              onClick={() => {
+                setInvoice(null);
+                setCancelReason("");
+              }}
             >
               {t.owner.newSale}
             </button>
           </div>
           <SalesInvoiceView locale={locale} invoice={invoice} />
+          {canSell && !invoice.isReversed ? (
+            <form
+              className="owner-form compact reverse-form no-print"
+              onSubmit={onCancelSale}
+            >
+              <h2>{t.owner.cancelSale}</h2>
+              <p className="muted tiny">{t.owner.cancelSaleHint}</p>
+              <label className="full">
+                {t.owner.reverseReason}
+                <textarea
+                  required
+                  minLength={5}
+                  rows={3}
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder={t.owner.reverseReasonHint}
+                />
+              </label>
+              <button type="submit" className="cta danger">
+                {t.owner.confirmCancelSale}
+              </button>
+            </form>
+          ) : null}
         </div>
       ) : null}
 
       <form className="sell-layout no-print" onSubmit={onConfirm}>
-        <section className="sell-panel">
+        <section className="sell-panel panel-card">
           <h2>{t.owner.sellOrderMeta}</h2>
           <div className="owner-form compact">
             <label>
@@ -349,7 +397,7 @@ export function OwnerSellPage({ locale }: Props) {
             </button>
           </div>
 
-          <div className="owner-table-wrap">
+          <div className="owner-table-wrap sell-cart-desktop">
             <table className="owner-table">
               <thead>
                 <tr>
@@ -371,7 +419,8 @@ export function OwnerSellPage({ locale }: Props) {
                 ) : (
                   lines.map((l) => {
                     const sold = Number(l.unitPriceBdt || 0);
-                    const overridden = Math.abs(sold - l.catalogPriceBdt) > 0.0001;
+                    const overridden =
+                      Math.abs(sold - l.catalogPriceBdt) > 0.0001;
                     return (
                       <tr key={l.key}>
                         <td>
@@ -440,6 +489,75 @@ export function OwnerSellPage({ locale }: Props) {
             </table>
           </div>
 
+          <div className="sell-cart-mobile">
+            {lines.length === 0 ? (
+              <p className="muted">{t.owner.cartEmpty}</p>
+            ) : (
+              lines.map((l) => {
+                const sold = Number(l.unitPriceBdt || 0);
+                return (
+                  <article key={l.key} className="sell-line-card">
+                    <div className="sell-line-head">
+                      <div>
+                        <strong>{l.productLabel}</strong>
+                        <div className="muted tiny">{l.sku}</div>
+                      </div>
+                      <button
+                        type="button"
+                        className="linkish"
+                        onClick={() => removeLine(l.key)}
+                      >
+                        {t.owner.removeLine}
+                      </button>
+                    </div>
+                    <div className="owner-form compact">
+                      <label>
+                        {t.owner.fieldQty}
+                        <input
+                          type="number"
+                          min={0.01}
+                          step="0.01"
+                          value={l.qty}
+                          onChange={(e) =>
+                            setLines((prev) =>
+                              prev.map((x) =>
+                                x.key === l.key
+                                  ? { ...x, qty: e.target.value }
+                                  : x,
+                              ),
+                            )
+                          }
+                        />
+                      </label>
+                      <label>
+                        {t.owner.soldPrice}
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={l.unitPriceBdt}
+                          onChange={(e) =>
+                            setLines((prev) =>
+                              prev.map((x) =>
+                                x.key === l.key
+                                  ? { ...x, unitPriceBdt: e.target.value }
+                                  : x,
+                              ),
+                            )
+                          }
+                        />
+                      </label>
+                    </div>
+                    <p className="sell-line-total">
+                      {t.owner.fieldLineTotal}: ৳
+                      {(Number(l.qty || 0) * sold).toLocaleString()}
+                    </p>
+                  </article>
+                );
+              })
+            )}
+          </div>
+
           <div className="sell-footer">
             <p className="wallet-amount">৳{total.toLocaleString()}</p>
             <button
@@ -452,7 +570,7 @@ export function OwnerSellPage({ locale }: Props) {
           </div>
         </section>
 
-        <aside className="sell-side">
+        <aside className="sell-side panel-card">
           <h2>{t.owner.recentOrders}</h2>
           <ul className="plain-list">
             {orders.length === 0 ? (
@@ -464,7 +582,10 @@ export function OwnerSellPage({ locale }: Props) {
                     <span>
                       {o.buyerName ?? t.owner.walkInBuyer}
                       <div className="muted tiny">
-                        {o.source?.code} · {o.lines.length} SKU
+                        {o.isReversed || o.status?.code === "REVERSED"
+                          ? t.owner.statusReversed
+                          : o.source?.code}{" "}
+                        · {o.lines.length} SKU
                       </div>
                     </span>
                     <span>৳{o.totalBdt.toLocaleString()}</span>

@@ -1060,14 +1060,41 @@ button.linkish {
 
 .sell-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(14rem, 0.8fr);
-  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1.6fr) minmax(min(100%, 14rem), 0.8fr);
+  gap: 1.25rem;
+  align-items: start;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
-.sell-panel h2,
-.sell-side h2 {
-  margin: 0 0 0.75rem;
-  font-size: 1.05rem;
+.sell-panel,
+.sell-side {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sell-cart-mobile {
+  display: none;
+}
+
+.sell-line-card {
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.sell-line-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.sell-line-total {
+  margin: 0.5rem 0 0;
+  font-weight: 700;
 }
 
 .sell-footer {
@@ -1076,13 +1103,87 @@ button.linkish {
   justify-content: space-between;
   gap: 1rem;
   margin-top: 1rem;
+  position: sticky;
+  bottom: 0;
+  background: rgba(243, 250, 246, 0.96);
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--line);
+  z-index: 5;
 }
 
 .qty-input {
   width: 5.5rem;
+  max-width: 100%;
   font: inherit;
   padding: 0.35rem 0.4rem;
   border: 1px solid var(--line);
+}
+
+.post-sell-invoice {
+  margin-bottom: 1.5rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+@media (max-width: 900px) {
+  .sell-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sell-cart-desktop {
+    display: none;
+  }
+
+  .sell-cart-mobile {
+    display: block;
+  }
+
+  .sell-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sell-footer .cta {
+    width: 100%;
+  }
+
+  .sell-side {
+    order: 2;
+  }
+
+  .sell-panel {
+    order: 1;
+  }
+
+  .sell-panel .owner-form.compact,
+  .sell-line-card .owner-form.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .sell-line-card .owner-form.compact label,
+  .sell-panel .owner-form.compact label {
+    width: 100%;
+  }
+
+  .sell-line-card input,
+  .sell-panel select,
+  .sell-panel input {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+}
+
+@media (max-width: 480px) {
+  .sell-footer .wallet-amount {
+    text-align: center;
+    width: 100%;
+  }
+
+  .reverse-form .cta {
+    width: 100%;
+  }
 }
 
 .last-order {

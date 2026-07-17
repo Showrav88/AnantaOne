@@ -413,7 +413,7 @@ export async function confirmSell(input: ConfirmSellInput) {
 
 /**
  * Reverse a confirmed sale: restore batch/product stock, debit cash drawer,
- * mark order REVERSED with a clear reason.
+ * mark order REVERSED with a clear reason — all in one transaction.
  */
 export async function reverseSell(input: {
   tenantId: string;
@@ -449,8 +449,10 @@ export async function reverseSell(input: {
   }
 
   const totalBdt = Number(order.totalBdt);
+  const restocked: Array<{ productId: string; batchId: string; qty: number }> =
+    [];
 
-  await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     for (const line of order.lines) {
       const qty = Number(line.qty);
       const batch = await tx.productionBatch.findUniqueOrThrow({
@@ -470,6 +472,11 @@ export async function reverseSell(input: {
           updatedBy: input.userId,
         },
       });
+      restocked.push({
+        productId: line.productId,
+        batchId: line.batchId,
+        qty,
+      });
     }
 
     await tx.salesOrder.update({
@@ -482,25 +489,23 @@ export async function reverseSell(input: {
         updatedBy: input.userId,
       },
     });
-  });
 
-  let wallet = null;
-  let transaction = null;
-  if (totalBdt > 0) {
-    const walletResult = await recordWalletTxn({
-      tenantId: input.tenantId,
-      typeCode: "SALE_REVERSE",
-      amountBdt: totalBdt,
-      note: `Reverse ${order.invoiceCode}: ${reason}`,
-      reference: order.id,
-      createdBy: input.userId,
-    });
-    wallet = {
-      id: walletResult.wallet.id,
-      balanceBdt: Number(walletResult.wallet.balanceBdt),
-    };
-    transaction = serializeTxn(walletResult.transaction);
-  }
+    let walletResult = null;
+    if (totalBdt > 0) {
+      walletResult = await recordWalletTxn({
+        tenantId: input.tenantId,
+        typeCode: "SALE_REVERSE",
+        amountBdt: totalBdt,
+        note: `Reverse ${order.invoiceCode}: ${reason}`,
+        reference: order.id,
+        createdBy: input.userId,
+        allowNegative: true,
+        tx,
+      });
+    }
+
+    return walletResult;
+  });
 
   const full = await prisma.salesOrder.findUniqueOrThrow({
     where: { id: order.id },
@@ -514,8 +519,15 @@ export async function reverseSell(input: {
 
   return {
     order: serializeOrder(full),
-    wallet,
-    transaction,
+    restocked,
+    cashDebitedBdt: totalBdt,
+    wallet: result
+      ? {
+          id: result.wallet.id,
+          balanceBdt: Number(result.wallet.balanceBdt),
+        }
+      : null,
+    transaction: result ? serializeTxn(result.transaction) : null,
   };
 }
 

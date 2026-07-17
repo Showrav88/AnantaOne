@@ -226,7 +226,11 @@
     "reverseReason": "Reason",
     "reverseReasonHint": "e.g. Wrong shop / damaged goods / customer returned",
     "confirmReverse": "Confirm reverse & debit cash",
-    "reverseDone": "Sale reversed — stock restored and cash debited."
+    "reverseDone": "Sale cancelled — stock restored and cash debited.",
+    "cancelSale": "Cancel / reverse this sale",
+    "cancelSaleHint": "Restocks every line back to its batch and debits the cash drawer by the invoice total.",
+    "confirmCancelSale": "Cancel sale · restock + debit",
+    "cashDebited": "Cash debited"
   },
   "auth": {
     "loginTitle": "Sign in",
