@@ -87,13 +87,18 @@ See [DATABASE.md](DATABASE.md) for Neon + migration rules.
 
 ## Install commands
 
-### Cloud Agent (Neon, no Docker)
+### Cloud Agent (Neon or VM Postgres)
 
 ```bash
 git checkout cloud-dev && git pull
+
+# A) VM Postgres (no Neon):
+bash scripts/setup-cloud-postgres.sh
+
+# B) Or Neon — set DATABASE_URL + DIRECT_DATABASE_URL in .env
 cp .env.example .env
 cp apps/api/.env.example apps/api/.env
-# set Neon DATABASE_URL + DIRECT_DATABASE_URL
+
 npm install
 npm run db:migrate:deploy
 npm run db:generate

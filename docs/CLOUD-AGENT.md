@@ -4,13 +4,12 @@ Use this when coding from **mobile**, **cursor.com**, or **any PC**.
 
 ## Cloud without Docker (recommended start)
 
-Docker is **not** required on the Cloud Agent VM. Use **Neon PostgreSQL** + Prisma migrations.
+Docker is **not** required on the Cloud Agent VM. Run Postgres **on the VM** or use Neon.
 
-1. Read [DATABASE.md](DATABASE.md) — create a free Neon project
-2. Set `DATABASE_URL` + `DIRECT_DATABASE_URL` in `.env` / `apps/api/.env` (or cloud secrets)
-3. Run:
+### Fastest: Postgres on the VM
 
 ```bash
+bash scripts/setup-cloud-postgres.sh
 # Node 26 (nvm use / .nvmrc)
 npm install
 npm run db:migrate:deploy
@@ -18,6 +17,12 @@ npm run db:generate
 npm run db:seed   # optional
 npm run dev
 ```
+
+### Alternative: Neon
+
+1. Read [DATABASE.md](DATABASE.md) — create a free Neon project
+2. Set `DATABASE_URL` + `DIRECT_DATABASE_URL` in `.env` / `apps/api/.env`
+3. Same `npm run db:migrate:deploy` / `db:generate` / `dev` commands
 
 Schema syncs later to your PC via the same migration files in Git.
 

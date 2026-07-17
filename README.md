@@ -21,13 +21,16 @@ PERN-based SaaS platform for distilled water production, inventory, B2B ordering
 
 ## Quick start
 
-### Cloud Agent (no Docker — Neon)
+### Cloud Agent (no Docker)
 
 ```bash
-git checkout cloud-dev && git pull
+# Option A — Postgres on the VM
+bash scripts/setup-cloud-postgres.sh
+
+# Option B — or set Neon URLs in .env (see docs/DATABASE.md)
 cp .env.example .env
 cp apps/api/.env.example apps/api/.env
-# set Neon URLs — see docs/DATABASE.md
+
 npm install
 npm run db:migrate:deploy
 npm run db:generate

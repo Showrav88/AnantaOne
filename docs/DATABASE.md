@@ -1,15 +1,15 @@
 # AnantaOne — Database setup
 
-Schema lives in **Git + Prisma migrations**, not in Docker. Docker and Neon are just two ways to run PostgreSQL.
+Schema lives in **Git + Prisma migrations**, not in Docker or Neon.
 
 ```
 schema.prisma  →  prisma/migrations/*.sql  →  committed to GitHub
 Cloud Agent and PC both apply the same migration files.
 ```
 
-| Environment | Postgres | Redis |
+| Environment | Postgres options | Redis |
 |---|---|---|
-| **Cloud Agent** (no Docker) | Neon free tier | Optional / skip for early Phase 1 |
+| **Cloud Agent** | **A)** Install Postgres on the VM (no Neon) · **B)** Neon free tier | Optional / skip early Phase 1 |
 | **Local PC** | Docker Compose (`postgres:18-alpine`) | Docker Compose (`redis:8-alpine`) |
 
 ---
@@ -26,7 +26,57 @@ Cloud Agent and PC both apply the same migration files.
 
 ---
 
-## Cloud today (Neon — no Docker)
+## Option A — Postgres on the Cloud VM (no Neon)
+
+Cloud Agent Ubuntu VMs have `sudo` and apt. Docker is often missing; install PostgreSQL **directly**.
+
+### One command
+
+```bash
+bash scripts/setup-cloud-postgres.sh
+```
+
+This installs **PostgreSQL 18**, creates user `ananta` / db `anantaone`, and matches `.env.example`:
+
+```env
+DATABASE_URL=postgresql://ananta:ananta123@localhost:5432/anantaone
+DIRECT_DATABASE_URL=postgresql://ananta:ananta123@localhost:5432/anantaone
+```
+
+### Then migrate + run
+
+```bash
+# Node 26 (see .nvmrc / docs/STACK.md)
+npm install
+npm run db:migrate:deploy
+npm run db:generate
+npm run db:seed   # optional
+npm run dev
+```
+
+### After a VM restart
+
+systemd may not run in cloud VMs — start the cluster manually:
+
+```bash
+sudo pg_ctlcluster 18 main start
+pg_lsclusters   # should show 18/main online
+```
+
+**Note:** VM disk data is local to that agent environment. Prefer committing migrations; do not rely on VM data as the source of truth.
+
+When **changing** schema on cloud:
+
+```bash
+npm run db:migrate          # creates + applies a new migration
+git add apps/api/prisma && git commit -m "Add migration: describe change" && git push
+```
+
+---
+
+## Option B — Neon (managed cloud Postgres)
+
+Use Neon if you want a DB that survives across agent VMs / machines.
 
 ### 1. Create a Neon project
 
@@ -45,39 +95,24 @@ If Neon only gives one URL, use it for both until you enable pooling.
 
 ### 2. Set env on Cloud Agent
 
-Create root `.env` and `apps/api/.env` (never commit):
-
 ```bash
 cp .env.example .env
 cp apps/api/.env.example apps/api/.env
 ```
-
-Set:
 
 ```env
 DATABASE_URL=postgresql://USER:PASS@ep-xxx-pooler.region.aws.neon.tech/anantaone?sslmode=require
 DIRECT_DATABASE_URL=postgresql://USER:PASS@ep-xxx.region.aws.neon.tech/anantaone?sslmode=require
 ```
 
-Or set the same values in Cloud Agent **environment variables** / secrets UI.
-
-### 3. Install and migrate
+### 3. Migrate + run
 
 ```bash
-# Node 26 required (see docs/STACK.md)
 npm install
-npm run db:migrate:deploy   # apply committed migrations
-npm run db:generate         # generate Prisma Client
-npm run db:seed             # optional demo data
+npm run db:migrate:deploy
+npm run db:generate
+npm run db:seed
 npm run dev
-```
-
-When **changing** schema on cloud:
-
-```bash
-npm run db:migrate          # creates + applies a new migration
-# commit apps/api/prisma/migrations/**
-git add apps/api/prisma && git commit -m "Add migration: describe change" && git push
 ```
 
 ---
@@ -100,7 +135,7 @@ npm run db:seed              # optional
 npm run dev
 ```
 
-Local DB starts **empty** — that is normal. Migrations recreate the same tables. Cloud Neon data and local Docker data are separate; structure stays the same.
+Local DB starts **empty** — that is normal. Migrations recreate the same tables. Cloud VM / Neon data and local Docker data are separate; structure stays the same.
 
 ---
 
@@ -118,12 +153,12 @@ Local DB starts **empty** — that is normal. Migrations recreate the same table
 
 ## Cloud vs local (expected differences)
 
-| | Cloud (Neon) | Local (Docker) |
-|---|---|---|
-| Data | Agent / shared cloud test data | Empty until seed |
-| URL | Neon connection string | `localhost:5432` |
-| Code | Same | Same |
-| Migrations | Same files in Git | Same files in Git |
+| | Cloud VM Postgres | Neon | Local Docker |
+|---|---|---|---|
+| Data | On that VM only | Survives across machines | Empty until seed |
+| URL | `localhost:5432` | Neon host | `localhost:5432` |
+| Code | Same | Same | Same |
+| Migrations | Same files in Git | Same | Same |
 
 Different data, same structure — expected.
 
@@ -131,13 +166,15 @@ Different data, same structure — expected.
 
 ## Recommended path
 
-**Today (no Docker):**
+**Today (Cloud Agent, no Docker):**
 
 ```
-Cloud Agent on cloud-dev
-  + Neon PostgreSQL (free)
+bash scripts/setup-cloud-postgres.sh   # Postgres 18 on the VM
+  → npm run db:migrate:deploy
   → build features, commit migrations, push
 ```
+
+**Or Neon** if you want DB data shared across agents/PCs.
 
 **Later (PC + Docker):**
 
