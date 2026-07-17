@@ -34,7 +34,8 @@ model UnitLookup {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  products Product[]
+  products           Product[]
+  materialPurchases  MaterialPurchase[]
 }
 
 model Company {
@@ -408,13 +409,24 @@ model Sale {
   @@index([tenantId, soldAt])
 }
 
-/// Material / supply purchase — debits the company wallet.
+/// Material / supply purchase — debits the company wallet (goods + trip costs).
 model MaterialPurchase {
   id                String   @id @default(cuid())
   tenantId          String
   supplierName      String?
   supplierPhone     String?
   materialName      String
+  kindId            String
+  unitId            String
+  /// How many units bought (L, pcs, kg…).
+  qty               Decimal  @db.Decimal(14, 3)
+  /// Supplier invoice for the goods only.
+  goodsAmountBdt    Decimal  @db.Decimal(14, 2)
+  /// Trip extras — used for landed cost / consumer pricing.
+  transportBdt      Decimal  @default(0) @db.Decimal(14, 2)
+  driverBdt         Decimal  @default(0) @db.Decimal(14, 2)
+  travelBdt         Decimal  @default(0) @db.Decimal(14, 2)
+  /// Total cash debit = goods + transport + driver + travel.
   amountBdt         Decimal  @db.Decimal(14, 2)
   note              String?
   purchasedAt       DateTime @default(now())
@@ -424,9 +436,28 @@ model MaterialPurchase {
   createdBy         String?
 
   company         Company         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kind            SupplyKindLookup @relation(fields: [kindId], references: [id])
+  unit            UnitLookup       @relation(fields: [unitId], references: [id])
   cashTransaction CashTransaction @relation(fields: [cashTransactionId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, purchasedAt])
+  @@index([kindId])
+  @@index([unitId])
+}
+
+/// What kind of supply was bought (bottle, acid, raw water…).
+model SupplyKindLookup {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  nameEn      String
+  nameBn      String
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  purchases MaterialPurchase[]
 }
 
 /// Expense categories for utility and other cash-out (not counter sales).

@@ -967,6 +967,96 @@ body {
   margin: 0 0 0.25rem;
 }
 
+.wallet-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 1.25rem;
+}
+
+.wallet-tab {
+  font: inherit;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  padding: 0.5rem 0.85rem;
+  cursor: pointer;
+}
+
+.wallet-tab.active {
+  border-color: var(--tide, #0f6b4c);
+  background: #e8f6ef;
+  color: var(--tide, #0f6b4c);
+  font-weight: 600;
+}
+
+.wallet-analytics .analytics-stats {
+  margin-top: 0.75rem;
+}
+
+.breakdown-list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.9rem;
+}
+
+.breakdown-list .total {
+  font-weight: 700;
+  margin-top: 0.25rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.breakdown-list .landed {
+  color: var(--tide, #0f6b4c);
+  font-weight: 600;
+}
+
+.purchase-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1.5rem;
+}
+
+.txn-breakdown-list {
+  list-style: none;
+  margin: 0 0 2rem;
+  padding: 0;
+}
+
+.txn-detail {
+  margin: 0 0 0.75rem;
+}
+
+.owner-table .credit,
+.stat-grid .credit,
+.plain-list .credit,
+.txn-breakdown-list .credit {
+  color: #0f6b4c;
+}
+
+.owner-table .debit,
+.stat-grid .debit,
+.plain-list .debit,
+.txn-breakdown-list .debit {
+  color: #9a3412;
+}
+
+@media (max-width: 700px) {
+  .wallet-tabs {
+    width: 100%;
+  }
+
+  .wallet-tab {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+}
+
 .owner-form input,
 .owner-form textarea,
 .owner-form select {

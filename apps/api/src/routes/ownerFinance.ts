@@ -400,11 +400,123 @@ ownerFinanceRouter.post(
 
 const materialSchema = z.object({
   materialName: z.string().min(2).max(160),
-  amountBdt: z.coerce.number().positive(),
+  kindCode: z
+    .enum([
+      "RAW_MATERIAL",
+      "BOTTLE",
+      "ACID",
+      "CAP",
+      "LABEL",
+      "OTHER",
+    ])
+    .default("OTHER"),
+  unitCode: z
+    .enum(["LITER", "BOTTLE", "DRUM", "PIECE", "KG", "PACK", "CAN"])
+    .default("PIECE"),
+  qty: z.coerce.number().positive(),
+  goodsAmountBdt: z.coerce.number().nonnegative(),
+  transportBdt: z.coerce.number().nonnegative().optional(),
+  driverBdt: z.coerce.number().nonnegative().optional(),
+  travelBdt: z.coerce.number().nonnegative().optional(),
+  /** @deprecated prefer goodsAmountBdt + extras; kept for older clients */
+  amountBdt: z.coerce.number().positive().optional(),
   supplierName: z.string().max(160).nullable().optional(),
   supplierPhone: z.string().max(40).nullable().optional(),
   note: z.string().max(500).nullable().optional(),
   purchasedAt: z.string().datetime().optional(),
+});
+
+function serializePurchase(p: {
+  id: string;
+  materialName: string;
+  supplierName: string | null;
+  supplierPhone: string | null;
+  qty: { toString(): string } | number;
+  goodsAmountBdt: { toString(): string } | number;
+  transportBdt: { toString(): string } | number;
+  driverBdt: { toString(): string } | number;
+  travelBdt: { toString(): string } | number;
+  amountBdt: { toString(): string } | number;
+  purchasedAt: Date;
+  note: string | null;
+  kind?: { code: string; nameEn: string; nameBn: string };
+  unit?: { code: string; nameEn: string; nameBn: string };
+}) {
+  const qty = Number(p.qty);
+  const goods = Number(p.goodsAmountBdt);
+  const transport = Number(p.transportBdt);
+  const driver = Number(p.driverBdt);
+  const travel = Number(p.travelBdt);
+  const total = Number(p.amountBdt);
+  return {
+    id: p.id,
+    materialName: p.materialName,
+    supplierName: p.supplierName,
+    supplierPhone: p.supplierPhone,
+    qty,
+    goodsAmountBdt: goods,
+    transportBdt: transport,
+    driverBdt: driver,
+    travelBdt: travel,
+    amountBdt: total,
+    landedUnitCostBdt: qty > 0 ? total / qty : null,
+    purchasedAt: p.purchasedAt,
+    note: p.note,
+    kind: p.kind
+      ? { code: p.kind.code, nameEn: p.kind.nameEn, nameBn: p.kind.nameBn }
+      : null,
+    unit: p.unit
+      ? { code: p.unit.code, nameEn: p.unit.nameEn, nameBn: p.unit.nameBn }
+      : null,
+    breakdown: {
+      goodsBdt: goods,
+      transportBdt: transport,
+      driverBdt: driver,
+      travelBdt: travel,
+      totalBdt: total,
+    },
+  };
+}
+
+ownerFinanceRouter.get("/wallet/supply-meta", async (_req, res) => {
+  const [kinds, units] = await Promise.all([
+    prisma.supplyKindLookup.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: "asc" },
+    }),
+    prisma.unitLookup.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: "asc" },
+    }),
+  ]);
+  res.json({
+    ok: true,
+    kinds: kinds.map((k) => ({
+      code: k.code,
+      nameEn: k.nameEn,
+      nameBn: k.nameBn,
+      description: k.description,
+    })),
+    units: units.map((u) => ({
+      code: u.code,
+      nameEn: u.nameEn,
+      nameBn: u.nameBn,
+    })),
+  });
+});
+
+ownerFinanceRouter.get("/wallet/purchases", async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+  const purchases = await prisma.materialPurchase.findMany({
+    where: { tenantId: tid(req) },
+    include: { kind: true, unit: true },
+    orderBy: { purchasedAt: "desc" },
+    take: limit,
+  });
+  res.json({
+    ok: true,
+    purchases: purchases.map(serializePurchase),
+  });
 });
 
 ownerFinanceRouter.post(
@@ -417,6 +529,36 @@ ownerFinanceRouter.post(
       return;
     }
     try {
+      const kind = await prisma.supplyKindLookup.findUnique({
+        where: { code: parsed.data.kindCode },
+      });
+      const unit = await prisma.unitLookup.findUnique({
+        where: { code: parsed.data.unitCode },
+      });
+      if (!kind?.isActive || !unit?.isActive) {
+        res.status(400).json({
+          ok: false,
+          message: "Unknown supply kind or unit",
+        });
+        return;
+      }
+
+      const transportBdt = parsed.data.transportBdt ?? 0;
+      const driverBdt = parsed.data.driverBdt ?? 0;
+      const travelBdt = parsed.data.travelBdt ?? 0;
+      const goodsAmountBdt =
+        parsed.data.goodsAmountBdt > 0
+          ? parsed.data.goodsAmountBdt
+          : (parsed.data.amountBdt ?? 0);
+      const totalBdt = goodsAmountBdt + transportBdt + driverBdt + travelBdt;
+      if (!(totalBdt > 0)) {
+        res.status(400).json({
+          ok: false,
+          message: "Total purchase amount must be greater than zero",
+        });
+        return;
+      }
+
       const purchasedAt = parsed.data.purchasedAt
         ? new Date(parsed.data.purchasedAt)
         : new Date();
@@ -426,13 +568,19 @@ ownerFinanceRouter.post(
       ]
         .filter(Boolean)
         .join(" · ");
+      const qtyLabel = `${parsed.data.qty} ${unit.code}`;
+      const note =
+        parsed.data.note ??
+        `${parsed.data.materialName} (${kind.code} · ${qtyLabel})${supplierBits ? ` — ${supplierBits}` : ""} · goods ৳${goodsAmountBdt}` +
+          (transportBdt || driverBdt || travelBdt
+            ? ` + trip ৳${transportBdt + driverBdt + travelBdt}`
+            : "");
+
       const result = await recordWalletTxn({
         tenantId: tid(req),
         typeCode: "MATERIAL_BUY",
-        amountBdt: parsed.data.amountBdt,
-        note:
-          parsed.data.note ??
-          `${parsed.data.materialName}${supplierBits ? ` — ${supplierBits}` : ""}`,
+        amountBdt: totalBdt,
+        note,
         occurredAt: purchasedAt,
         createdBy: req.auth!.id,
       });
@@ -440,25 +588,26 @@ ownerFinanceRouter.post(
         data: {
           tenantId: tid(req),
           materialName: parsed.data.materialName,
+          kindId: kind.id,
+          unitId: unit.id,
+          qty: parsed.data.qty,
+          goodsAmountBdt,
+          transportBdt,
+          driverBdt,
+          travelBdt,
           supplierName: parsed.data.supplierName ?? null,
           supplierPhone: parsed.data.supplierPhone ?? null,
-          amountBdt: parsed.data.amountBdt,
+          amountBdt: totalBdt,
           note: parsed.data.note ?? null,
           purchasedAt,
           cashTransactionId: result.transaction.id,
           createdBy: req.auth!.id,
         },
+        include: { kind: true, unit: true },
       });
       res.status(201).json({
         ok: true,
-        purchase: {
-          id: purchase.id,
-          materialName: purchase.materialName,
-          supplierName: purchase.supplierName,
-          supplierPhone: purchase.supplierPhone,
-          amountBdt: Number(purchase.amountBdt),
-          purchasedAt: purchase.purchasedAt,
-        },
+        purchase: serializePurchase(purchase),
         wallet: {
           id: result.wallet.id,
           balanceBdt: Number(result.wallet.balanceBdt),
@@ -479,6 +628,9 @@ const expenseSchema = z.object({
     "LAWSUIT",
     "GESTURE",
     "OTHER",
+    "TRANSPORT",
+    "DRIVER",
+    "TRAVEL",
   ]),
   title: z.string().min(2).max(160),
   amountBdt: z.coerce.number().positive(),
@@ -525,7 +677,11 @@ ownerFinanceRouter.post(
         ? new Date(parsed.data.occurredAt)
         : new Date();
       const typeCode =
-        parsed.data.categoryCode === "UTILITY" ? "UTILITY" : "EXPENSE";
+        parsed.data.categoryCode === "UTILITY"
+          ? "UTILITY"
+          : parsed.data.categoryCode === "TRANSPORT"
+            ? "TRANSPORT"
+            : "EXPENSE";
       const contactBits = [parsed.data.contactName, parsed.data.contactPhone]
         .filter(Boolean)
         .join(" · ");
@@ -581,6 +737,201 @@ ownerFinanceRouter.post(
     }
   },
 );
+
+ownerFinanceRouter.get("/wallet/analytics", async (req, res) => {
+  const tenantId = tid(req);
+  const days = Math.min(Math.max(Number(req.query.days) || 90, 7), 365);
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const [txns, purchases, expenses, wallet] = await Promise.all([
+    prisma.cashTransaction.findMany({
+      where: { tenantId, occurredAt: { gte: since } },
+      include: {
+        type: true,
+        materialPurchase: { include: { kind: true, unit: true } },
+        cashExpense: { include: { category: true } },
+        sale: true,
+        salaryPayment: true,
+      },
+      orderBy: { occurredAt: "desc" },
+      take: 300,
+    }),
+    prisma.materialPurchase.findMany({
+      where: { tenantId, purchasedAt: { gte: since } },
+      include: { kind: true, unit: true },
+      orderBy: { purchasedAt: "desc" },
+      take: 100,
+    }),
+    prisma.cashExpense.findMany({
+      where: { tenantId, occurredAt: { gte: since } },
+      include: { category: true },
+      orderBy: { occurredAt: "desc" },
+      take: 100,
+    }),
+    ensureCashWallet(tenantId),
+  ]);
+
+  let salesCredit = 0;
+  let materialTotal = 0;
+  let salaryTotal = 0;
+  let utilityTotal = 0;
+  let transportExtra = 0;
+  let otherExpense = 0;
+  let otherCredit = 0;
+  let otherDebit = 0;
+
+  for (const txn of txns) {
+    const amt = Number(txn.amountBdt);
+    const code = txn.type.code;
+    if (txn.type.direction === "credit") {
+      if (code === "SALE") salesCredit += amt;
+      else otherCredit += amt;
+    } else if (code === "MATERIAL_BUY") materialTotal += amt;
+    else if (code === "SALARY") salaryTotal += amt;
+    else if (code === "UTILITY") utilityTotal += amt;
+    else if (code === "TRANSPORT") transportExtra += amt;
+    else if (code === "EXPENSE") otherExpense += amt;
+    else otherDebit += amt;
+  }
+
+  let goodsSum = 0;
+  let tripTransport = 0;
+  let tripDriver = 0;
+  let tripTravel = 0;
+  const byKind: Record<
+    string,
+    { code: string; nameEn: string; nameBn: string; totalBdt: number; qty: number }
+  > = {};
+
+  for (const p of purchases) {
+    goodsSum += Number(p.goodsAmountBdt);
+    tripTransport += Number(p.transportBdt);
+    tripDriver += Number(p.driverBdt);
+    tripTravel += Number(p.travelBdt);
+    const key = p.kind.code;
+    if (!byKind[key]) {
+      byKind[key] = {
+        code: p.kind.code,
+        nameEn: p.kind.nameEn,
+        nameBn: p.kind.nameBn,
+        totalBdt: 0,
+        qty: 0,
+      };
+    }
+    byKind[key]!.totalBdt += Number(p.amountBdt);
+    byKind[key]!.qty += Number(p.qty);
+  }
+
+  const byExpenseCat: Record<
+    string,
+    { code: string; nameEn: string; nameBn: string; totalBdt: number; count: number }
+  > = {};
+  for (const e of expenses) {
+    const key = e.category.code;
+    if (!byExpenseCat[key]) {
+      byExpenseCat[key] = {
+        code: e.category.code,
+        nameEn: e.category.nameEn,
+        nameBn: e.category.nameBn,
+        totalBdt: 0,
+        count: 0,
+      };
+    }
+    byExpenseCat[key]!.totalBdt += Number(e.amountBdt);
+    byExpenseCat[key]!.count += 1;
+  }
+
+  const transactions = txns.map((txn) => {
+    const base = serializeTxn(txn);
+    if (txn.materialPurchase) {
+      const p = serializePurchase(txn.materialPurchase);
+      return {
+        ...base,
+        detailType: "material" as const,
+        detail: p,
+      };
+    }
+    if (txn.cashExpense) {
+      return {
+        ...base,
+        detailType: "expense" as const,
+        detail: {
+          id: txn.cashExpense.id,
+          title: txn.cashExpense.title,
+          amountBdt: Number(txn.cashExpense.amountBdt),
+          contactName: txn.cashExpense.contactName,
+          contactPhone: txn.cashExpense.contactPhone,
+          category: {
+            code: txn.cashExpense.category.code,
+            nameEn: txn.cashExpense.category.nameEn,
+            nameBn: txn.cashExpense.category.nameBn,
+          },
+        },
+      };
+    }
+    if (txn.sale) {
+      return {
+        ...base,
+        detailType: "sale" as const,
+        detail: {
+          id: txn.sale.id,
+          amountBdt: Number(txn.sale.amountBdt),
+          buyerName: txn.sale.buyerName,
+        },
+      };
+    }
+    if (txn.salaryPayment) {
+      return {
+        ...base,
+        detailType: "salary" as const,
+        detail: {
+          id: txn.salaryPayment.id,
+          amountBdt: Number(txn.salaryPayment.amountBdt),
+          periodLabel: txn.salaryPayment.periodLabel,
+        },
+      };
+    }
+    return { ...base, detailType: "other" as const, detail: null };
+  });
+
+  res.json({
+    ok: true,
+    days,
+    since,
+    wallet: {
+      id: wallet.id,
+      balanceBdt: Number(wallet.balanceBdt),
+    },
+    totals: {
+      salesCreditBdt: salesCredit,
+      materialTotalBdt: materialTotal,
+      materialGoodsBdt: goodsSum,
+      materialTransportBdt: tripTransport,
+      materialDriverBdt: tripDriver,
+      materialTravelBdt: tripTravel,
+      standaloneTransportBdt: transportExtra,
+      utilityBdt: utilityTotal,
+      otherExpenseBdt: otherExpense,
+      salaryBdt: salaryTotal,
+      otherCreditBdt: otherCredit,
+      otherDebitBdt: otherDebit,
+      netCashFlowBdt:
+        salesCredit +
+        otherCredit -
+        (materialTotal +
+          salaryTotal +
+          utilityTotal +
+          transportExtra +
+          otherExpense +
+          otherDebit),
+    },
+    bySupplyKind: Object.values(byKind),
+    byExpenseCategory: Object.values(byExpenseCat),
+    purchases: purchases.map(serializePurchase),
+    transactions,
+  });
+});
 
 /* ───────── Salary payments ───────── */
 

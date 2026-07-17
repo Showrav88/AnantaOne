@@ -148,6 +148,74 @@ export type WalletSummary = {
   updatedAt?: string;
 };
 
+export type SupplyPurchase = {
+  id: string;
+  materialName: string;
+  supplierName: string | null;
+  supplierPhone: string | null;
+  qty: number;
+  goodsAmountBdt: number;
+  transportBdt: number;
+  driverBdt: number;
+  travelBdt: number;
+  amountBdt: number;
+  landedUnitCostBdt: number | null;
+  purchasedAt: string;
+  note: string | null;
+  kind: { code: string; nameEn: string; nameBn: string } | null;
+  unit: { code: string; nameEn: string; nameBn: string } | null;
+  breakdown: {
+    goodsBdt: number;
+    transportBdt: number;
+    driverBdt: number;
+    travelBdt: number;
+    totalBdt: number;
+  };
+};
+
+export type WalletAnalytics = {
+  ok: boolean;
+  days: number;
+  since: string;
+  wallet: WalletSummary;
+  totals: {
+    salesCreditBdt: number;
+    materialTotalBdt: number;
+    materialGoodsBdt: number;
+    materialTransportBdt: number;
+    materialDriverBdt: number;
+    materialTravelBdt: number;
+    standaloneTransportBdt: number;
+    utilityBdt: number;
+    otherExpenseBdt: number;
+    salaryBdt: number;
+    otherCreditBdt: number;
+    otherDebitBdt: number;
+    netCashFlowBdt: number;
+  };
+  bySupplyKind: Array<{
+    code: string;
+    nameEn: string;
+    nameBn: string;
+    totalBdt: number;
+    qty: number;
+  }>;
+  byExpenseCategory: Array<{
+    code: string;
+    nameEn: string;
+    nameBn: string;
+    totalBdt: number;
+    count: number;
+  }>;
+  purchases: SupplyPurchase[];
+  transactions: Array<
+    CashTransaction & {
+      detailType: string;
+      detail: unknown;
+    }
+  >;
+};
+
 export type SalaryPaymentRow = {
   id: string;
   amountBdt: number;
@@ -535,6 +603,31 @@ export const api = {
         "/api/v1/owner/wallet/materials",
         1,
         { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
+    supplyMeta: () =>
+      getJson<{
+        ok: boolean;
+        kinds: Array<{
+          code: string;
+          nameEn: string;
+          nameBn: string;
+          description: string | null;
+        }>;
+        units: Array<{ code: string; nameEn: string; nameBn: string }>;
+      }>("/api/v1/owner/wallet/supply-meta", 2, undefined, true),
+    supplyPurchases: () =>
+      getJson<{ ok: boolean; purchases: SupplyPurchase[] }>(
+        "/api/v1/owner/wallet/purchases",
+        2,
+        undefined,
+        true,
+      ),
+    walletAnalytics: (days = 90) =>
+      getJson<WalletAnalytics>(
+        `/api/v1/owner/wallet/analytics?days=${days}`,
+        2,
+        undefined,
         true,
       ),
     expenseCategories: () =>
