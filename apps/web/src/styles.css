@@ -1225,6 +1225,84 @@ button.cta.secondary {
   margin: 1.5rem 0;
   display: flex;
   justify-content: center;
+  overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tags-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  align-items: start;
+}
+
+.tags-live-preview {
+  min-width: 0;
+}
+
+.tags-live-preview .tag-print-area {
+  margin: 0.75rem 0 0;
+  justify-content: flex-start;
+  background: repeating-linear-gradient(
+    -45deg,
+    #f3faf6,
+    #f3faf6 8px,
+    #e8f3ec 8px,
+    #e8f3ec 16px
+  );
+  padding: 1rem;
+  border: 1px dashed var(--line);
+}
+
+.tag-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.tag-actions .cta {
+  flex: 1 1 10rem;
+  min-width: min(100%, 9rem);
+  justify-content: center;
+  text-align: center;
+}
+
+.save-dates-check {
+  padding: 0.55rem 0.65rem;
+  background: #e8f6ef;
+  border: 1px solid #b7e0c8;
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 700px) {
+  .tags-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .tags-controls .owner-form.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .tag-actions {
+    flex-direction: column;
+  }
+
+  .tag-actions .cta {
+    width: 100%;
+    flex: none;
+  }
+
+  .size-presets {
+    width: 100%;
+  }
+
+  .size-chip {
+    flex: 1 1 auto;
+    text-align: center;
+  }
 }
 
 .product-tag {

@@ -1,11 +1,17 @@
-import { useEffect, useState, useTransition, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type FormEvent,
+} from "react";
 import QRCode from "qrcode";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import {
   api,
   type Product,
   type ProductionBatch,
-  type TagPreview,
   type TagTemplate,
 } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
@@ -41,6 +47,13 @@ function toDateInput(value: string | null | undefined) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
+function formatTagDate(value: string) {
+  if (!value) return "—";
+  const d = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString();
+}
+
 export function OwnerTagsPage({ locale }: Props) {
   const t = getMessages(locale);
   const user = getStoredUser();
@@ -50,6 +63,11 @@ export function OwnerTagsPage({ locale }: Props) {
   const [templates, setTemplates] = useState<TagTemplate[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [batches, setBatches] = useState<ProductionBatch[]>([]);
+  const [company, setCompany] = useState<{
+    name: string;
+    slug: string;
+    phone: string | null;
+  } | null>(null);
   const [form, setForm] = useState(emptyTpl);
   const [productId, setProductId] = useState("");
   const [batchId, setBatchId] = useState("");
@@ -59,28 +77,37 @@ export function OwnerTagsPage({ locale }: Props) {
   const [printWidth, setPrintWidth] = useState("50");
   const [printHeight, setPrintHeight] = useState("30");
   const [saveDates, setSaveDates] = useState(true);
-  const [preview, setPreview] = useState<TagPreview | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [savingDates, setSavingDates] = useState(false);
   const [pending, startTransition] = useTransition();
+  const lastProductId = useRef("");
 
   async function load() {
-    const [tpl, prod, batchRes] = await Promise.all([
+    const [tpl, prod, batchRes, companyRes] = await Promise.all([
       api.owner.tagTemplates(),
       api.owner.products(),
       api.owner.batches(),
+      api.owner.company().catch(() => null),
     ]);
     setTemplates(tpl.templates);
     setProducts(prod.products.filter((p) => p.isActive));
     setBatches(batchRes.batches);
-    const firstProd = prod.products[0];
+    if (companyRes?.company) {
+      setCompany({
+        name: companyRes.company.name,
+        slug: companyRes.company.slug,
+        phone: companyRes.company.phone ?? null,
+      });
+    }
+    const firstProd = prod.products.find((p) => p.isActive) ?? prod.products[0];
     if (firstProd) setProductId((id) => id || firstProd.id);
     const def = tpl.templates.find((x) => x.isDefault) ?? tpl.templates[0];
     if (def) {
       setTemplateId((id) => id || def.id);
-      setPrintWidth(String(def.widthMm));
-      setPrintHeight(String(def.heightMm));
+      setPrintWidth((w) => (w ? w : String(def.widthMm)));
+      setPrintHeight((h) => (h ? h : String(def.heightMm)));
     }
     return batchRes.batches;
   }
@@ -93,18 +120,31 @@ export function OwnerTagsPage({ locale }: Props) {
     });
   }, []);
 
-  const productBatches = batches.filter((b) => b.productId === productId);
+  const productBatches = useMemo(
+    () => batches.filter((b) => b.productId === productId),
+    [batches, productId],
+  );
   const selectedProduct = products.find((p) => p.id === productId);
+  const selectedBatch = batches.find((b) => b.id === batchId);
+  const selectedTemplate = templates.find((x) => x.id === templateId);
   const productCreatedMin = selectedProduct?.createdAt
     ? toDateInput(selectedProduct.createdAt)
     : "";
 
+  // Only reset batch when the product changes — not when batches reload after save.
   useEffect(() => {
+    if (productId === lastProductId.current) {
+      if (batchId && productBatches.some((b) => b.id === batchId)) return;
+      if (productBatches[0]) setBatchId(productBatches[0].id);
+      else setBatchId("");
+      return;
+    }
+    lastProductId.current = productId;
     if (productBatches[0]) setBatchId(productBatches[0].id);
     else setBatchId("");
-  }, [productId, batches]);
+  }, [productId, productBatches, batchId]);
 
-  // MFG defaults from product create date; EXP is chosen at print time (blank).
+  // MFG defaults from product create date when product changes; EXP blank until set.
   useEffect(() => {
     if (!selectedProduct?.createdAt) {
       setMfgDate("");
@@ -122,6 +162,82 @@ export function OwnerTagsPage({ locale }: Props) {
       setPrintHeight(String(tpl.heightMm));
     }
   }, [templateId, templates]);
+
+  const liveTag = useMemo(() => {
+    if (!selectedProduct) return null;
+    const tpl = selectedTemplate ?? {
+      showSku: true,
+      showPrice: true,
+      showDescription: true,
+      showMfgDate: true,
+      showExpDate: true,
+      showBatch: true,
+      showQr: true,
+      showCompany: true,
+      tagDescription: null as string | null,
+    };
+    const widthMm = Number(printWidth) || 50;
+    const heightMm = Number(printHeight) || 30;
+    const productName =
+      locale === "bn" && selectedProduct.nameBn
+        ? selectedProduct.nameBn
+        : selectedProduct.name;
+    const description =
+      tpl.tagDescription?.trim() ||
+      selectedProduct.description ||
+      selectedProduct.nameBn ||
+      selectedProduct.name;
+    const qrValue =
+      tpl.showQr && company?.slug && selectedBatch
+        ? `${window.location.origin}${window.location.pathname}#/tag/${company.slug}/${encodeURIComponent(selectedProduct.sku)}/${encodeURIComponent(selectedBatch.batchCode)}`
+        : null;
+
+    return {
+      size: { widthMm, heightMm },
+      fields: {
+        company: tpl.showCompany ? (company?.name ?? null) : null,
+        phone: tpl.showCompany ? (company?.phone ?? null) : null,
+        productName,
+        sku: tpl.showSku ? selectedProduct.sku : null,
+        priceBdt: tpl.showPrice ? selectedProduct.priceBdt : null,
+        description: tpl.showDescription ? description : null,
+        batchCode: tpl.showBatch ? (selectedBatch?.batchCode ?? null) : null,
+        manufacturedAt: tpl.showMfgDate && mfgDate ? mfgDate : null,
+        expiresAt: tpl.showExpDate && expDate ? expDate : null,
+        qrValue,
+      },
+    };
+  }, [
+    selectedProduct,
+    selectedBatch,
+    selectedTemplate,
+    company,
+    printWidth,
+    printHeight,
+    mfgDate,
+    expDate,
+    locale,
+  ]);
+
+  // Live QR for the current tag fields.
+  useEffect(() => {
+    const value = liveTag?.fields.qrValue;
+    if (!value) {
+      setQrDataUrl(null);
+      return;
+    }
+    let cancelled = false;
+    void QRCode.toDataURL(value, {
+      margin: 0,
+      width: 96,
+      errorCorrectionLevel: "M",
+    }).then((url) => {
+      if (!cancelled) setQrDataUrl(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [liveTag?.fields.qrValue]);
 
   async function onCreateTemplate(e: FormEvent) {
     e.preventDefault();
@@ -157,72 +273,42 @@ export function OwnerTagsPage({ locale }: Props) {
     return true;
   }
 
-  async function onSaveDatesOnly() {
+  async function persistDatesToBatch() {
     if (!batchId || !mfgDate || !expDate) {
       setError(t.owner.expRequiredAtPrint);
-      return;
+      return false;
     }
-    if (!assertMfgForward(mfgDate)) return;
+    if (!assertMfgForward(mfgDate)) return false;
+    setSavingDates(true);
     setError(null);
-    setOkMsg(null);
     try {
-      await api.owner.updateBatch(batchId, {
+      const res = await api.owner.updateBatch(batchId, {
         manufacturedAt: mfgDate,
         expiresAt: expDate,
       });
+      setBatches((prev) =>
+        prev.map((b) => (b.id === res.batch.id ? res.batch : b)),
+      );
       setOkMsg(t.owner.datesSaved);
-      await load();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
+      return false;
+    } finally {
+      setSavingDates(false);
     }
   }
 
-  async function onPreview() {
-    setError(null);
+  async function onSaveDatesOnly() {
     setOkMsg(null);
-    if (!mfgDate) {
-      setError(t.owner.mfgRequired);
-      return;
-    }
-    if (!expDate) {
-      setError(t.owner.expRequiredAtPrint);
-      return;
-    }
-    if (!assertMfgForward(mfgDate)) return;
-    try {
-      const res = await api.owner.previewTag({
-        productId,
-        batchId,
-        templateId: templateId || undefined,
-        manufacturedAt: mfgDate,
-        expiresAt: expDate,
-        saveDatesToBatch: saveDates,
-        widthMm: Number(printWidth),
-        heightMm: Number(printHeight),
-      });
-      setPreview(res.tag);
-      if (saveDates) {
-        setOkMsg(t.owner.datesSaved);
-        await load();
-      }
-      if (res.tag.fields.qrValue) {
-        const url = await QRCode.toDataURL(res.tag.fields.qrValue, {
-          margin: 1,
-          width: 160,
-        });
-        setQrDataUrl(url);
-      } else {
-        setQrDataUrl(null);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
-    }
+    await persistDatesToBatch();
   }
 
   const mmToPx = (mm: number) => Math.round((mm / 25.4) * 96);
+  const canPrint = Boolean(liveTag && mfgDate && expDate && productId && batchId);
 
   return (
-    <div className="owner-page">
+    <div className="owner-page tags-page">
       <header className="owner-header">
         <div>
           <p className="eyebrow">{t.owner.navTags}</p>
@@ -234,8 +320,8 @@ export function OwnerTagsPage({ locale }: Props) {
       {error ? <p className="error-banner">{error}</p> : null}
       {okMsg ? <p className="ok-banner">{okMsg}</p> : null}
 
-      <div className="responsive-panels">
-        <section className="panel-card">
+      <div className="tags-layout">
+        <section className="panel-card tags-controls">
           <h2>{t.owner.printPreview}</h2>
           <p className="muted tiny">{t.owner.tagDateHint}</p>
           {productCreatedMin ? (
@@ -277,11 +363,18 @@ export function OwnerTagsPage({ locale }: Props) {
                 value={batchId}
                 onChange={(e) => setBatchId(e.target.value)}
               >
-                {productBatches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.batchCode}
-                  </option>
-                ))}
+                {productBatches.length === 0 ? (
+                  <option value="">{t.owner.noBatch}</option>
+                ) : (
+                  productBatches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.batchCode}
+                      {b.expiresAt
+                        ? ` · exp ${new Date(b.expiresAt).toLocaleDateString()}`
+                        : ""}
+                    </option>
+                  ))
+                )}
               </select>
             </label>
             <label>
@@ -299,7 +392,9 @@ export function OwnerTagsPage({ locale }: Props) {
                     return;
                   }
                   setError(null);
+                  setOkMsg(null);
                   setMfgDate(next);
+                  if (expDate && next && expDate < next) setExpDate(next);
                 }}
               />
               <span className="muted tiny">{t.owner.mfgForwardHint}</span>
@@ -311,7 +406,11 @@ export function OwnerTagsPage({ locale }: Props) {
                 required
                 min={mfgDate || productCreatedMin || undefined}
                 value={expDate}
-                onChange={(e) => setExpDate(e.target.value)}
+                onChange={(e) => {
+                  setError(null);
+                  setOkMsg(null);
+                  setExpDate(e.target.value);
+                }}
               />
               <span className="muted tiny">{t.owner.expAtPrintHint}</span>
             </label>
@@ -358,7 +457,7 @@ export function OwnerTagsPage({ locale }: Props) {
               />
             </label>
             {canWrite ? (
-              <label className="check full">
+              <label className="check full save-dates-check">
                 <input
                   type="checkbox"
                   checked={saveDates}
@@ -367,38 +466,92 @@ export function OwnerTagsPage({ locale }: Props) {
                 {t.owner.saveDatesToBatch}
               </label>
             ) : null}
-            <button
-              type="button"
-              className="cta"
-              onClick={() => void onPreview()}
-              disabled={!productId || !batchId || !mfgDate || !expDate}
-            >
-              {t.owner.previewTag}
-            </button>
+          </div>
+
+          <div className="tag-actions">
             {canWrite ? (
               <button
                 type="button"
                 className="cta secondary"
                 onClick={() => void onSaveDatesOnly()}
-                disabled={!batchId || !mfgDate || !expDate}
+                disabled={
+                  !batchId || !mfgDate || !expDate || savingDates
+                }
               >
-                {t.owner.saveDatesOnly}
+                {savingDates ? "…" : t.owner.saveDatesOnly}
               </button>
             ) : null}
-            {preview ? (
-              <button
-                type="button"
-                className="cta secondary"
-                onClick={() => window.print()}
-              >
-                {t.owner.printTag}
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className="cta"
+              onClick={() => {
+                void (async () => {
+                  if (saveDates && canWrite) {
+                    const ok = await persistDatesToBatch();
+                    if (!ok) return;
+                  }
+                  window.print();
+                })();
+              }}
+              disabled={!canPrint || savingDates}
+            >
+              {t.owner.printTag}
+            </button>
           </div>
         </section>
 
+        <section className="panel-card tags-live-preview">
+          <h2>{t.owner.previewTag}</h2>
+          <p className="muted tiny">{t.owner.tagLiveHint}</p>
+          {liveTag ? (
+            <div className="tag-print-area">
+              <div
+                className="product-tag"
+                style={{
+                  width: mmToPx(liveTag.size.widthMm),
+                  minHeight: mmToPx(liveTag.size.heightMm),
+                }}
+              >
+                {liveTag.fields.company ? (
+                  <p className="tag-brand">{liveTag.fields.company}</p>
+                ) : null}
+                <p className="tag-name">{liveTag.fields.productName}</p>
+                {liveTag.fields.sku ? (
+                  <p className="tag-row">SKU: {liveTag.fields.sku}</p>
+                ) : null}
+                {liveTag.fields.priceBdt != null ? (
+                  <p className="tag-price">৳{liveTag.fields.priceBdt}</p>
+                ) : null}
+                {liveTag.fields.description ? (
+                  <p className="tag-desc">{liveTag.fields.description}</p>
+                ) : null}
+                {liveTag.fields.batchCode ? (
+                  <p className="tag-row">
+                    Batch: {liveTag.fields.batchCode}
+                  </p>
+                ) : null}
+                {selectedTemplate?.showMfgDate !== false ? (
+                  <p className="tag-row">
+                    MFG: {formatTagDate(mfgDate)}
+                  </p>
+                ) : null}
+                {selectedTemplate?.showExpDate !== false ? (
+                  <p className="tag-row">
+                    EXP: {formatTagDate(expDate)}
+                  </p>
+                ) : null}
+                {qrDataUrl ? (
+                  <img className="tag-qr" src={qrDataUrl} alt="QR" />
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <p className="muted">{t.owner.cartEmpty}</p>
+          )}
+        </section>
+
         {canWrite ? (
-          <section className="panel-card">
+          <section className="panel-card tags-template-form">
             <h2>{t.owner.tagTemplateForm}</h2>
             <form className="owner-form compact" onSubmit={onCreateTemplate}>
               <label>
@@ -530,49 +683,6 @@ export function OwnerTagsPage({ locale }: Props) {
           </section>
         ) : null}
       </div>
-
-      {preview ? (
-        <div className="tag-print-area">
-          <div
-            className="product-tag"
-            style={{
-              width: mmToPx(preview.size.widthMm),
-              minHeight: mmToPx(preview.size.heightMm),
-            }}
-          >
-            {preview.fields.company ? (
-              <p className="tag-brand">{preview.fields.company}</p>
-            ) : null}
-            <p className="tag-name">{preview.fields.productName}</p>
-            {preview.fields.sku ? (
-              <p className="tag-row">SKU: {preview.fields.sku}</p>
-            ) : null}
-            {preview.fields.priceBdt != null ? (
-              <p className="tag-price">৳{preview.fields.priceBdt}</p>
-            ) : null}
-            {preview.fields.description ? (
-              <p className="tag-desc">{preview.fields.description}</p>
-            ) : null}
-            {preview.fields.batchCode ? (
-              <p className="tag-row">Batch: {preview.fields.batchCode}</p>
-            ) : null}
-            {preview.fields.manufacturedAt ? (
-              <p className="tag-row">
-                MFG:{" "}
-                {new Date(preview.fields.manufacturedAt).toLocaleDateString()}
-              </p>
-            ) : null}
-            {preview.fields.expiresAt ? (
-              <p className="tag-row">
-                EXP: {new Date(preview.fields.expiresAt).toLocaleDateString()}
-              </p>
-            ) : null}
-            {qrDataUrl ? (
-              <img className="tag-qr" src={qrDataUrl} alt="QR" />
-            ) : null}
-          </div>
-        </div>
-      ) : null}
 
       <h2 className="section-title">{t.owner.savedTemplates}</h2>
       <ul className="plain-list">
