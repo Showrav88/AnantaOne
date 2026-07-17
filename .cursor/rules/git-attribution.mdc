@@ -1,0 +1,8 @@
+---
+description: Git commit rules for AnantaOne — no Cursor attribution
+alwaysApply: true
+---
+
+Never add "Made-with: Cursor", "Co-authored-by: Cursor", "Co-authored-by: cursoragent@cursor.com", or any Cursor attribution trailer to commits, PRs, or code comments.
+
+Commits should use the project identity only (AnantaOne / company email), not personal Showrav88 branding in messages or trailers.

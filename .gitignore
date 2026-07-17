@@ -1,0 +1,70 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+build/
+.next/
+out/
+.expo/
+web-build/
+
+# Environment (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# Testing
+coverage/
+.nyc_output/
+
+# Prisma / DB
+*.db
+*.sqlite
+
+# Uploads & temp
+uploads/
+tmp/
+temp/
+.cache/
+
+# Mobile
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+android/app/debug
+android/app/release
+ios/Pods/
+
+# Docker volumes (local data)
+postgres-data/
+redis-data/
+
+# Misc
+*.tsbuildinfo
+.turbo/
