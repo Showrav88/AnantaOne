@@ -537,6 +537,23 @@ export const api = {
         { method: "POST", body: JSON.stringify(body) },
         true,
       ),
+    expenseCategories: () =>
+      getJson<{
+        ok: boolean;
+        categories: Array<{
+          code: string;
+          nameEn: string;
+          nameBn: string;
+          description: string | null;
+        }>;
+      }>("/api/v1/owner/wallet/expense-categories", 2, undefined, true),
+    recordExpense: (body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; wallet: WalletSummary }>(
+        "/api/v1/owner/wallet/expenses",
+        1,
+        { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
     payments: () =>
       getJson<{ ok: boolean; payments: SalaryPaymentRow[] }>(
         "/api/v1/owner/payments",

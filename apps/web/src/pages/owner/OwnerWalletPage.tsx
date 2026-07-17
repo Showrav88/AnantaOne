@@ -1,9 +1,17 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import { api, type CashTransaction, type WalletSummary } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
 
 type Props = { locale: LocaleCode };
+
+type ExpenseCategory = {
+  code: string;
+  nameEn: string;
+  nameBn: string;
+  description: string | null;
+};
 
 export function OwnerWalletPage({ locale }: Props) {
   const t = getMessages(locale);
@@ -14,14 +22,24 @@ export function OwnerWalletPage({ locale }: Props) {
 
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
   const [txns, setTxns] = useState<CashTransaction[]>([]);
+  const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const [sale, setSale] = useState({ amountBdt: "", buyerName: "", note: "" });
   const [material, setMaterial] = useState({
     materialName: "",
     amountBdt: "",
     supplierName: "",
+    supplierPhone: "",
+    note: "",
+  });
+  const [expense, setExpense] = useState({
+    categoryCode: "UTILITY",
+    title: "",
+    amountBdt: "",
+    contactName: "",
+    contactPhone: "",
     note: "",
   });
   const [adjust, setAdjust] = useState({
@@ -36,9 +54,16 @@ export function OwnerWalletPage({ locale }: Props) {
   });
 
   async function load() {
-    const res = await api.owner.wallet();
-    setWallet(res.wallet);
-    setTxns(res.transactions);
+    const [walletRes, catRes] = await Promise.all([
+      api.owner.wallet(),
+      api.owner.expenseCategories().catch(() => ({ categories: [] as ExpenseCategory[] })),
+    ]);
+    setWallet(walletRes.wallet);
+    setTxns(walletRes.transactions);
+    setCategories(catRes.categories);
+    if (catRes.categories[0] && !expense.categoryCode) {
+      setExpense((e) => ({ ...e, categoryCode: catRes.categories[0]!.code }));
+    }
   }
 
   useEffect(() => {
@@ -49,38 +74,54 @@ export function OwnerWalletPage({ locale }: Props) {
     });
   }, []);
 
-  async function onSale(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    try {
-      await api.owner.recordSale({
-        amountBdt: Number(sale.amountBdt),
-        buyerName: sale.buyerName || null,
-        note: sale.note || null,
-      });
-      setSale({ amountBdt: "", buyerName: "", note: "" });
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
-    }
-  }
-
   async function onMaterial(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setOkMsg(null);
     try {
       await api.owner.recordMaterial({
         materialName: material.materialName,
         amountBdt: Number(material.amountBdt),
         supplierName: material.supplierName || null,
+        supplierPhone: material.supplierPhone || null,
         note: material.note || null,
       });
       setMaterial({
         materialName: "",
         amountBdt: "",
         supplierName: "",
+        supplierPhone: "",
         note: "",
       });
+      setOkMsg(t.owner.expenseDebited);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
+  async function onExpense(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setOkMsg(null);
+    try {
+      await api.owner.recordExpense({
+        categoryCode: expense.categoryCode,
+        title: expense.title,
+        amountBdt: Number(expense.amountBdt),
+        contactName: expense.contactName || null,
+        contactPhone: expense.contactPhone || null,
+        note: expense.note || null,
+      });
+      setExpense({
+        categoryCode: expense.categoryCode,
+        title: "",
+        amountBdt: "",
+        contactName: "",
+        contactPhone: "",
+        note: "",
+      });
+      setOkMsg(t.owner.expenseDebited);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
@@ -90,6 +131,7 @@ export function OwnerWalletPage({ locale }: Props) {
   async function onAdjust(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setOkMsg(null);
     try {
       await api.owner.adjustWallet({
         typeCode: adjust.typeCode,
@@ -110,6 +152,10 @@ export function OwnerWalletPage({ locale }: Props) {
           <p className="eyebrow">{t.owner.navWallet}</p>
           <h1>{t.owner.walletTitle}</h1>
           <p className="muted">{t.owner.walletHint}</p>
+          <p className="muted tiny">
+            {t.owner.walletSaleNote}{" "}
+            <Link to="/owner/sell">{t.owner.navSell}</Link>
+          </p>
         </div>
         <div className="wallet-balance">
           <p className="eyebrow">{t.owner.cashBalance}</p>
@@ -120,47 +166,13 @@ export function OwnerWalletPage({ locale }: Props) {
       </header>
 
       {error ? <p className="error-banner">{error}</p> : null}
+      {okMsg ? <p className="ok-banner">{okMsg}</p> : null}
 
       {canWrite ? (
         <div className="wallet-forms">
-          <form className="owner-form compact" onSubmit={onSale}>
-            <h2>{t.owner.saleCredit}</h2>
-            <label>
-              {t.owner.fieldAmount}
-              <input
-                required
-                type="number"
-                min={0.01}
-                step="0.01"
-                value={sale.amountBdt}
-                onChange={(e) =>
-                  setSale({ ...sale, amountBdt: e.target.value })
-                }
-              />
-            </label>
-            <label>
-              {t.owner.fieldBuyerName}
-              <input
-                value={sale.buyerName}
-                onChange={(e) =>
-                  setSale({ ...sale, buyerName: e.target.value })
-                }
-              />
-            </label>
-            <label className="full">
-              {t.owner.fieldNote}
-              <input
-                value={sale.note}
-                onChange={(e) => setSale({ ...sale, note: e.target.value })}
-              />
-            </label>
-            <button type="submit" className="cta" disabled={pending}>
-              {t.owner.addSale}
-            </button>
-          </form>
-
           <form className="owner-form compact" onSubmit={onMaterial}>
             <h2>{t.owner.materialDebit}</h2>
+            <p className="muted tiny full">{t.owner.materialDebitHint}</p>
             <label>
               {t.owner.fieldMaterial}
               <input
@@ -193,6 +205,18 @@ export function OwnerWalletPage({ locale }: Props) {
                 }
               />
             </label>
+            <label>
+              {t.owner.fieldSupplierPhone}
+              <input
+                type="tel"
+                inputMode="tel"
+                value={material.supplierPhone}
+                onChange={(e) =>
+                  setMaterial({ ...material, supplierPhone: e.target.value })
+                }
+                placeholder="01XXXXXXXXX"
+              />
+            </label>
             <label className="full">
               {t.owner.fieldNote}
               <input
@@ -204,6 +228,92 @@ export function OwnerWalletPage({ locale }: Props) {
             </label>
             <button type="submit" className="cta" disabled={pending}>
               {t.owner.addMaterial}
+            </button>
+          </form>
+
+          <form className="owner-form compact" onSubmit={onExpense}>
+            <h2>{t.owner.expenseDebit}</h2>
+            <p className="muted tiny full">{t.owner.expenseDebitHint}</p>
+            <label>
+              {t.owner.fieldExpenseCategory}
+              <select
+                value={expense.categoryCode}
+                onChange={(e) =>
+                  setExpense({ ...expense, categoryCode: e.target.value })
+                }
+              >
+                {(categories.length
+                  ? categories
+                  : [
+                      { code: "UTILITY", nameEn: "Utility", nameBn: "ইউটিলিটি" },
+                      { code: "FAMILY", nameEn: "Family", nameBn: "পারিবারিক" },
+                      { code: "LAWSUIT", nameEn: "Lawsuit", nameBn: "মামলা" },
+                      { code: "GESTURE", nameEn: "Gesture", nameBn: "সৌজন্য" },
+                      { code: "OTHER", nameEn: "Other", nameBn: "অন্যান্য" },
+                    ]
+                ).map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {locale === "bn" ? c.nameBn : c.nameEn}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              {t.owner.fieldExpenseTitle}
+              <input
+                required
+                value={expense.title}
+                onChange={(e) =>
+                  setExpense({ ...expense, title: e.target.value })
+                }
+                placeholder={t.owner.expenseTitleHint}
+              />
+            </label>
+            <label>
+              {t.owner.fieldAmount}
+              <input
+                required
+                type="number"
+                min={0.01}
+                step="0.01"
+                value={expense.amountBdt}
+                onChange={(e) =>
+                  setExpense({ ...expense, amountBdt: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              {t.owner.fieldContactName}
+              <input
+                value={expense.contactName}
+                onChange={(e) =>
+                  setExpense({ ...expense, contactName: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              {t.owner.fieldContactPhone}
+              <input
+                type="tel"
+                inputMode="tel"
+                value={expense.contactPhone}
+                onChange={(e) =>
+                  setExpense({ ...expense, contactPhone: e.target.value })
+                }
+                placeholder="01XXXXXXXXX"
+              />
+            </label>
+            <label className="full">
+              {t.owner.fieldNote}
+              <input
+                value={expense.note}
+                onChange={(e) =>
+                  setExpense({ ...expense, note: e.target.value })
+                }
+              />
+            </label>
+            <button type="submit" className="cta" disabled={pending}>
+              {t.owner.addExpense}
             </button>
           </form>
 

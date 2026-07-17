@@ -59,6 +59,7 @@ model Company {
   salaryPayments     SalaryPayment[]
   sales              Sale[]
   materialPurchases  MaterialPurchase[]
+  cashExpenses       CashExpense[]
   productionBatches  ProductionBatch[]
   salesOrders        SalesOrder[]
   tagTemplates       TagTemplate[]
@@ -358,6 +359,7 @@ model CashTransaction {
   salaryPayment     SalaryPayment?
   sale              Sale?
   materialPurchase  MaterialPurchase?
+  cashExpense       CashExpense?
 
   @@index([tenantId, occurredAt])
   @@index([walletId])
@@ -411,6 +413,7 @@ model MaterialPurchase {
   id                String   @id @default(cuid())
   tenantId          String
   supplierName      String?
+  supplierPhone     String?
   materialName      String
   amountBdt         Decimal  @db.Decimal(14, 2)
   note              String?
@@ -424,4 +427,43 @@ model MaterialPurchase {
   cashTransaction CashTransaction @relation(fields: [cashTransactionId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, purchasedAt])
+}
+
+/// Expense categories for utility and other cash-out (not counter sales).
+model ExpenseCategoryLookup {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  nameEn      String
+  nameBn      String
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  expenses CashExpense[]
+}
+
+/// Utility / family / lawsuit / gesture / other — auto-debits cash drawer.
+model CashExpense {
+  id                String   @id @default(cuid())
+  tenantId          String
+  categoryId        String
+  title             String
+  amountBdt         Decimal  @db.Decimal(14, 2)
+  contactName       String?
+  contactPhone      String?
+  note              String?
+  occurredAt        DateTime @default(now())
+  cashTransactionId String   @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String?
+
+  company         Company               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category        ExpenseCategoryLookup @relation(fields: [categoryId], references: [id])
+  cashTransaction CashTransaction       @relation(fields: [cashTransactionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, occurredAt])
+  @@index([categoryId])
 }

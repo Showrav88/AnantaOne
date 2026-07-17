@@ -402,6 +402,7 @@ const materialSchema = z.object({
   materialName: z.string().min(2).max(160),
   amountBdt: z.coerce.number().positive(),
   supplierName: z.string().max(160).nullable().optional(),
+  supplierPhone: z.string().max(40).nullable().optional(),
   note: z.string().max(500).nullable().optional(),
   purchasedAt: z.string().datetime().optional(),
 });
@@ -419,13 +420,19 @@ ownerFinanceRouter.post(
       const purchasedAt = parsed.data.purchasedAt
         ? new Date(parsed.data.purchasedAt)
         : new Date();
+      const supplierBits = [
+        parsed.data.supplierName,
+        parsed.data.supplierPhone,
+      ]
+        .filter(Boolean)
+        .join(" · ");
       const result = await recordWalletTxn({
         tenantId: tid(req),
         typeCode: "MATERIAL_BUY",
         amountBdt: parsed.data.amountBdt,
         note:
           parsed.data.note ??
-          `${parsed.data.materialName}${parsed.data.supplierName ? ` — ${parsed.data.supplierName}` : ""}`,
+          `${parsed.data.materialName}${supplierBits ? ` — ${supplierBits}` : ""}`,
         occurredAt: purchasedAt,
         createdBy: req.auth!.id,
       });
@@ -434,6 +441,7 @@ ownerFinanceRouter.post(
           tenantId: tid(req),
           materialName: parsed.data.materialName,
           supplierName: parsed.data.supplierName ?? null,
+          supplierPhone: parsed.data.supplierPhone ?? null,
           amountBdt: parsed.data.amountBdt,
           note: parsed.data.note ?? null,
           purchasedAt,
@@ -447,8 +455,119 @@ ownerFinanceRouter.post(
           id: purchase.id,
           materialName: purchase.materialName,
           supplierName: purchase.supplierName,
+          supplierPhone: purchase.supplierPhone,
           amountBdt: Number(purchase.amountBdt),
           purchasedAt: purchase.purchasedAt,
+        },
+        wallet: {
+          id: result.wallet.id,
+          balanceBdt: Number(result.wallet.balanceBdt),
+        },
+        transaction: serializeTxn(result.transaction),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed";
+      res.status(400).json({ ok: false, message });
+    }
+  },
+);
+
+const expenseSchema = z.object({
+  categoryCode: z.enum([
+    "UTILITY",
+    "FAMILY",
+    "LAWSUIT",
+    "GESTURE",
+    "OTHER",
+  ]),
+  title: z.string().min(2).max(160),
+  amountBdt: z.coerce.number().positive(),
+  contactName: z.string().max(160).nullable().optional(),
+  contactPhone: z.string().max(40).nullable().optional(),
+  note: z.string().max(500).nullable().optional(),
+  occurredAt: z.string().datetime().optional(),
+});
+
+ownerFinanceRouter.get("/wallet/expense-categories", async (_req, res) => {
+  const categories = await prisma.expenseCategoryLookup.findMany({
+    where: { isActive: true },
+    orderBy: { sortOrder: "asc" },
+  });
+  res.json({
+    ok: true,
+    categories: categories.map((c) => ({
+      code: c.code,
+      nameEn: c.nameEn,
+      nameBn: c.nameBn,
+      description: c.description,
+    })),
+  });
+});
+
+ownerFinanceRouter.post(
+  "/wallet/expenses",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const parsed = expenseSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: parsed.error.message });
+      return;
+    }
+    try {
+      const category = await prisma.expenseCategoryLookup.findUnique({
+        where: { code: parsed.data.categoryCode },
+      });
+      if (!category || !category.isActive) {
+        res.status(400).json({ ok: false, message: "Unknown expense category" });
+        return;
+      }
+      const occurredAt = parsed.data.occurredAt
+        ? new Date(parsed.data.occurredAt)
+        : new Date();
+      const typeCode =
+        parsed.data.categoryCode === "UTILITY" ? "UTILITY" : "EXPENSE";
+      const contactBits = [parsed.data.contactName, parsed.data.contactPhone]
+        .filter(Boolean)
+        .join(" · ");
+      const result = await recordWalletTxn({
+        tenantId: tid(req),
+        typeCode,
+        amountBdt: parsed.data.amountBdt,
+        note:
+          parsed.data.note ??
+          `${category.nameEn}: ${parsed.data.title}${contactBits ? ` — ${contactBits}` : ""}`,
+        occurredAt,
+        createdBy: req.auth!.id,
+      });
+      const expense = await prisma.cashExpense.create({
+        data: {
+          tenantId: tid(req),
+          categoryId: category.id,
+          title: parsed.data.title,
+          amountBdt: parsed.data.amountBdt,
+          contactName: parsed.data.contactName ?? null,
+          contactPhone: parsed.data.contactPhone ?? null,
+          note: parsed.data.note ?? null,
+          occurredAt,
+          cashTransactionId: result.transaction.id,
+          createdBy: req.auth!.id,
+        },
+        include: { category: true },
+      });
+      res.status(201).json({
+        ok: true,
+        expense: {
+          id: expense.id,
+          title: expense.title,
+          amountBdt: Number(expense.amountBdt),
+          contactName: expense.contactName,
+          contactPhone: expense.contactPhone,
+          occurredAt: expense.occurredAt,
+          category: {
+            code: expense.category.code,
+            nameEn: expense.category.nameEn,
+            nameBn: expense.category.nameBn,
+          },
         },
         wallet: {
           id: result.wallet.id,

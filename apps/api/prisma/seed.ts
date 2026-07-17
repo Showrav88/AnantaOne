@@ -89,11 +89,13 @@ async function main() {
   const roles = await prisma.roleLookup.findMany();
   const units = await prisma.unitLookup.findMany();
   const walletTypes = await prisma.walletTxnTypeLookup.findMany();
+  const expenseCategories = await prisma.expenseCategoryLookup.findMany();
   const orderSources = await prisma.orderSourceLookup.findMany();
   if (
     roles.length === 0 ||
     units.length === 0 ||
     walletTypes.length === 0 ||
+    expenseCategories.length === 0 ||
     orderSources.length === 0
   ) {
     throw new Error("Lookups missing — run migrations first");
