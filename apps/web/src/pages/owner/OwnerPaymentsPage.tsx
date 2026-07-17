@@ -24,7 +24,10 @@ export function OwnerPaymentsPage({ locale }: Props) {
     periodLabel: "",
     note: "",
   });
+  const [reverseId, setReverseId] = useState<string | null>(null);
+  const [reverseReason, setReverseReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   async function load() {
@@ -34,7 +37,9 @@ export function OwnerPaymentsPage({ locale }: Props) {
     ]);
     setPayments(payRes.payments);
     const payees = staffRes.staff.filter(
-      (s) => s.isActive && (s.role.code === "MANAGER" || s.role.code === "EMPLOYEE"),
+      (s) =>
+        s.isActive &&
+        (s.role.code === "MANAGER" || s.role.code === "EMPLOYEE"),
     );
     setStaff(payees);
     if (!form.userId && payees[0]) {
@@ -68,6 +73,7 @@ export function OwnerPaymentsPage({ locale }: Props) {
   async function onPay(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setOkMsg(null);
     try {
       await api.owner.paySalary({
         userId: form.userId,
@@ -76,9 +82,28 @@ export function OwnerPaymentsPage({ locale }: Props) {
         note: form.note || null,
       });
       setForm({ ...form, amountBdt: "", periodLabel: "", note: "" });
+      setOkMsg(t.owner.paySalaryDone);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
+  async function onReverse(e: FormEvent) {
+    e.preventDefault();
+    if (!reverseId) return;
+    setError(null);
+    setOkMsg(null);
+    try {
+      const res = await api.owner.reverseSalary(reverseId, reverseReason);
+      setOkMsg(
+        `${t.owner.salaryReverseDone} · ${t.owner.cashCredited}: ৳${(res.cashCreditedBdt ?? res.payment.amountBdt).toLocaleString()}`,
+      );
+      setReverseId(null);
+      setReverseReason("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Reverse failed");
     }
   }
 
@@ -97,10 +122,12 @@ export function OwnerPaymentsPage({ locale }: Props) {
           <p className="eyebrow">{t.owner.navPayments}</p>
           <h1>{t.owner.paymentsTitle}</h1>
           <p className="muted">{t.owner.paymentsHint}</p>
+          <p className="muted tiny">{t.owner.salaryReverseHint}</p>
         </div>
       </header>
 
       {error ? <p className="error-banner">{error}</p> : null}
+      {okMsg ? <p className="ok-banner">{okMsg}</p> : null}
 
       {isOwner ? (
         <form className="owner-form compact" onSubmit={onPay}>
@@ -148,7 +175,11 @@ export function OwnerPaymentsPage({ locale }: Props) {
               onChange={(e) => setForm({ ...form, note: e.target.value })}
             />
           </label>
-          <button type="submit" className="cta" disabled={pending || !form.userId}>
+          <button
+            type="submit"
+            className="cta"
+            disabled={pending || !form.userId}
+          >
             {t.owner.paySalary}
           </button>
         </form>
@@ -165,32 +196,98 @@ export function OwnerPaymentsPage({ locale }: Props) {
               <th>{t.owner.fieldPeriod}</th>
               <th>{t.owner.fieldAmount}</th>
               <th>{t.owner.fieldNote}</th>
+              {isOwner ? <th /> : null}
             </tr>
           </thead>
           <tbody>
             {payments.length === 0 ? (
               <tr>
-                <td colSpan={5} className="muted">
+                <td colSpan={isOwner ? 6 : 5} className="muted">
                   {t.owner.paymentsEmpty}
                 </td>
               </tr>
             ) : (
               payments.map((p) => (
-                <tr key={p.id}>
+                <tr
+                  key={p.id}
+                  className={p.isReversed ? "dim" : undefined}
+                >
                   <td>{new Date(p.paidAt).toLocaleString()}</td>
                   <td>
                     {p.staff.name}
                     <div className="muted tiny">{p.staff.role}</div>
+                    {p.isReversed ? (
+                      <div className="price-override">
+                        {t.owner.statusReversed}
+                        {p.reverseReason ? ` — ${p.reverseReason}` : ""}
+                      </div>
+                    ) : null}
                   </td>
                   <td>{p.periodLabel ?? "—"}</td>
                   <td>৳{p.amountBdt.toLocaleString()}</td>
                   <td>{p.note ?? "—"}</td>
+                  {isOwner ? (
+                    <td>
+                      {!p.isReversed ? (
+                        <button
+                          type="button"
+                          className="linkish"
+                          onClick={() => {
+                            setReverseId(p.id);
+                            setReverseReason("");
+                            setError(null);
+                            setOkMsg(null);
+                          }}
+                        >
+                          {t.owner.reverseSalary}
+                        </button>
+                      ) : (
+                        <span className="muted tiny">—</span>
+                      )}
+                    </td>
+                  ) : null}
                 </tr>
               ))
             )}
           </tbody>
         </table>
       </div>
+
+      {isOwner && reverseId ? (
+        <form
+          className="owner-form compact reverse-form"
+          onSubmit={onReverse}
+        >
+          <h2>{t.owner.reverseSalary}</h2>
+          <p className="muted tiny">{t.owner.salaryReverseFormHint}</p>
+          <label className="full">
+            {t.owner.reverseReason}
+            <textarea
+              required
+              minLength={5}
+              rows={3}
+              value={reverseReason}
+              onChange={(e) => setReverseReason(e.target.value)}
+              placeholder={t.owner.salaryReverseReasonHint}
+            />
+          </label>
+          <div className="form-actions">
+            <button type="submit" className="cta danger" disabled={pending}>
+              {t.owner.confirmSalaryReverse}
+            </button>
+            <button
+              type="button"
+              className="linkish"
+              onClick={() => {
+                setReverseId(null);
+                setReverseReason("");
+              }}
+            >
+              {t.common.cancel}
+            </button>
+          </div>
+        </form>
+      ) : null}
     </div>
   );
 }

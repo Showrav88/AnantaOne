@@ -357,7 +357,8 @@ model CashTransaction {
   company           Company              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   wallet            CashWallet           @relation(fields: [walletId], references: [id], onDelete: Cascade)
   type              WalletTxnTypeLookup  @relation(fields: [typeId], references: [id])
-  salaryPayment     SalaryPayment?
+  salaryPayment     SalaryPayment?       @relation("SalaryPayTxn")
+  salaryReverseOf   SalaryPayment?       @relation("SalaryReverseTxn")
   sale              Sale?
   materialPurchase  MaterialPurchase?
   cashExpense       CashExpense?
@@ -368,21 +369,26 @@ model CashTransaction {
 }
 
 model SalaryPayment {
-  id                String   @id @default(cuid())
-  tenantId          String
-  userId            String
-  amountBdt         Decimal  @db.Decimal(12, 2)
-  periodLabel       String?
-  note              String?
-  paidAt            DateTime @default(now())
-  cashTransactionId String   @unique
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  createdBy         String?
+  id                        String    @id @default(cuid())
+  tenantId                  String
+  userId                    String
+  amountBdt                 Decimal   @db.Decimal(12, 2)
+  periodLabel               String?
+  note                      String?
+  paidAt                    DateTime  @default(now())
+  cashTransactionId         String    @unique
+  reverseReason             String?
+  reversedAt                DateTime?
+  reversedBy                String?
+  reverseCashTransactionId  String?   @unique
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  createdBy                 String?
 
-  company         Company         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cashTransaction CashTransaction @relation(fields: [cashTransactionId], references: [id], onDelete: Cascade)
+  company                Company          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user                   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cashTransaction        CashTransaction  @relation("SalaryPayTxn", fields: [cashTransactionId], references: [id], onDelete: Cascade)
+  reverseCashTransaction CashTransaction? @relation("SalaryReverseTxn", fields: [reverseCashTransactionId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, paidAt])
   @@index([userId])

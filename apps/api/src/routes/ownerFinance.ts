@@ -775,6 +775,7 @@ ownerFinanceRouter.get("/wallet/analytics", async (req, res) => {
   let salesCredit = 0;
   let materialTotal = 0;
   let salaryTotal = 0;
+  let salaryReverseTotal = 0;
   let utilityTotal = 0;
   let transportExtra = 0;
   let otherExpense = 0;
@@ -786,6 +787,7 @@ ownerFinanceRouter.get("/wallet/analytics", async (req, res) => {
     const code = txn.type.code;
     if (txn.type.direction === "credit") {
       if (code === "SALE") salesCredit += amt;
+      else if (code === "SALARY_REVERSE") salaryReverseTotal += amt;
       else otherCredit += amt;
     } else if (code === "MATERIAL_BUY") materialTotal += amt;
     else if (code === "SALARY") salaryTotal += amt;
@@ -914,11 +916,13 @@ ownerFinanceRouter.get("/wallet/analytics", async (req, res) => {
       utilityBdt: utilityTotal,
       otherExpenseBdt: otherExpense,
       salaryBdt: salaryTotal,
+      salaryReverseBdt: salaryReverseTotal,
       otherCreditBdt: otherCredit,
       otherDebitBdt: otherDebit,
       netCashFlowBdt:
         salesCredit +
-        otherCredit -
+        otherCredit +
+        salaryReverseTotal -
         (materialTotal +
           salaryTotal +
           utilityTotal +
@@ -941,6 +945,7 @@ ownerFinanceRouter.get("/payments", requireOwnerOrManager, async (req, res) => {
     include: {
       user: { include: { role: true } },
       cashTransaction: { include: { type: true } },
+      reverseCashTransaction: { include: { type: true } },
     },
     orderBy: { paidAt: "desc" },
     take: 100,
@@ -953,6 +958,9 @@ ownerFinanceRouter.get("/payments", requireOwnerOrManager, async (req, res) => {
       periodLabel: p.periodLabel,
       note: p.note,
       paidAt: p.paidAt,
+      isReversed: Boolean(p.reversedAt),
+      reverseReason: p.reverseReason,
+      reversedAt: p.reversedAt,
       staff: {
         id: p.user.id,
         name: p.user.name,
@@ -962,6 +970,9 @@ ownerFinanceRouter.get("/payments", requireOwnerOrManager, async (req, res) => {
           p.user.salaryBdt == null ? null : Number(p.user.salaryBdt),
       },
       transaction: serializeTxn(p.cashTransaction),
+      reverseTransaction: p.reverseCashTransaction
+        ? serializeTxn(p.reverseCashTransaction)
+        : null,
     })),
   });
 });
@@ -1043,6 +1054,7 @@ ownerFinanceRouter.post("/payments", requireOwnerOnly, async (req, res) => {
         amountBdt: Number(payment.amountBdt),
         periodLabel: payment.periodLabel,
         paidAt: payment.paidAt,
+        isReversed: false,
         staff: serializeStaff(payment.user),
       },
       wallet: {
@@ -1056,3 +1068,96 @@ ownerFinanceRouter.post("/payments", requireOwnerOnly, async (req, res) => {
     res.status(400).json({ ok: false, message });
   }
 });
+
+const reversePaySchema = z.object({
+  reason: z.string().min(5).max(500),
+});
+
+ownerFinanceRouter.post(
+  "/payments/:id/reverse",
+  requireOwnerOnly,
+  async (req, res) => {
+    const parsed = reversePaySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        ok: false,
+        message: "Clear reverse reason required (min 5 characters)",
+      });
+      return;
+    }
+
+    const payment = await prisma.salaryPayment.findFirst({
+      where: { id: String(req.params.id), tenantId: tid(req) },
+      include: {
+        user: { include: { role: true } },
+      },
+    });
+    if (!payment) {
+      res.status(404).json({ ok: false, message: "Salary payment not found" });
+      return;
+    }
+    if (payment.reversedAt) {
+      res.status(400).json({
+        ok: false,
+        message: "Salary payment already reversed",
+      });
+      return;
+    }
+
+    const reason = parsed.data.reason.trim();
+    const amountBdt = Number(payment.amountBdt);
+
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const walletResult = await recordWalletTxn({
+          tenantId: tid(req),
+          typeCode: "SALARY_REVERSE",
+          amountBdt,
+          note: `Salary reverse — ${payment.user.name}: ${reason}`,
+          reference: payment.id,
+          createdBy: req.auth!.id,
+          tx,
+        });
+        const updated = await tx.salaryPayment.update({
+          where: { id: payment.id },
+          data: {
+            reverseReason: reason,
+            reversedAt: new Date(),
+            reversedBy: req.auth!.id,
+            reverseCashTransactionId: walletResult.transaction.id,
+          },
+          include: {
+            user: { include: { role: true } },
+            cashTransaction: { include: { type: true } },
+            reverseCashTransaction: { include: { type: true } },
+          },
+        });
+        return { updated, walletResult };
+      });
+
+      res.json({
+        ok: true,
+        payment: {
+          id: result.updated.id,
+          amountBdt: Number(result.updated.amountBdt),
+          periodLabel: result.updated.periodLabel,
+          paidAt: result.updated.paidAt,
+          isReversed: true,
+          reverseReason: result.updated.reverseReason,
+          reversedAt: result.updated.reversedAt,
+          staff: serializeStaff(result.updated.user),
+        },
+        cashCreditedBdt: amountBdt,
+        wallet: {
+          id: result.walletResult.wallet.id,
+          balanceBdt: Number(result.walletResult.wallet.balanceBdt),
+        },
+        transaction: serializeTxn(result.walletResult.transaction),
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Salary reverse failed";
+      res.status(400).json({ ok: false, message });
+    }
+  },
+);

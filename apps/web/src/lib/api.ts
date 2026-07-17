@@ -222,6 +222,9 @@ export type SalaryPaymentRow = {
   periodLabel: string | null;
   note: string | null;
   paidAt: string;
+  isReversed?: boolean;
+  reverseReason?: string | null;
+  reversedAt?: string | null;
   staff: {
     id: string;
     name: string;
@@ -659,6 +662,18 @@ export const api = {
         "/api/v1/owner/payments",
         1,
         { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
+    reverseSalary: (id: string, reason: string) =>
+      getJson<{
+        ok: boolean;
+        cashCreditedBdt?: number;
+        wallet: WalletSummary | null;
+        payment: SalaryPaymentRow;
+      }>(
+        `/api/v1/owner/payments/${id}/reverse`,
+        1,
+        { method: "POST", body: JSON.stringify({ reason }) },
         true,
       ),
     batches: (productId?: string) =>
