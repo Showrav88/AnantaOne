@@ -41,12 +41,18 @@ export function OwnerDashboardPage({ locale }: Props) {
           <h1>{data.company.name}</h1>
           <p className="muted">{data.company.tagline ?? t.app.pulse}</p>
         </div>
-        <Link className="btn primary" to="/owner/products">
-          {t.owner.manageProducts}
+        <Link className="btn primary" to="/owner/wallet">
+          {t.owner.navWallet}
         </Link>
       </header>
 
       <section className="stat-grid">
+        <article>
+          <p>{t.owner.statCash}</p>
+          <strong>
+            ৳{(data.stats.cashBalanceBdt ?? 0).toLocaleString()}
+          </strong>
+        </article>
         <article>
           <p>{t.owner.statProducts}</p>
           <strong>{data.stats.products}</strong>

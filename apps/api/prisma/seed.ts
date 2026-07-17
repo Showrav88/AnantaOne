@@ -88,7 +88,8 @@ const mockProducts = [
 async function main() {
   const roles = await prisma.roleLookup.findMany();
   const units = await prisma.unitLookup.findMany();
-  if (roles.length === 0 || units.length === 0) {
+  const walletTypes = await prisma.walletTxnTypeLookup.findMany();
+  if (roles.length === 0 || units.length === 0 || walletTypes.length === 0) {
     throw new Error("Lookups missing — run migrations first");
   }
 
@@ -173,6 +174,8 @@ async function main() {
       branchId,
       passwordHash: await hashPassword("Owner#2026"),
       isActive: true,
+      joiningDate: new Date("2024-01-01"),
+      designation: "Owner",
     },
     create: {
       tenantId: company.id,
@@ -182,17 +185,55 @@ async function main() {
       phone: "01700000000",
       passwordHash: await hashPassword("Owner#2026"),
       roleId: byRole.OWNER!.id,
+      joiningDate: new Date("2024-01-01"),
+      designation: "Owner",
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: "manager@anantaone.local" },
+    update: {
+      name: "Demo Manager",
+      phone: "01700000012",
+      roleId: byRole.MANAGER!.id,
+      tenantId: company.id,
+      branchId,
+      passwordHash: await hashPassword("Manager#2026"),
+      isActive: true,
+      employeeCode: "MGR-01",
+      designation: "Branch Manager",
+      joiningDate: new Date("2025-03-01"),
+      salaryBdt: 25000,
+    },
+    create: {
+      tenantId: company.id,
+      branchId,
+      email: "manager@anantaone.local",
+      name: "Demo Manager",
+      phone: "01700000012",
+      passwordHash: await hashPassword("Manager#2026"),
+      roleId: byRole.MANAGER!.id,
+      employeeCode: "MGR-01",
+      designation: "Branch Manager",
+      joiningDate: new Date("2025-03-01"),
+      salaryBdt: 25000,
     },
   });
 
   await prisma.user.upsert({
     where: { email: "employee@anantaone.local" },
     update: {
+      name: "Demo Employee",
+      phone: "01700000011",
       roleId: byRole.EMPLOYEE!.id,
       tenantId: company.id,
       branchId,
       passwordHash: await hashPassword("Employee#2026"),
       isActive: true,
+      employeeCode: "EMP-01",
+      designation: "Delivery",
+      joiningDate: new Date("2025-06-15"),
+      salaryBdt: 15000,
     },
     create: {
       tenantId: company.id,
@@ -202,8 +243,47 @@ async function main() {
       phone: "01700000011",
       passwordHash: await hashPassword("Employee#2026"),
       roleId: byRole.EMPLOYEE!.id,
+      employeeCode: "EMP-01",
+      designation: "Delivery",
+      joiningDate: new Date("2025-06-15"),
+      salaryBdt: 15000,
     },
   });
+
+  const wallet = await prisma.cashWallet.upsert({
+    where: { tenantId: company.id },
+    update: {},
+    create: { tenantId: company.id, balanceBdt: 0 },
+  });
+
+  const openingType = await prisma.walletTxnTypeLookup.findUnique({
+    where: { code: "OPENING" },
+  });
+  if (openingType) {
+    const hasOpening = await prisma.cashTransaction.findFirst({
+      where: { tenantId: company.id, typeId: openingType.id },
+    });
+    if (!hasOpening) {
+      const openingAmount = 50000;
+      await prisma.$transaction(async (tx) => {
+        await tx.cashWallet.update({
+          where: { id: wallet.id },
+          data: { balanceBdt: openingAmount },
+        });
+        await tx.cashTransaction.create({
+          data: {
+            tenantId: company.id,
+            walletId: wallet.id,
+            typeId: openingType.id,
+            amountBdt: openingAmount,
+            balanceAfter: openingAmount,
+            note: "Seed opening cash drawer",
+            occurredAt: new Date("2026-01-01"),
+          },
+        });
+      });
+    }
+  }
 
   for (const shop of mockShops) {
     await prisma.buyer.upsert({
@@ -267,6 +347,7 @@ async function main() {
   console.log("Seeded:");
   console.log(`  super admin: ${superEmail} / ${superPassword}`);
   console.log("  owner: owner@anantaone.local / Owner#2026");
+  console.log("  manager: manager@anantaone.local / Manager#2026");
   console.log("  employee: employee@anantaone.local / Employee#2026");
   console.log(
     `  company=${company.slug} shops=${mockShops.length} products=${mockProducts.length}`,

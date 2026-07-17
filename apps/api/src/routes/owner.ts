@@ -19,7 +19,7 @@ function tenantId(req: { auth?: { tenantId: string | null } }) {
 ownerRouter.get("/dashboard", async (req, res) => {
   const tid = tenantId(req);
 
-  const [company, productCount, buyerCount, lowStock, recentProducts] =
+  const [company, productCount, buyerCount, lowStock, recentProducts, wallet] =
     await Promise.all([
       prisma.company.findUniqueOrThrow({
         where: { id: tid },
@@ -42,6 +42,7 @@ ownerRouter.get("/dashboard", async (req, res) => {
         orderBy: { updatedAt: "desc" },
         take: 5,
       }),
+      prisma.cashWallet.findUnique({ where: { tenantId: tid } }),
     ]);
 
   const lowStockItems = lowStock
@@ -70,6 +71,7 @@ ownerRouter.get("/dashboard", async (req, res) => {
         buyers: buyerCount,
         lowStock: lowStockItems.length,
         users: company._count.users,
+        cashBalanceBdt: wallet ? Number(wallet.balanceBdt) : 0,
       },
       lowStock: lowStockItems,
       recentProducts: recentProducts.map(serializeProduct),

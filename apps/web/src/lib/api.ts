@@ -106,9 +106,60 @@ export type OwnerDashboard = {
     buyers: number;
     lowStock: number;
     users: number;
+    cashBalanceBdt?: number;
   };
   lowStock: Product[];
   recentProducts: Product[];
+};
+
+export type StaffMember = {
+  id: string;
+  email: string;
+  name: string;
+  phone: string | null;
+  employeeCode: string | null;
+  designation: string | null;
+  joiningDate: string | null;
+  salaryBdt: number | null;
+  isActive: boolean;
+  createdAt: string;
+  role: { code: string; nameEn: string; nameBn: string };
+};
+
+export type CashTransaction = {
+  id: string;
+  amountBdt: number;
+  balanceAfter: number;
+  note: string | null;
+  reference: string | null;
+  occurredAt: string;
+  type: {
+    code: string;
+    nameEn: string;
+    nameBn: string;
+    direction: string;
+  } | null;
+};
+
+export type WalletSummary = {
+  id: string;
+  balanceBdt: number;
+  updatedAt?: string;
+};
+
+export type SalaryPaymentRow = {
+  id: string;
+  amountBdt: number;
+  periodLabel: string | null;
+  note: string | null;
+  paidAt: string;
+  staff: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    salaryBdt: number | null;
+  };
 };
 
 type AuthResponse = {
@@ -316,6 +367,83 @@ export const api = {
       ),
     buyers: () =>
       getJson<BuyersResponse>("/api/v1/owner/buyers", 2, undefined, true),
+    staff: () =>
+      getJson<{ ok: boolean; staff: StaffMember[] }>(
+        "/api/v1/owner/staff",
+        2,
+        undefined,
+        true,
+      ),
+    createStaff: (body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; staff: StaffMember }>(
+        "/api/v1/owner/staff",
+        1,
+        { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
+    updateStaff: (id: string, body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; staff: StaffMember }>(
+        `/api/v1/owner/staff/${id}`,
+        1,
+        { method: "PATCH", body: JSON.stringify(body) },
+        true,
+      ),
+    deactivateStaff: (id: string) =>
+      getJson<{ ok: boolean; staff: StaffMember }>(
+        `/api/v1/owner/staff/${id}`,
+        1,
+        { method: "DELETE" },
+        true,
+      ),
+    wallet: () =>
+      getJson<{
+        ok: boolean;
+        wallet: WalletSummary;
+        types: Array<{
+          code: string;
+          nameEn: string;
+          nameBn: string;
+          direction: string;
+        }>;
+        transactions: CashTransaction[];
+      }>("/api/v1/owner/wallet", 2, undefined, true),
+    adjustWallet: (body: Record<string, unknown>) =>
+      getJson<{
+        ok: boolean;
+        wallet: WalletSummary;
+        transaction: CashTransaction;
+      }>("/api/v1/owner/wallet/adjust", 1, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }, true),
+    recordSale: (body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; wallet: WalletSummary }>(
+        "/api/v1/owner/wallet/sales",
+        1,
+        { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
+    recordMaterial: (body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; wallet: WalletSummary }>(
+        "/api/v1/owner/wallet/materials",
+        1,
+        { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
+    payments: () =>
+      getJson<{ ok: boolean; payments: SalaryPaymentRow[] }>(
+        "/api/v1/owner/payments",
+        2,
+        undefined,
+        true,
+      ),
+    paySalary: (body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; wallet: WalletSummary }>(
+        "/api/v1/owner/payments",
+        1,
+        { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
   },
   admin: {
     dashboard: () =>

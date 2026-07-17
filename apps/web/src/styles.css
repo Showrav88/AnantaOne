@@ -696,6 +696,97 @@ body {
   opacity: 0.55;
 }
 
+.owner-table-wrap {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.owner-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.owner-table th,
+.owner-table td {
+  text-align: left;
+  padding: 0.65rem 0.4rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.owner-table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.owner-table .credit {
+  color: #0f6b4c;
+  font-weight: 600;
+}
+
+.owner-table .debit {
+  color: #9a3412;
+  font-weight: 600;
+}
+
+.tiny {
+  font-size: 0.8rem;
+}
+
+.error-banner {
+  color: #9a3412;
+  background: #fff1eb;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.wallet-balance {
+  text-align: right;
+}
+
+.wallet-amount {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 700;
+  margin: 0.2rem 0 0;
+  color: var(--ink);
+}
+
+.wallet-forms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.wallet-forms h2,
+.section-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.owner-form .cta,
+button.cta {
+  grid-column: 1 / -1;
+  justify-self: start;
+  font: inherit;
+  border: 0;
+  background: var(--tide, #0f6b4c);
+  color: #fff;
+  padding: 0.65rem 1.1rem;
+  cursor: pointer;
+}
+
+button.linkish {
+  background: none;
+  border: 0;
+  color: var(--tide, #0f6b4c);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+  padding: 0;
+}
+
 @media (max-width: 900px) {
   .owner-shell {
     grid-template-columns: 1fr;
@@ -710,6 +801,10 @@ body {
   .owner-form,
   .owner-form.compact {
     grid-template-columns: 1fr;
+  }
+
+  .wallet-balance {
+    text-align: left;
   }
 
   .catalog-list li {

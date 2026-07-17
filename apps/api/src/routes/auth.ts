@@ -75,6 +75,9 @@ authRouter.post("/register", async (req, res) => {
             address: null,
           },
         },
+        cashWallet: {
+          create: { balanceBdt: 0 },
+        },
       },
       include: { branches: true },
     });
@@ -88,6 +91,7 @@ authRouter.post("/register", async (req, res) => {
         name: data.ownerName,
         passwordHash,
         roleId: ownerRole.id,
+        joiningDate: new Date(),
       },
       include: { role: true },
     });
