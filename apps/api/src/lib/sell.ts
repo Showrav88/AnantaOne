@@ -48,9 +48,14 @@ export function serializeBatch(batch: {
   };
 }
 
+export function makeInvoiceCode(orderedAt: Date, orderId: string) {
+  return `INV-${orderedAt.toISOString().slice(0, 10).replace(/-/g, "")}-${orderId.slice(-6).toUpperCase()}`;
+}
+
 export function serializeOrder(order: {
   id: string;
   tenantId: string;
+  invoiceCode?: string;
   buyerId: string | null;
   buyerName: string | null;
   totalBdt: { toString(): string } | number | string;
@@ -58,6 +63,8 @@ export function serializeOrder(order: {
   orderedAt: Date;
   confirmedAt: Date | null;
   saleId: string | null;
+  reverseReason?: string | null;
+  reversedAt?: Date | null;
   source?: { code: string; nameEn: string; nameBn: string };
   status?: { code: string; nameEn: string; nameBn: string };
   buyer?: { id: string; shopName: string; phone: string } | null;
@@ -82,9 +89,12 @@ export function serializeOrder(order: {
     };
   }>;
 }) {
+  const invoiceNo =
+    order.invoiceCode ?? makeInvoiceCode(order.orderedAt, order.id);
   return {
     id: order.id,
-    invoiceNo: `INV-${order.orderedAt.toISOString().slice(0, 10).replace(/-/g, "")}-${order.id.slice(-6).toUpperCase()}`,
+    invoiceNo,
+    invoiceCode: invoiceNo,
     tenantId: order.tenantId,
     buyerId: order.buyerId,
     buyerName: order.buyerName,
@@ -93,6 +103,9 @@ export function serializeOrder(order: {
     orderedAt: order.orderedAt,
     confirmedAt: order.confirmedAt,
     saleId: order.saleId,
+    reverseReason: order.reverseReason ?? null,
+    reversedAt: order.reversedAt ?? null,
+    isReversed: order.status?.code === "REVERSED",
     source: order.source
       ? {
           code: order.source.code,
@@ -289,17 +302,22 @@ export async function confirmSell(input: ConfirmSellInput) {
     }
 
     const totalBdt = prepared.reduce((s, l) => s + l.lineTotalBdt, 0);
+    const orderedAt = new Date();
+    // Temporary id-like suffix; replaced after create with real id-based code if needed
+    const provisionalId = `tmp${Date.now().toString(36)}`;
 
-    return tx.salesOrder.create({
+    const created = await tx.salesOrder.create({
       data: {
         tenantId: input.tenantId,
+        invoiceCode: makeInvoiceCode(orderedAt, provisionalId),
         buyerId: input.buyerId ?? null,
         buyerName,
         sourceId: source.id,
         statusId: statusConfirmed.id,
         totalBdt,
         note: input.note ?? null,
-        confirmedAt: new Date(),
+        orderedAt,
+        confirmedAt: orderedAt,
         createdBy: input.userId,
         lines: {
           create: prepared.map((l) => ({
@@ -312,6 +330,18 @@ export async function confirmSell(input: ConfirmSellInput) {
           })),
         },
       },
+      include: {
+        source: true,
+        status: true,
+        buyer: true,
+        lines: { include: { product: true, batch: true } },
+      },
+    });
+
+    const finalCode = makeInvoiceCode(orderedAt, created.id);
+    return tx.salesOrder.update({
+      where: { id: created.id },
+      data: { invoiceCode: finalCode },
       include: {
         source: true,
         status: true,
@@ -379,6 +409,122 @@ export async function confirmSell(input: ConfirmSellInput) {
     wallet,
     transaction,
   };
+}
+
+/**
+ * Reverse a confirmed sale: restore batch/product stock, debit cash drawer,
+ * mark order REVERSED with a clear reason.
+ */
+export async function reverseSell(input: {
+  tenantId: string;
+  userId: string;
+  orderId: string;
+  reason: string;
+}) {
+  const reason = input.reason.trim();
+  if (reason.length < 5) {
+    throw new Error("Reverse reason must be at least 5 characters");
+  }
+
+  const statusReversed = await prisma.orderStatusLookup.findUnique({
+    where: { code: "REVERSED" },
+  });
+  if (!statusReversed) {
+    throw new Error("REVERSED status missing — run migrations");
+  }
+
+  const order = await prisma.salesOrder.findFirst({
+    where: { id: input.orderId, tenantId: input.tenantId },
+    include: {
+      status: true,
+      lines: true,
+    },
+  });
+  if (!order) throw new Error("Order not found");
+  if (order.status.code === "REVERSED") {
+    throw new Error("Sale already reversed");
+  }
+  if (order.status.code !== "CONFIRMED") {
+    throw new Error("Only confirmed sales can be reversed");
+  }
+
+  const totalBdt = Number(order.totalBdt);
+
+  await prisma.$transaction(async (tx) => {
+    for (const line of order.lines) {
+      const qty = Number(line.qty);
+      const batch = await tx.productionBatch.findUniqueOrThrow({
+        where: { id: line.batchId },
+      });
+      await tx.productionBatch.update({
+        where: { id: batch.id },
+        data: { qtyRemaining: Number(batch.qtyRemaining) + qty },
+      });
+      const product = await tx.product.findUniqueOrThrow({
+        where: { id: line.productId },
+      });
+      await tx.product.update({
+        where: { id: product.id },
+        data: {
+          stockQty: Number(product.stockQty) + qty,
+          updatedBy: input.userId,
+        },
+      });
+    }
+
+    await tx.salesOrder.update({
+      where: { id: order.id },
+      data: {
+        statusId: statusReversed.id,
+        reverseReason: reason,
+        reversedAt: new Date(),
+        reversedBy: input.userId,
+        updatedBy: input.userId,
+      },
+    });
+  });
+
+  let wallet = null;
+  let transaction = null;
+  if (totalBdt > 0) {
+    const walletResult = await recordWalletTxn({
+      tenantId: input.tenantId,
+      typeCode: "SALE_REVERSE",
+      amountBdt: totalBdt,
+      note: `Reverse ${order.invoiceCode}: ${reason}`,
+      reference: order.id,
+      createdBy: input.userId,
+    });
+    wallet = {
+      id: walletResult.wallet.id,
+      balanceBdt: Number(walletResult.wallet.balanceBdt),
+    };
+    transaction = serializeTxn(walletResult.transaction);
+  }
+
+  const full = await prisma.salesOrder.findUniqueOrThrow({
+    where: { id: order.id },
+    include: {
+      source: true,
+      status: true,
+      buyer: true,
+      lines: { include: { product: true, batch: true } },
+    },
+  });
+
+  return {
+    order: serializeOrder(full),
+    wallet,
+    transaction,
+  };
+}
+
+export function buildInvoiceQrUrl(opts: {
+  publicBaseUrl: string;
+  companySlug: string;
+  invoiceCode: string;
+}) {
+  return `${opts.publicBaseUrl.replace(/\/$/, "")}/#/invoice/${opts.companySlug}/${encodeURIComponent(opts.invoiceCode)}`;
 }
 
 export function buildTagPayload(opts: {

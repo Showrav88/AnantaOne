@@ -13,6 +13,7 @@
   "dependencies": {
     "@anantaone/i18n": "*",
     "@anantaone/shared": "*",
+    "html5-qrcode": "^2.3.8",
     "qrcode": "^1.5.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

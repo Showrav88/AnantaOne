@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import type { LocaleCode } from "@anantaone/i18n";
 import { getMessages } from "@anantaone/i18n";
 import type { SalesInvoice } from "../lib/api";
@@ -9,6 +11,16 @@ type Props = {
 
 export function SalesInvoiceView({ locale, invoice }: Props) {
   const t = getMessages(locale);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const value = invoice.qrValue;
+    if (!value) {
+      setQrDataUrl(null);
+      return;
+    }
+    void QRCode.toDataURL(value, { margin: 1, width: 140 }).then(setQrDataUrl);
+  }, [invoice.qrValue]);
 
   return (
     <div className="invoice-sheet" id="invoice-print">
@@ -27,7 +39,10 @@ export function SalesInvoiceView({ locale, invoice }: Props) {
         </div>
         <div className="invoice-meta">
           <p className="eyebrow">{t.owner.invoiceLabel}</p>
-          <strong>{invoice.invoiceNo}</strong>
+          <strong>{invoice.invoiceNo ?? invoice.invoiceCode}</strong>
+          {invoice.isReversed ? (
+            <p className="price-override">{t.owner.statusReversed}</p>
+          ) : null}
           <p className="muted tiny">
             {new Date(invoice.confirmedAt ?? invoice.orderedAt).toLocaleString()}
           </p>
@@ -38,6 +53,10 @@ export function SalesInvoiceView({ locale, invoice }: Props) {
                 : invoice.source.nameEn
               : ""}
           </p>
+          {qrDataUrl ? (
+            <img className="invoice-qr" src={qrDataUrl} alt="Invoice QR" />
+          ) : null}
+          <p className="muted tiny">{t.owner.invoiceQrHint}</p>
         </div>
       </header>
 
@@ -54,6 +73,11 @@ export function SalesInvoiceView({ locale, invoice }: Props) {
           <p className="muted tiny">{invoice.buyer.phone}</p>
         ) : null}
         {invoice.note ? <p className="muted tiny">{invoice.note}</p> : null}
+        {invoice.reverseReason ? (
+          <p className="price-override">
+            {t.owner.reverseReason}: {invoice.reverseReason}
+          </p>
+        ) : null}
       </section>
 
       <table className="invoice-table">

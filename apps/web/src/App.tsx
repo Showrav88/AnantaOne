@@ -18,6 +18,7 @@ import { OwnerBatchesPage } from "./pages/owner/OwnerBatchesPage";
 import { OwnerTagsPage } from "./pages/owner/OwnerTagsPage";
 import { OwnerSalesHistoryPage } from "./pages/owner/OwnerSalesHistoryPage";
 import { PublicTagPage } from "./pages/PublicTagPage";
+import { PublicInvoicePage } from "./pages/PublicInvoicePage";
 import {
   AdminCompaniesPage,
   AdminDashboardPage,
@@ -50,6 +51,10 @@ export function App() {
         <Route
           path="/tag/:companySlug/:sku/:batchCode"
           element={<PublicTagPage locale={locale} onLocale={toggleLocale} />}
+        />
+        <Route
+          path="/invoice/:companySlug/:invoiceCode"
+          element={<PublicInvoicePage locale={locale} onLocale={toggleLocale} />}
         />
         <Route
           path="/owner"

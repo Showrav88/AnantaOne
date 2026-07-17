@@ -225,21 +225,26 @@ model ProductionBatch {
 
 /// B2B / counter sales order — phone, online, or walk-in basket.
 model SalesOrder {
-  id          String    @id @default(cuid())
-  tenantId    String
-  buyerId     String?
-  buyerName   String?
-  sourceId    String
-  statusId    String
-  totalBdt    Decimal   @default(0) @db.Decimal(14, 2)
-  note        String?
-  orderedAt   DateTime  @default(now())
-  confirmedAt DateTime?
-  saleId      String?   @unique
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  createdBy   String?
-  updatedBy   String?
+  id             String    @id @default(cuid())
+  tenantId       String
+  /// Stable printable / QR-searchable invoice code (unique per company).
+  invoiceCode    String
+  buyerId        String?
+  buyerName      String?
+  sourceId       String
+  statusId       String
+  totalBdt       Decimal   @default(0) @db.Decimal(14, 2)
+  note           String?
+  orderedAt      DateTime  @default(now())
+  confirmedAt    DateTime?
+  saleId         String?   @unique
+  reverseReason  String?
+  reversedAt     DateTime?
+  reversedBy     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdBy      String?
+  updatedBy      String?
 
   company Company           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   buyer   Buyer?            @relation(fields: [buyerId], references: [id], onDelete: SetNull)
@@ -248,9 +253,11 @@ model SalesOrder {
   sale    Sale?             @relation(fields: [saleId], references: [id], onDelete: SetNull)
   lines   OrderLine[]
 
+  @@unique([tenantId, invoiceCode])
   @@index([tenantId, orderedAt])
   @@index([statusId])
   @@index([sourceId])
+  @@index([invoiceCode])
 }
 
 model OrderLine {

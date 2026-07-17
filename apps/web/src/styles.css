@@ -982,8 +982,50 @@ a.cta.secondary {
   margin: 0 0 0.35rem;
 }
 
-.invoice-note {
-  margin-top: 0.5rem;
+.invoice-qr {
+  display: block;
+  width: 96px;
+  height: 96px;
+  margin: 0.5rem 0 0.25rem auto;
+}
+
+.invoice-search {
+  margin-bottom: 1.25rem;
+}
+
+.qr-reader {
+  max-width: 20rem;
+  margin-top: 0.75rem;
+}
+
+.qr-reader:not(.active) {
+  display: none;
+}
+
+.reverse-form {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+button.cta.danger {
+  background: #9a3412;
+}
+
+.invoice-public {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+
+textarea {
+  font: inherit;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 0.65rem 0.7rem;
+  width: 100%;
+  resize: vertical;
 }
 
 .history-layout {

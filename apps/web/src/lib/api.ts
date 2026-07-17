@@ -207,12 +207,16 @@ export type SalesOrderLine = {
 export type SalesOrder = {
   id: string;
   invoiceNo?: string;
+  invoiceCode?: string;
   buyerId: string | null;
   buyerName: string | null;
   totalBdt: number;
   note: string | null;
   orderedAt: string;
   confirmedAt: string | null;
+  reverseReason?: string | null;
+  reversedAt?: string | null;
+  isReversed?: boolean;
   source: { code: string; nameEn: string; nameBn: string } | null;
   status: { code: string; nameEn: string; nameBn: string } | null;
   lines: SalesOrderLine[];
@@ -221,11 +225,13 @@ export type SalesOrder = {
 export type SalesInvoice = SalesOrder & {
   company: {
     name: string;
+    slug?: string;
     phone: string | null;
     address: string | null;
     tagline: string | null;
   };
   buyer: { id: string; shopName: string; phone: string } | null;
+  qrValue?: string | null;
   printedAt?: string;
 };
 
@@ -572,6 +578,20 @@ export const api = {
         undefined,
         true,
       ),
+    lookupInvoice: (q: string) =>
+      getJson<{ ok: boolean; invoice: SalesInvoice }>(
+        `/api/v1/owner/invoices/lookup?q=${encodeURIComponent(q)}`,
+        1,
+        undefined,
+        true,
+      ),
+    reverseOrder: (id: string, reason: string) =>
+      getJson<{ ok: boolean; order: SalesOrder; wallet: WalletSummary | null }>(
+        `/api/v1/owner/orders/${id}/reverse`,
+        1,
+        { method: "POST", body: JSON.stringify({ reason }) },
+        true,
+      ),
     confirmSell: (body: Record<string, unknown>) =>
       getJson<{
         ok: boolean;
@@ -626,6 +646,10 @@ export const api = {
       };
     }>(
       `/api/v1/tag/${encodeURIComponent(companySlug)}/${encodeURIComponent(sku)}/${encodeURIComponent(batchCode)}`,
+    ),
+  publicInvoice: (companySlug: string, invoiceCode: string) =>
+    getJson<{ ok: boolean; invoice: SalesInvoice }>(
+      `/api/v1/invoice/${encodeURIComponent(companySlug)}/${encodeURIComponent(invoiceCode)}`,
     ),
   admin: {
     dashboard: () =>

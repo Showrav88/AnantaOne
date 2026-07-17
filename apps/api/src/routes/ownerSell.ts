@@ -2,8 +2,10 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import {
+  buildInvoiceQrUrl,
   buildTagPayload,
   confirmSell,
+  reverseSell,
   serializeBatch,
   serializeOrder,
 } from "../lib/sell.js";
@@ -228,20 +230,117 @@ ownerSellRouter.get("/orders/:id/invoice", async (req, res) => {
   });
 
   const serialized = serializeOrder(order);
+  const qrValue = buildInvoiceQrUrl({
+    publicBaseUrl: publicBaseUrl(req),
+    companySlug: company.slug,
+    invoiceCode: serialized.invoiceCode,
+  });
   res.json({
     ok: true,
     invoice: {
       ...serialized,
       company: {
         name: company.name,
+        slug: company.slug,
         phone: company.phone,
         address: company.address,
         tagline: company.tagline,
       },
+      qrValue,
       printedAt: new Date().toISOString(),
     },
   });
 });
+
+ownerSellRouter.get("/invoices/lookup", async (req, res) => {
+  const raw = String(req.query.q ?? "").trim();
+  if (!raw) {
+    res.status(400).json({ ok: false, message: "q required" });
+    return;
+  }
+
+  // Accept full QR URL or bare invoice code
+  let code = raw;
+  const hashMatch = raw.match(/#\/invoice\/[^/]+\/([^/?#]+)/i);
+  const pathMatch = raw.match(/\/invoice\/[^/]+\/([^/?#]+)/i);
+  if (hashMatch?.[1]) code = decodeURIComponent(hashMatch[1]);
+  else if (pathMatch?.[1]) code = decodeURIComponent(pathMatch[1]);
+  code = code.trim().toUpperCase();
+
+  const order = await prisma.salesOrder.findFirst({
+    where: {
+      tenantId: tid(req),
+      OR: [
+        { invoiceCode: { equals: code, mode: "insensitive" } },
+        { id: raw },
+      ],
+    },
+    include: {
+      source: true,
+      status: true,
+      buyer: true,
+      lines: { include: { product: true, batch: true } },
+    },
+  });
+  if (!order) {
+    res.status(404).json({ ok: false, message: "Invoice not found" });
+    return;
+  }
+
+  const company = await prisma.company.findUniqueOrThrow({
+    where: { id: tid(req) },
+  });
+  const serialized = serializeOrder(order);
+  res.json({
+    ok: true,
+    invoice: {
+      ...serialized,
+      company: {
+        name: company.name,
+        slug: company.slug,
+        phone: company.phone,
+        address: company.address,
+        tagline: company.tagline,
+      },
+      qrValue: buildInvoiceQrUrl({
+        publicBaseUrl: publicBaseUrl(req),
+        companySlug: company.slug,
+        invoiceCode: serialized.invoiceCode,
+      }),
+    },
+  });
+});
+
+const reverseSchema = z.object({
+  reason: z.string().min(5).max(500),
+});
+
+ownerSellRouter.post(
+  "/orders/:id/reverse",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const parsed = reverseSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        ok: false,
+        message: "Clear reverse reason required (min 5 characters)",
+      });
+      return;
+    }
+    try {
+      const result = await reverseSell({
+        tenantId: tid(req),
+        userId: req.auth!.id,
+        orderId: String(req.params.id),
+        reason: parsed.data.reason,
+      });
+      res.json({ ok: true, ...result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Reverse failed";
+      res.status(400).json({ ok: false, message });
+    }
+  },
+);
 
 const sellSchema = z.object({
   sourceCode: z

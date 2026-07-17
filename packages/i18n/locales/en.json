@@ -198,7 +198,21 @@
     "newSale": "New sale",
     "historyTitle": "Sale history & invoices",
     "historyHint": "All confirmed counter / phone / online sales. Open any row to reprint the invoice.",
-    "selectOrder": "Select a sale to view its invoice."
+    "selectOrder": "Select a sale to view its invoice.",
+    "invoiceQrHint": "Scan this QR to find this invoice later.",
+    "searchInvoice": "Find invoice (code or QR text)",
+    "searchInvoiceHint": "INV-20260717-XXXXXX or paste scanned QR URL",
+    "findInvoice": "Search",
+    "scanInvoiceQr": "Scan invoice QR",
+    "stopScan": "Stop camera",
+    "invoiceFound": "Invoice loaded",
+    "statusReversed": "REVERSED",
+    "reverseSale": "Reverse this sale",
+    "reverseHint": "Restores stock to batches and debits the cash drawer (opposite of the sale credit). Reason is required.",
+    "reverseReason": "Reason",
+    "reverseReasonHint": "e.g. Wrong shop / damaged goods / customer returned",
+    "confirmReverse": "Confirm reverse & debit cash",
+    "reverseDone": "Sale reversed — stock restored and cash debited."
   },
   "auth": {
     "loginTitle": "Sign in",

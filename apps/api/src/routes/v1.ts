@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { serializeOrder } from "../lib/sell.js";
 import { prisma } from "../db.js";
 
 export const v1Router = Router();
@@ -117,6 +118,59 @@ v1Router.get("/products", async (_req, res) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     res.status(500).json({ ok: false, message, products: [] });
+  }
+});
+
+/** Public invoice QR lookup — find a sale by company + invoice code. */
+v1Router.get("/invoice/:companySlug/:invoiceCode", async (req, res) => {
+  try {
+    const companySlug = String(req.params.companySlug);
+    const invoiceCode = decodeURIComponent(
+      String(req.params.invoiceCode),
+    ).toUpperCase();
+
+    const company = await prisma.company.findUnique({
+      where: { slug: companySlug },
+    });
+    if (!company || !company.isActive) {
+      res.status(404).json({ ok: false, message: "Company not found" });
+      return;
+    }
+
+    const order = await prisma.salesOrder.findFirst({
+      where: {
+        tenantId: company.id,
+        invoiceCode: { equals: invoiceCode, mode: "insensitive" },
+      },
+      include: {
+        source: true,
+        status: true,
+        buyer: true,
+        lines: { include: { product: true, batch: true } },
+      },
+    });
+    if (!order) {
+      res.status(404).json({ ok: false, message: "Invoice not found" });
+      return;
+    }
+
+    const serialized = serializeOrder(order);
+    res.json({
+      ok: true,
+      invoice: {
+        ...serialized,
+        company: {
+          name: company.name,
+          slug: company.slug,
+          phone: company.phone,
+          address: company.address,
+          tagline: company.tagline,
+        },
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    res.status(500).json({ ok: false, message });
   }
 });
 
