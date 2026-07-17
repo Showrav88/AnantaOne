@@ -25,6 +25,11 @@ export function OwnerBatchesPage({ locale }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editMfg, setEditMfg] = useState("");
+  const [editExp, setEditExp] = useState("");
+  const [okMsg, setOkMsg] = useState<string | null>(null);
+
   async function load() {
     const [prod, batchRes] = await Promise.all([
       api.owner.products(),
@@ -45,6 +50,30 @@ export function OwnerBatchesPage({ locale }: Props) {
       );
     });
   }, []);
+
+  function startEdit(b: ProductionBatch) {
+    setEditId(b.id);
+    setEditMfg(new Date(b.manufacturedAt).toISOString().slice(0, 10));
+    setEditExp(
+      b.expiresAt ? new Date(b.expiresAt).toISOString().slice(0, 10) : "",
+    );
+  }
+
+  async function saveEdit(id: string) {
+    setError(null);
+    setOkMsg(null);
+    try {
+      await api.owner.updateBatch(id, {
+        manufacturedAt: editMfg,
+        expiresAt: editExp || null,
+      });
+      setEditId(null);
+      setOkMsg(t.owner.datesSaved);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    }
+  }
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
@@ -81,6 +110,7 @@ export function OwnerBatchesPage({ locale }: Props) {
       </header>
 
       {error ? <p className="error-banner">{error}</p> : null}
+      {okMsg ? <p className="ok-banner">{okMsg}</p> : null}
 
       {canWrite ? (
         <form className="owner-form compact" onSubmit={onCreate}>
@@ -161,12 +191,13 @@ export function OwnerBatchesPage({ locale }: Props) {
               <th>{t.owner.fieldMfgDate}</th>
               <th>{t.owner.fieldExpDate}</th>
               <th>{t.owner.fieldQtyLeft}</th>
+              {canWrite ? <th /> : null}
             </tr>
           </thead>
           <tbody>
             {batches.length === 0 ? (
               <tr>
-                <td colSpan={5} className="muted">
+                <td colSpan={canWrite ? 6 : 5} className="muted">
                   {t.owner.batchesEmpty}
                 </td>
               </tr>
@@ -183,16 +214,55 @@ export function OwnerBatchesPage({ locale }: Props) {
                     <div className="muted tiny">{b.product?.sku}</div>
                   </td>
                   <td>
-                    {new Date(b.manufacturedAt).toLocaleDateString()}
+                    {editId === b.id ? (
+                      <input
+                        type="date"
+                        className="qty-input"
+                        value={editMfg}
+                        onChange={(e) => setEditMfg(e.target.value)}
+                      />
+                    ) : (
+                      new Date(b.manufacturedAt).toLocaleDateString()
+                    )}
                   </td>
                   <td>
-                    {b.expiresAt
-                      ? new Date(b.expiresAt).toLocaleDateString()
-                      : "—"}
+                    {editId === b.id ? (
+                      <input
+                        type="date"
+                        className="qty-input"
+                        value={editExp}
+                        onChange={(e) => setEditExp(e.target.value)}
+                      />
+                    ) : b.expiresAt ? (
+                      new Date(b.expiresAt).toLocaleDateString()
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td>
                     {b.qtyRemaining} / {b.qtyProduced}
                   </td>
+                  {canWrite ? (
+                    <td>
+                      {editId === b.id ? (
+                        <button
+                          type="button"
+                          className="linkish"
+                          onClick={() => void saveEdit(b.id)}
+                        >
+                          {t.owner.saved}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="linkish"
+                          onClick={() => startEdit(b)}
+                        >
+                          {t.owner.editBatchDates}
+                        </button>
+                      )}
+                    </td>
+                  ) : null}
                 </tr>
               ))
             )}

@@ -564,6 +564,13 @@ export const api = {
         { method: "POST", body: JSON.stringify(body) },
         true,
       ),
+    updateBatch: (id: string, body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; batch: ProductionBatch }>(
+        `/api/v1/owner/batches/${id}`,
+        1,
+        { method: "PATCH", body: JSON.stringify(body) },
+        true,
+      ),
     orders: () =>
       getJson<{ ok: boolean; orders: SalesOrder[] }>(
         "/api/v1/owner/orders",

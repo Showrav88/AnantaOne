@@ -133,6 +133,11 @@ ownerSellRouter.patch(
   async (req, res) => {
     const schema = z.object({
       note: z.string().max(500).nullable().optional(),
+      manufacturedAt: z
+        .string()
+        .datetime()
+        .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/))
+        .optional(),
       expiresAt: z
         .string()
         .datetime()
@@ -153,19 +158,39 @@ ownerSellRouter.patch(
       res.status(404).json({ ok: false, message: "Batch not found" });
       return;
     }
+
+    const data: {
+      note?: string | null;
+      isActive?: boolean;
+      manufacturedAt?: Date;
+      expiresAt?: Date | null;
+    } = {};
+    if (parsed.data.note !== undefined) data.note = parsed.data.note;
+    if (parsed.data.isActive !== undefined) data.isActive = parsed.data.isActive;
+    if (parsed.data.manufacturedAt) {
+      data.manufacturedAt = parseDate(parsed.data.manufacturedAt);
+    }
+    if (parsed.data.expiresAt !== undefined) {
+      data.expiresAt = parsed.data.expiresAt
+        ? parseDate(parsed.data.expiresAt)
+        : null;
+    }
+
+    if (
+      data.manufacturedAt &&
+      data.expiresAt &&
+      data.expiresAt < data.manufacturedAt
+    ) {
+      res.status(400).json({
+        ok: false,
+        message: "Expiry date must be on or after manufacture date",
+      });
+      return;
+    }
+
     const batch = await prisma.productionBatch.update({
       where: { id: existing.id },
-      data: {
-        note: parsed.data.note,
-        isActive: parsed.data.isActive,
-        ...(parsed.data.expiresAt !== undefined
-          ? {
-              expiresAt: parsed.data.expiresAt
-                ? parseDate(parsed.data.expiresAt)
-                : null,
-            }
-          : {}),
-      },
+      data,
       include: { product: true },
     });
     res.json({ ok: true, batch: serializeBatch(batch) });
@@ -555,6 +580,23 @@ ownerSellRouter.post(
       productId: z.string().min(1),
       batchId: z.string().min(1),
       templateId: z.string().optional(),
+      /** Override dates printed on tag (and optionally saved to batch). */
+      manufacturedAt: z
+        .string()
+        .datetime()
+        .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/))
+        .optional(),
+      expiresAt: z
+        .string()
+        .datetime()
+        .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/))
+        .nullable()
+        .optional(),
+      /** Persist date changes onto the production batch. */
+      saveDatesToBatch: z.boolean().optional(),
+      /** One-off print size override (mm). */
+      widthMm: z.coerce.number().int().min(20).max(200).optional(),
+      heightMm: z.coerce.number().int().min(15).max(200).optional(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
@@ -584,7 +626,32 @@ ownerSellRouter.post(
       return;
     }
 
-    const tpl =
+    let manufacturedAt = batch.manufacturedAt;
+    let expiresAt = batch.expiresAt;
+    if (parsed.data.manufacturedAt) {
+      manufacturedAt = parseDate(parsed.data.manufacturedAt);
+    }
+    if (parsed.data.expiresAt !== undefined) {
+      expiresAt = parsed.data.expiresAt
+        ? parseDate(parsed.data.expiresAt)
+        : null;
+    }
+    if (expiresAt && expiresAt < manufacturedAt) {
+      res.status(400).json({
+        ok: false,
+        message: "Expiry date must be on or after manufacture date",
+      });
+      return;
+    }
+
+    if (parsed.data.saveDatesToBatch) {
+      await prisma.productionBatch.update({
+        where: { id: batch.id },
+        data: { manufacturedAt, expiresAt },
+      });
+    }
+
+    const tplBase =
       template ??
       ({
         widthMm: 50,
@@ -599,6 +666,12 @@ ownerSellRouter.post(
         showCompany: true,
         tagDescription: null,
       } as const);
+
+    const tpl = {
+      ...tplBase,
+      widthMm: parsed.data.widthMm ?? tplBase.widthMm,
+      heightMm: parsed.data.heightMm ?? tplBase.heightMm,
+    };
 
     const tag = buildTagPayload({
       company: {
@@ -615,13 +688,17 @@ ownerSellRouter.post(
       },
       batch: {
         batchCode: batch.batchCode,
-        manufacturedAt: batch.manufacturedAt,
-        expiresAt: batch.expiresAt,
+        manufacturedAt,
+        expiresAt,
       },
       template: tpl,
       publicBaseUrl: publicBaseUrl(req),
     });
 
-    res.json({ ok: true, tag });
+    res.json({
+      ok: true,
+      tag,
+      batchDatesSaved: Boolean(parsed.data.saveDatesToBatch),
+    });
   },
 );
