@@ -1,4 +1,29 @@
-const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:5000";
+function normalizeApiUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/$/, "");
+  // Common Render mistake: AnantaOneApi → anantaone-api (404 host)
+  if (trimmed === "https://anantaone-api.onrender.com") {
+    return "https://anantaoneapi.onrender.com";
+  }
+  return trimmed;
+}
+
+function resolveApiUrl(): string {
+  const fromEnv = import.meta.env.VITE_API_URL as string | undefined;
+  if (fromEnv && fromEnv.trim()) {
+    return normalizeApiUrl(fromEnv);
+  }
+
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host === "anantaone.onrender.com" || host.endsWith(".onrender.com")) {
+      return "https://anantaoneapi.onrender.com";
+    }
+  }
+
+  return "http://localhost:5000";
+}
+
+const apiUrl = resolveApiUrl();
 
 export type HealthResponse = {
   ok: boolean;
@@ -37,12 +62,27 @@ export type BuyersResponse = {
   }>;
 };
 
-async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${apiUrl}${path}`);
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
+async function getJson<T>(path: string, attempts = 3): Promise<T> {
+  let lastError: unknown;
+
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      const res = await fetch(`${apiUrl}${path}`, {
+        // Render free tier cold-start can be slow
+        signal: AbortSignal.timeout(45_000),
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      return (await res.json()) as T;
+    } catch (error) {
+      lastError = error;
+      // Brief backoff before retry (cold start / transient network)
+      await new Promise((r) => setTimeout(r, 800 * (i + 1)));
+    }
   }
-  return (await res.json()) as T;
+
+  throw lastError instanceof Error ? lastError : new Error("API request failed");
 }
 
 export const api = {

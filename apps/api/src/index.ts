@@ -35,7 +35,8 @@ app.use(
         callback(null, true);
         return;
       }
-      callback(new Error(`CORS blocked for origin: ${origin}`));
+      // Use false (not Error) so browsers still get a clean CORS response shape
+      callback(null, false);
     },
   }),
 );
