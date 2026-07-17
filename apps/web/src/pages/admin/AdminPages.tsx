@@ -1,6 +1,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import { DisplayControls } from "../../components/DisplayControls";
 import { api } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
 
@@ -21,6 +22,13 @@ export function AdminLayout({ locale, onLocale }: Props) {
 
   return (
     <div className="owner-shell admin">
+      <header className="owner-topbar">
+        <p className="owner-topbar-brand">{t.app.name}</p>
+        <DisplayControls locale={locale} compact />
+        <button type="button" className="lang compact" onClick={onLocale}>
+          {t.common.language}
+        </button>
+      </header>
       <aside className="owner-nav">
         <p className="owner-brand">{t.app.name}</p>
         <p className="owner-role">{t.admin.roleLabel}</p>
@@ -32,6 +40,7 @@ export function AdminLayout({ locale, onLocale }: Props) {
           <NavLink to="/admin/companies">{t.admin.navCompanies}</NavLink>
         </nav>
         <div className="owner-nav-foot">
+          <DisplayControls locale={locale} />
           <button type="button" className="lang" onClick={onLocale}>
             {t.common.language}
           </button>

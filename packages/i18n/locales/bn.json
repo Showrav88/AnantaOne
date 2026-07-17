@@ -18,7 +18,14 @@
     "retry": "আবার চেষ্টা",
     "online": "চালু",
     "offline": "বন্ধ",
-    "language": "English"
+    "language": "English",
+    "themeToggle": "থিম",
+    "themeLight": "লাইট",
+    "themeDark": "ডার্ক",
+    "themeNight": "নাইট",
+    "fontSize": "অক্ষরের সাইজ",
+    "fontSmaller": "ছোট লেখা",
+    "fontLarger": "বড় লেখা"
   },
   "home": {
     "ctaPrimary": "লাইভ ড্যাশবোর্ড খুলুন",

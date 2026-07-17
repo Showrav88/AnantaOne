@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import { DisplayControls } from "../../components/DisplayControls";
 import { api } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
 
@@ -53,6 +54,7 @@ export function OwnerLayout({ locale, onLocale }: Props) {
           <span />
         </button>
         <p className="owner-topbar-brand">{t.app.name}</p>
+        <DisplayControls locale={locale} compact />
         <button type="button" className="lang compact" onClick={onLocale}>
           {t.common.language}
         </button>
@@ -90,6 +92,7 @@ export function OwnerLayout({ locale, onLocale }: Props) {
           <NavLink to="/pulse" onClick={closeMenu}>
             {t.owner.navPublic}
           </NavLink>
+          <DisplayControls locale={locale} />
           <button type="button" className="lang" onClick={onLocale}>
             {t.common.language}
           </button>

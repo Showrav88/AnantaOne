@@ -18,7 +18,14 @@
     "retry": "Retry",
     "online": "Online",
     "offline": "Offline",
-    "language": "বাংলা"
+    "language": "বাংলা",
+    "themeToggle": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeNight": "Night",
+    "fontSize": "Text size",
+    "fontSmaller": "Smaller text",
+    "fontLarger": "Larger text"
   },
   "home": {
     "ctaPrimary": "Open live dashboard",
