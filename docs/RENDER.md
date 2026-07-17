@@ -47,7 +47,7 @@ Dashboard → open service named like **anantaone-api** (type **Web Service**, n
 
 1. `prisma generate`
 2. `prisma migrate deploy`
-3. `prisma db seed` (mock Lakshmipur shops — safe upserts)
+3. `prisma db seed` (demo users/shops — upserts; **company name/phone/address/tagline/description are only set on first create**, so owner edits survive redeploys)
 
 ### Environment (Web Service only — not Static Site)
 

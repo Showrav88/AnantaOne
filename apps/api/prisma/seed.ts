@@ -130,16 +130,11 @@ async function main() {
     },
   });
 
+  // Demo profile fields only on create. Never overwrite owner-edited
+  // company details on redeploy / db:seed (Render runs seed every build).
   const company = await prisma.company.upsert({
     where: { slug: "ananta-water" },
     update: {
-      name: "Ananta Water",
-      locale: "bn",
-      phone: "01700000000",
-      address: "Lakshmipur, Bangladesh",
-      tagline: "বাংলাদেশের পালস — দোকান, স্টক ও ডেলিভারি",
-      description:
-        "Distilled / R/O water production and B2B distribution for Lakshmipur shops.",
       isActive: true,
     },
     create: {
