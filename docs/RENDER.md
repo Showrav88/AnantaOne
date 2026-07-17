@@ -39,7 +39,11 @@ Dashboard → open service named like **anantaone-api** (type **Web Service**, n
 | **Build Command** | `npm install && npm run render:api:build` |
 | **Start Command** | `npm run render:api:start` |
 
-`render:api:build` already runs **Prisma migrate deploy on every deploy**.
+`render:api:build` runs on **every deploy**:
+
+1. `prisma generate`
+2. `prisma migrate deploy`
+3. `prisma db seed` (mock Lakshmipur shops — safe upserts)
 
 ### Environment (Web Service only — not Static Site)
 

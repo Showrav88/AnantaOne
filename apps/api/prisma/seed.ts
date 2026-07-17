@@ -8,13 +8,53 @@ if (!connectionString) {
   throw new Error("DATABASE_URL is required for seeding");
 }
 
-const adapter = new PrismaPg({ connectionString });
+const needsSsl =
+  connectionString.includes("sslmode=require") ||
+  connectionString.includes("render.com") ||
+  connectionString.includes("neon.tech") ||
+  process.env.NODE_ENV === "production";
+
+const adapter = new PrismaPg({
+  connectionString,
+  ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
+});
 const prisma = new PrismaClient({ adapter });
+
+const mockShops = [
+  {
+    shopName: "লক্ষ্মীপুর বাজার স্টোর",
+    phone: "01800000001",
+    address: "Lakshmipur Bazaar, Main Road",
+  },
+  {
+    shopName: "চন্দ্রগঞ্জ ওয়াটার পয়েন্ট",
+    phone: "01800000002",
+    address: "Chandraganj Bazar",
+  },
+  {
+    shopName: "রায়পুর ট্রেডিং",
+    phone: "01800000003",
+    address: "Raipur Bus Stand",
+  },
+  {
+    shopName: "রামগঞ্জ সুপার শপ",
+    phone: "01800000004",
+    address: "Ramganj Zero Point",
+  },
+  {
+    shopName: "Demo Shop",
+    phone: "01800000000",
+    address: "Lakshmipur Bazaar",
+  },
+] as const;
 
 async function main() {
   const company = await prisma.company.upsert({
     where: { slug: "ananta-water" },
-    update: {},
+    update: {
+      name: "Ananta Water",
+      locale: "bn",
+    },
     create: {
       name: "Ananta Water",
       slug: "ananta-water",
@@ -29,7 +69,17 @@ async function main() {
     include: { branches: true },
   });
 
-  const branchId = company.branches[0]?.id;
+  let branchId = company.branches[0]?.id;
+  if (!branchId) {
+    const branch = await prisma.branch.create({
+      data: {
+        tenantId: company.id,
+        name: "Lakshmipur HQ",
+        address: "Lakshmipur, Bangladesh",
+      },
+    });
+    branchId = branch.id;
+  }
 
   await prisma.user.upsert({
     where: {
@@ -38,37 +88,50 @@ async function main() {
         email: "owner@anantaone.local",
       },
     },
-    update: {},
+    update: {
+      name: "Owner",
+      phone: "01700000000",
+      role: "OWNER",
+      branchId,
+    },
     create: {
       tenantId: company.id,
       branchId,
       email: "owner@anantaone.local",
       name: "Owner",
       phone: "01700000000",
-      // bcrypt hash placeholder — replace when auth lands
       passwordHash: "dev-only-change-me",
       role: "OWNER",
     },
   });
 
-  await prisma.buyer.upsert({
-    where: {
-      tenantId_phone: {
-        tenantId: company.id,
-        phone: "01800000000",
+  for (const shop of mockShops) {
+    await prisma.buyer.upsert({
+      where: {
+        tenantId_phone: {
+          tenantId: company.id,
+          phone: shop.phone,
+        },
       },
-    },
-    update: {},
-    create: {
-      tenantId: company.id,
-      shopName: "Demo Shop",
-      phone: "01800000000",
-      address: "Lakshmipur Bazaar",
-      locale: "bn",
-    },
-  });
+      update: {
+        shopName: shop.shopName,
+        address: shop.address,
+        locale: "bn",
+        isActive: true,
+      },
+      create: {
+        tenantId: company.id,
+        shopName: shop.shopName,
+        phone: shop.phone,
+        address: shop.address,
+        locale: "bn",
+      },
+    });
+  }
 
-  console.log("Seeded company:", company.slug);
+  console.log(
+    `Seeded company=${company.slug} shops=${mockShops.length} branch=${branchId}`,
+  );
 }
 
 main()
