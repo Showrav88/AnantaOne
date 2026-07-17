@@ -59,7 +59,7 @@ When starting a Cloud Agent on mobile or web, use:
 
 ```
 Repo: Showrav88/AnantaOne
-Branch: develop (or feature/*)
+Branch: cloud-dev (cloud) or local-dev (local PC)
 Read: docs/STACK.md, docs/ARCHITECTURE.md, docs/ROADMAP.md
 Continue from the first unchecked item in ROADMAP.md
 Use latest stable versions only (see STACK.md)
@@ -73,11 +73,12 @@ UI: Bengali + English, mobile-first for buyers
 ## Daily dev workflow (any PC)
 
 ```bash
-git checkout develop && git pull
+git checkout local-dev && git pull   # local PC
+git checkout cloud-dev && git pull   # cloud agent
 git checkout -b feature/my-task
 # code...
 git add . && git commit -m "message" && git push -u origin feature/my-task
-# Open PR → develop
+# Merge to local-dev or cloud-dev via PR
 ```
 
 ---

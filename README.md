@@ -16,6 +16,7 @@ PERN-based SaaS platform for distilled water production, inventory, B2B ordering
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modules, SaaS design, payments |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Build phases + checklist |
 | [docs/CLOUD-AGENT.md](docs/CLOUD-AGENT.md) | Start coding from mobile/cloud |
+| [docs/GIT-WORKFLOW.md](docs/GIT-WORKFLOW.md) | Local vs cloud branch rules |
 
 ## Quick start (local)
 
@@ -43,13 +44,16 @@ Use **GitHub as the single source of truth**. Work on cloud (Cursor Cloud Agent)
 
 | Branch | Purpose |
 |---|---|
-| `main` | Stable, deployable code |
-| `develop` | Daily integration branch |
-| `feature/*` | One feature per branch (e.g. `feature/auth`, `feature/orders`) |
+| `main` | Stable, deployable production code |
+| `local-dev` | Local PC development (home, office) |
+| `cloud-dev` | Cursor Cloud Agent (mobile, web) |
+| `feature/*` | One feature per branch |
+
+See [docs/GIT-WORKFLOW.md](docs/GIT-WORKFLOW.md) for full rules.
 
 ### Daily rules
 
-1. **Pull before you start** — `git pull origin develop`
+1. **Pull before you start** — `git pull origin local-dev` (PC) or `git pull origin cloud-dev` (cloud)
 2. **Work on a feature branch** — never commit directly to `main`
 3. **Push often** — keeps cloud and local in sync
 4. **Never commit `.env`** — secrets stay local / cloud env vars only
@@ -79,7 +83,7 @@ git pull origin feature/my-work
 1. Push your branch to GitHub
 2. In Cursor: **Agents → New Cloud Agent**
 3. Select repo: `Showrav88/AnantaOne`
-4. Pick the same branch you use locally
+4. Pick branch: **`cloud-dev`**
 5. Cloud agent edits → commit → push → pull locally
 
 ## Repo structure (planned)

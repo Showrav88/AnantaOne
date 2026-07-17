@@ -148,7 +148,8 @@ Buyer orders 100 bottles
 | Branch | Purpose |
 |---|---|
 | `main` | Production |
-| `develop` | Daily integration |
+| `local-dev` | Local PC development |
+| `cloud-dev` | Cloud Agent development |
 | `feature/*` | One feature per branch |
 
 GitHub repo: `Showrav88/AnantaOne`

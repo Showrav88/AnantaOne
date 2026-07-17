@@ -1,0 +1,62 @@
+---
+description: Git branching rules — local-dev vs cloud-dev
+alwaysApply: true
+---
+
+# AnantaOne Git Branch Rules
+
+## Branch purposes
+
+| Branch | Who uses it | Where |
+|---|---|---|
+| `main` | Production releases only | Merge via PR after testing |
+| `local-dev` | Local PC development | Home/office laptop, Cursor desktop |
+| `cloud-dev` | Cloud Agent development | Cursor mobile, cursor.com, Cloud Agent |
+| `feature/*` | Single task/feature | Branch off local-dev OR cloud-dev |
+
+## Rules
+
+1. **Local PC** → always branch from `local-dev`, merge back to `local-dev`
+2. **Cloud Agent** → always branch from `cloud-dev`, merge back to `cloud-dev`
+3. **Never commit directly to `main`**
+4. **Sync before work:** `git pull origin <your-dev-branch>`
+5. **Push often** so the other environment can pull
+6. **Never commit `.env`**
+
+## Sync local ↔ cloud
+
+When switching between PC and cloud:
+
+```bash
+# After local work — push local-dev, then on cloud:
+git checkout cloud-dev && git pull origin local-dev
+
+# After cloud work — push cloud-dev, then on PC:
+git checkout local-dev && git pull origin cloud-dev
+```
+
+Or use feature branches that both environments share:
+
+```bash
+git push -u origin feature/orders-module
+# Both local and cloud checkout the same feature branch
+```
+
+## Merge to production
+
+```
+feature/* → local-dev (or cloud-dev) → main
+```
+
+Only merge to `main` when tested and stable.
+
+## Cloud Agent setup
+
+- Repo: `Showrav88/AnantaOne`
+- Default branch for cloud: **`cloud-dev`**
+- Read `docs/GIT-WORKFLOW.md` before starting
+
+## Commit identity
+
+- Use project name `AnantaOne`, not personal branding in commit messages
+- No Cursor co-author trailers

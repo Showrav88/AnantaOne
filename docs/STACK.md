@@ -88,7 +88,7 @@ AnantaOne/
 ```bash
 git clone https://github.com/Showrav88/AnantaOne.git
 cd AnantaOne
-git checkout develop
+git checkout local-dev
 copy .env.example .env
 docker compose up -d
 npm install
