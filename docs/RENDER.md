@@ -16,7 +16,7 @@ You can deploy from PR branch `Cloudenv-setup-neon-d75c` (no merge required). Se
 | Web Service (API) | `https://anantaoneapi.onrender.com` (**no hyphen**) |
 
 > Important: Render names map to hostnames without extra hyphens.  
-> Wrong: `https://anantaoneapi.onrender.com` → 404 / fake CORS errors  
+> Wrong: `https://anantaone-api.onrender.com` → 404 / fake CORS errors  
 > Right: `https://anantaoneapi.onrender.com`
 
 If the static page says **Waiting for API…** but `VITE_API_URL` is correct, the **API Web Service is not running**.  
