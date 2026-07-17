@@ -60,6 +60,8 @@ Dashboard → open service named like **anantaone-api** (type **Web Service**, n
 | `APP_URL` | `https://anantaone.onrender.com` |
 | `JWT_SECRET` | long random string |
 | `JWT_REFRESH_SECRET` | long random string |
+| `SUPER_ADMIN_EMAIL` | `superadmin@anantaone.local` (or your email) |
+| `SUPER_ADMIN_PASSWORD` | strong password (seeded on deploy) |
 
 Example (replace password; do not commit):
 

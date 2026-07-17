@@ -1,37 +1,44 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
-import { attachOwnerContext, requireOwner } from "../middleware/ownerContext.js";
+import { requireAuth } from "../middleware/auth.js";
+import {
+  requireCompanyStaff,
+  requireOwnerOnly,
+  requireOwnerOrManager,
+} from "../middleware/companyAccess.js";
 
 export const ownerRouter = Router();
 
-ownerRouter.use(attachOwnerContext);
+ownerRouter.use(requireAuth, requireCompanyStaff);
+
+function tenantId(req: { auth?: { tenantId: string | null } }) {
+  return req.auth!.tenantId!;
+}
 
 ownerRouter.get("/dashboard", async (req, res) => {
-  const tenantId = req.owner!.tenantId;
+  const tid = tenantId(req);
 
   const [company, productCount, buyerCount, lowStock, recentProducts] =
     await Promise.all([
       prisma.company.findUniqueOrThrow({
-        where: { id: tenantId },
+        where: { id: tid },
         include: {
           branches: { orderBy: { createdAt: "asc" }, take: 5 },
           _count: { select: { users: true, buyers: true, products: true } },
         },
       }),
-      prisma.product.count({ where: { tenantId, isActive: true } }),
-      prisma.buyer.count({ where: { tenantId, isActive: true } }),
+      prisma.product.count({ where: { tenantId: tid, isActive: true } }),
+      prisma.buyer.count({ where: { tenantId: tid, isActive: true } }),
       prisma.product.findMany({
-        where: {
-          tenantId,
-          isActive: true,
-          // stockQty <= minStock — filter in JS for Decimal safety
-        },
+        where: { tenantId: tid, isActive: true },
+        include: { unit: true },
         orderBy: { updatedAt: "desc" },
         take: 50,
       }),
       prisma.product.findMany({
-        where: { tenantId },
+        where: { tenantId: tid },
+        include: { unit: true },
         orderBy: { updatedAt: "desc" },
         take: 5,
       }),
@@ -44,7 +51,7 @@ ownerRouter.get("/dashboard", async (req, res) => {
 
   res.json({
     ok: true,
-    role: req.owner!.role,
+    role: req.auth!.roleCode,
     dashboard: {
       company: {
         id: company.id,
@@ -72,7 +79,7 @@ ownerRouter.get("/dashboard", async (req, res) => {
 
 ownerRouter.get("/company", async (req, res) => {
   const company = await prisma.company.findUniqueOrThrow({
-    where: { id: req.owner!.tenantId },
+    where: { id: tenantId(req) },
     include: {
       branches: { orderBy: { createdAt: "asc" } },
       _count: { select: { users: true, buyers: true, products: true } },
@@ -81,7 +88,7 @@ ownerRouter.get("/company", async (req, res) => {
 
   res.json({
     ok: true,
-    role: req.owner!.role,
+    role: req.auth!.roleCode,
     company: {
       id: company.id,
       name: company.name,
@@ -106,7 +113,7 @@ const companyUpdateSchema = z.object({
   locale: z.enum(["bn", "en"]).optional(),
 });
 
-ownerRouter.patch("/company", requireOwner, async (req, res) => {
+ownerRouter.patch("/company", requireOwnerOnly, async (req, res) => {
   const parsed = companyUpdateSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, message: parsed.error.message });
@@ -114,7 +121,7 @@ ownerRouter.patch("/company", requireOwner, async (req, res) => {
   }
 
   const company = await prisma.company.update({
-    where: { id: req.owner!.tenantId },
+    where: { id: tenantId(req) },
     data: parsed.data,
     include: {
       branches: { orderBy: { createdAt: "asc" } },
@@ -141,20 +148,19 @@ ownerRouter.patch("/company", requireOwner, async (req, res) => {
 
 ownerRouter.get("/products", async (req, res) => {
   const products = await prisma.product.findMany({
-    where: { tenantId: req.owner!.tenantId },
+    where: { tenantId: tenantId(req) },
+    include: { unit: true },
     orderBy: [{ isActive: "desc" }, { name: "asc" }],
   });
   res.json({ ok: true, products: products.map(serializeProduct) });
 });
-
-const productUnit = z.enum(["LITER", "BOTTLE", "DRUM", "PIECE", "KG"]);
 
 const productCreateSchema = z.object({
   name: z.string().min(2).max(120),
   nameBn: z.string().max(120).nullable().optional(),
   sku: z.string().min(2).max(64),
   category: z.string().min(2).max(64).default("water"),
-  unit: productUnit.default("BOTTLE"),
+  unitCode: z.string().min(2).max(32).default("BOTTLE"),
   priceBdt: z.coerce.number().nonnegative(),
   stockQty: z.coerce.number().nonnegative().default(0),
   minStock: z.coerce.number().nonnegative().default(0),
@@ -162,28 +168,38 @@ const productCreateSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-ownerRouter.post("/products", requireOwner, async (req, res) => {
+ownerRouter.post("/products", requireOwnerOrManager, async (req, res) => {
   const parsed = productCreateSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, message: parsed.error.message });
     return;
   }
 
+  const unit = await prisma.unitLookup.findUnique({
+    where: { code: parsed.data.unitCode },
+  });
+  if (!unit) {
+    res.status(400).json({ ok: false, message: "Unknown unitCode" });
+    return;
+  }
+
   try {
     const product = await prisma.product.create({
       data: {
-        tenantId: req.owner!.tenantId,
+        tenantId: tenantId(req),
         name: parsed.data.name,
         nameBn: parsed.data.nameBn ?? null,
         sku: parsed.data.sku,
         category: parsed.data.category,
-        unit: parsed.data.unit,
+        unitId: unit.id,
         priceBdt: parsed.data.priceBdt,
         stockQty: parsed.data.stockQty,
         minStock: parsed.data.minStock,
         description: parsed.data.description ?? null,
         isActive: parsed.data.isActive ?? true,
+        createdBy: req.auth!.id,
       },
+      include: { unit: true },
     });
     res.status(201).json({ ok: true, product: serializeProduct(product) });
   } catch (error) {
@@ -194,7 +210,7 @@ ownerRouter.post("/products", requireOwner, async (req, res) => {
 
 const productUpdateSchema = productCreateSchema.partial();
 
-ownerRouter.patch("/products/:id", requireOwner, async (req, res) => {
+ownerRouter.patch("/products/:id", requireOwnerOrManager, async (req, res) => {
   const parsed = productUpdateSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, message: parsed.error.message });
@@ -203,35 +219,53 @@ ownerRouter.patch("/products/:id", requireOwner, async (req, res) => {
 
   const id = String(req.params.id);
   const existing = await prisma.product.findFirst({
-    where: { id, tenantId: req.owner!.tenantId },
+    where: { id, tenantId: tenantId(req) },
   });
   if (!existing) {
     res.status(404).json({ ok: false, message: "Product not found" });
     return;
   }
 
+  let unitId: string | undefined;
+  if (parsed.data.unitCode) {
+    const unit = await prisma.unitLookup.findUnique({
+      where: { code: parsed.data.unitCode },
+    });
+    if (!unit) {
+      res.status(400).json({ ok: false, message: "Unknown unitCode" });
+      return;
+    }
+    unitId = unit.id;
+  }
+
+  const { unitCode: _unitCode, ...rest } = parsed.data;
   const product = await prisma.product.update({
     where: { id: existing.id },
-    data: parsed.data,
+    data: {
+      ...rest,
+      ...(unitId ? { unitId } : {}),
+      updatedBy: req.auth!.id,
+    },
+    include: { unit: true },
   });
 
   res.json({ ok: true, product: serializeProduct(product) });
 });
 
-ownerRouter.delete("/products/:id", requireOwner, async (req, res) => {
+ownerRouter.delete("/products/:id", requireOwnerOrManager, async (req, res) => {
   const id = String(req.params.id);
   const existing = await prisma.product.findFirst({
-    where: { id, tenantId: req.owner!.tenantId },
+    where: { id, tenantId: tenantId(req) },
   });
   if (!existing) {
     res.status(404).json({ ok: false, message: "Product not found" });
     return;
   }
 
-  // Soft delete — keep history for later inventory/orders
   const product = await prisma.product.update({
     where: { id: existing.id },
-    data: { isActive: false },
+    data: { isActive: false, updatedBy: req.auth!.id },
+    include: { unit: true },
   });
 
   res.json({ ok: true, product: serializeProduct(product) });
@@ -239,7 +273,7 @@ ownerRouter.delete("/products/:id", requireOwner, async (req, res) => {
 
 ownerRouter.get("/buyers", async (req, res) => {
   const buyers = await prisma.buyer.findMany({
-    where: { tenantId: req.owner!.tenantId, isActive: true },
+    where: { tenantId: tenantId(req), isActive: true },
     orderBy: { shopName: "asc" },
   });
   res.json({ ok: true, buyers });
@@ -252,7 +286,8 @@ function serializeProduct(product: {
   nameBn: string | null;
   sku: string;
   category: string;
-  unit: string;
+  unitId: string;
+  unit?: { code: string; nameEn: string; nameBn: string };
   priceBdt: { toString(): string } | number | string;
   stockQty: { toString(): string } | number | string;
   minStock: { toString(): string } | number | string;
@@ -268,7 +303,11 @@ function serializeProduct(product: {
     nameBn: product.nameBn,
     sku: product.sku,
     category: product.category,
-    unit: product.unit,
+    unitId: product.unitId,
+    unit: product.unit?.code ?? null,
+    unitLabel: product.unit
+      ? { en: product.unit.nameEn, bn: product.unit.nameBn }
+      : null,
     priceBdt: Number(product.priceBdt),
     stockQty: Number(product.stockQty),
     minStock: Number(product.minStock),

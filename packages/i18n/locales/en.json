@@ -35,7 +35,10 @@
   },
   "owner": {
     "roleOwner": "Owner workspace",
-    "enterDashboard": "Owner dashboard",
+    "roleManager": "Manager workspace",
+    "roleEmployee": "Employee workspace",
+    "enterDashboard": "Company login",
+    "readOnlyHint": "Employees can view products but not edit them.",
     "navDashboard": "Overview",
     "navCompany": "Company",
     "navProducts": "Products",
@@ -72,5 +75,36 @@
     "buyersTitle": "B2B shops",
     "buyersHint": "Active buyer shops on this tenant.",
     "publicCatalog": "Product pulse"
+  },
+  "auth": {
+    "loginTitle": "Sign in",
+    "loginHint": "Owners, managers, employees, and SaaS super admin.",
+    "registerTitle": "Register your company",
+    "registerHint": "Creates your company and the first owner account.",
+    "email": "Email",
+    "password": "Password",
+    "phone": "Phone",
+    "companyName": "Company name",
+    "ownerName": "Owner full name",
+    "loginCta": "Login",
+    "registerCta": "Register",
+    "logout": "Logout",
+    "noAccount": "New company?",
+    "hasAccount": "Already registered?"
+  },
+  "admin": {
+    "roleLabel": "SaaS Super Admin",
+    "title": "Platform control",
+    "hint": "Manage every company (shop) on AnantaOne.",
+    "navDashboard": "Overview",
+    "navCompanies": "Companies",
+    "statCompanies": "Companies",
+    "statUsers": "Users",
+    "statBuyers": "Shops",
+    "statProducts": "Products",
+    "companiesTitle": "All companies",
+    "companiesHint": "Enable or disable tenant companies.",
+    "enable": "Enable",
+    "disable": "Disable"
   }
 }

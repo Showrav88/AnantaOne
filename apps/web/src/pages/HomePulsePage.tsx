@@ -47,7 +47,7 @@ export function HomePulsePage({ locale, onLocale }: Props) {
       const [ov, by, prod] = await Promise.all([
         api.overview(),
         api.buyers(),
-        api.owner.products(),
+        api.products(),
       ]);
       setOverview(ov.company);
       setBuyers(by.buyers ?? []);
@@ -83,8 +83,11 @@ export function HomePulsePage({ locale, onLocale }: Props) {
       <header className="topbar">
         <span className="topbar-brand">{t.app.name}</span>
         <div className="topbar-actions">
-          <Link className="lang" to="/owner">
-            {t.owner.enterDashboard}
+          <Link className="lang" to="/login">
+            {t.auth.loginCta}
+          </Link>
+          <Link className="lang" to="/register">
+            {t.auth.registerCta}
           </Link>
           <button type="button" className="lang" onClick={onLocale}>
             {t.common.language}
@@ -97,7 +100,7 @@ export function HomePulsePage({ locale, onLocale }: Props) {
         <h1>{t.app.tagline}</h1>
         <p className="lede">{t.app.pulse}</p>
         <div className="cta-row">
-          <Link className="btn primary" to="/owner">
+          <Link className="btn primary" to="/login">
             {t.owner.enterDashboard}
           </Link>
           <button

@@ -1,6 +1,7 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import { api, type Product } from "../../lib/api";
+import { getStoredUser } from "../../lib/session";
 
 type Props = { locale: LocaleCode };
 
@@ -9,7 +10,7 @@ const emptyForm = {
   nameBn: "",
   sku: "",
   category: "water",
-  unit: "BOTTLE",
+  unitCode: "BOTTLE",
   priceBdt: "0",
   stockQty: "0",
   minStock: "0",
@@ -18,14 +19,23 @@ const emptyForm = {
 
 export function OwnerProductsPage({ locale }: Props) {
   const t = getMessages(locale);
+  const user = getStoredUser();
+  const canWrite = user?.role.code === "OWNER" || user?.role.code === "MANAGER";
   const [products, setProducts] = useState<Product[]>([]);
+  const [units, setUnits] = useState<
+    Array<{ code: string; nameEn: string; nameBn: string }>
+  >([]);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   async function load() {
-    const res = await api.owner.products();
-    setProducts(res.products);
+    const [prod, unitRes] = await Promise.all([
+      api.owner.products(),
+      api.auth.units(),
+    ]);
+    setProducts(prod.products);
+    setUnits(unitRes.units);
   }
 
   useEffect(() => {
@@ -45,7 +55,7 @@ export function OwnerProductsPage({ locale }: Props) {
         nameBn: form.nameBn || null,
         sku: form.sku,
         category: form.category,
-        unit: form.unit,
+        unitCode: form.unitCode,
         priceBdt: Number(form.priceBdt),
         stockQty: Number(form.stockQty),
         minStock: Number(form.minStock),
@@ -78,81 +88,85 @@ export function OwnerProductsPage({ locale }: Props) {
         </div>
       </header>
 
-      <form className="owner-form compact" onSubmit={onCreate}>
-        <label>
-          {t.owner.fieldProductName}
-          <input
-            required
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-        </label>
-        <label>
-          {t.owner.fieldProductNameBn}
-          <input
-            value={form.nameBn}
-            onChange={(e) => setForm({ ...form, nameBn: e.target.value })}
-          />
-        </label>
-        <label>
-          SKU
-          <input
-            required
-            value={form.sku}
-            onChange={(e) => setForm({ ...form, sku: e.target.value })}
-          />
-        </label>
-        <label>
-          {t.owner.fieldUnit}
-          <select
-            value={form.unit}
-            onChange={(e) => setForm({ ...form, unit: e.target.value })}
-          >
-            <option value="BOTTLE">BOTTLE</option>
-            <option value="LITER">LITER</option>
-            <option value="DRUM">DRUM</option>
-            <option value="PIECE">PIECE</option>
-            <option value="KG">KG</option>
-          </select>
-        </label>
-        <label>
-          {t.owner.fieldPrice}
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            required
-            value={form.priceBdt}
-            onChange={(e) => setForm({ ...form, priceBdt: e.target.value })}
-          />
-        </label>
-        <label>
-          {t.owner.fieldStock}
-          <input
-            type="number"
-            min="0"
-            step="1"
-            value={form.stockQty}
-            onChange={(e) => setForm({ ...form, stockQty: e.target.value })}
-          />
-        </label>
-        <label>
-          {t.owner.fieldMinStock}
-          <input
-            type="number"
-            min="0"
-            step="1"
-            value={form.minStock}
-            onChange={(e) => setForm({ ...form, minStock: e.target.value })}
-          />
-        </label>
-        <div className="form-actions">
-          <button className="btn primary" type="submit" disabled={pending}>
-            {t.owner.addProduct}
-          </button>
-          {error ? <span className="error">{error}</span> : null}
-        </div>
-      </form>
+      {canWrite ? (
+        <form className="owner-form compact" onSubmit={onCreate}>
+          <label>
+            {t.owner.fieldProductName}
+            <input
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          </label>
+          <label>
+            {t.owner.fieldProductNameBn}
+            <input
+              value={form.nameBn}
+              onChange={(e) => setForm({ ...form, nameBn: e.target.value })}
+            />
+          </label>
+          <label>
+            SKU
+            <input
+              required
+              value={form.sku}
+              onChange={(e) => setForm({ ...form, sku: e.target.value })}
+            />
+          </label>
+          <label>
+            {t.owner.fieldUnit}
+            <select
+              value={form.unitCode}
+              onChange={(e) => setForm({ ...form, unitCode: e.target.value })}
+            >
+              {units.map((u) => (
+                <option key={u.code} value={u.code}>
+                  {locale === "bn" ? u.nameBn : u.nameEn}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t.owner.fieldPrice}
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              required
+              value={form.priceBdt}
+              onChange={(e) => setForm({ ...form, priceBdt: e.target.value })}
+            />
+          </label>
+          <label>
+            {t.owner.fieldStock}
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={form.stockQty}
+              onChange={(e) => setForm({ ...form, stockQty: e.target.value })}
+            />
+          </label>
+          <label>
+            {t.owner.fieldMinStock}
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={form.minStock}
+              onChange={(e) => setForm({ ...form, minStock: e.target.value })}
+            />
+          </label>
+          <div className="form-actions">
+            <button className="btn primary" type="submit" disabled={pending}>
+              {t.owner.addProduct}
+            </button>
+            {error ? <span className="error">{error}</span> : null}
+          </div>
+        </form>
+      ) : (
+        <p className="muted">{t.owner.readOnlyHint}</p>
+      )}
 
       <div className="table-wrap">
         <table className="data-table">
@@ -177,7 +191,7 @@ export function OwnerProductsPage({ locale }: Props) {
                 </td>
                 <td>{p.isActive ? t.common.online : t.common.offline}</td>
                 <td>
-                  {p.isActive ? (
+                  {canWrite && p.isActive ? (
                     <button
                       type="button"
                       className="btn ghost compact dark"

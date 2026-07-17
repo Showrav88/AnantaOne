@@ -6,6 +6,7 @@ export const v1Router = Router();
 v1Router.get("/overview", async (_req, res) => {
   try {
     const company = await prisma.company.findFirst({
+      where: { isActive: true },
       orderBy: { createdAt: "asc" },
       include: {
         branches: { orderBy: { createdAt: "asc" }, take: 5 },
@@ -48,6 +49,7 @@ v1Router.get("/overview", async (_req, res) => {
 v1Router.get("/buyers", async (_req, res) => {
   try {
     const company = await prisma.company.findFirst({
+      where: { isActive: true },
       orderBy: { createdAt: "asc" },
       select: { id: true },
     });
@@ -73,5 +75,47 @@ v1Router.get("/buyers", async (_req, res) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     res.status(500).json({ ok: false, message, buyers: [] });
+  }
+});
+
+v1Router.get("/products", async (_req, res) => {
+  try {
+    const company = await prisma.company.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+
+    if (!company) {
+      res.json({ ok: true, products: [] });
+      return;
+    }
+
+    const products = await prisma.product.findMany({
+      where: { tenantId: company.id, isActive: true },
+      include: { unit: true },
+      orderBy: { name: "asc" },
+      take: 24,
+    });
+
+    res.json({
+      ok: true,
+      products: products.map((p) => ({
+        id: p.id,
+        name: p.name,
+        nameBn: p.nameBn,
+        sku: p.sku,
+        category: p.category,
+        unit: p.unit.code,
+        priceBdt: Number(p.priceBdt),
+        stockQty: Number(p.stockQty),
+        minStock: Number(p.minStock),
+        description: p.description,
+        isActive: p.isActive,
+      })),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    res.status(500).json({ ok: false, message, products: [] });
   }
 });

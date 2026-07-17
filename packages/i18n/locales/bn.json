@@ -35,7 +35,10 @@
   },
   "owner": {
     "roleOwner": "মালিক ওয়ার্কস্পেস",
-    "enterDashboard": "মালিক ড্যাশবোর্ড",
+    "roleManager": "ম্যানেজার ওয়ার্কস্পেস",
+    "roleEmployee": "কর্মচারী ওয়ার্কস্পেস",
+    "enterDashboard": "কোম্পানি লগইন",
+    "readOnlyHint": "কর্মচারী পণ্য দেখতে পারেন, সম্পাদনা করতে পারেন না।",
     "navDashboard": "ওভারভিউ",
     "navCompany": "কোম্পানি",
     "navProducts": "পণ্য",
@@ -72,5 +75,36 @@
     "buyersTitle": "বি২বি দোকান",
     "buyersHint": "এই ট্যানেন্টের সক্রিয় ক্রেতা দোকান।",
     "publicCatalog": "পণ্য পালস"
+  },
+  "auth": {
+    "loginTitle": "লগইন",
+    "loginHint": "মালিক, ম্যানেজার, কর্মচারী ও সুপার অ্যাডমিন।",
+    "registerTitle": "কোম্পানি রেজিস্টার",
+    "registerHint": "নতুন কোম্পানি ও প্রথম মালিক অ্যাকাউন্ট তৈরি হবে।",
+    "email": "ইমেইল",
+    "password": "পাসওয়ার্ড",
+    "phone": "ফোন",
+    "companyName": "কোম্পানির নাম",
+    "ownerName": "মালিকের নাম",
+    "loginCta": "লগইন",
+    "registerCta": "রেজিস্টার",
+    "logout": "লগআউট",
+    "noAccount": "নতুন কোম্পানি?",
+    "hasAccount": "আগে রেজিস্টার করেছেন?"
+  },
+  "admin": {
+    "roleLabel": "স্যাস সুপার অ্যাডমিন",
+    "title": "প্ল্যাটফর্ম কন্ট্রোল",
+    "hint": "AnantaOne-এর সব কোম্পানি ম্যানেজ করুন।",
+    "navDashboard": "ওভারভিউ",
+    "navCompanies": "কোম্পানি",
+    "statCompanies": "কোম্পানি",
+    "statUsers": "ইউজার",
+    "statBuyers": "দোকান",
+    "statProducts": "পণ্য",
+    "companiesTitle": "সব কোম্পানি",
+    "companiesHint": "ট্যানেন্ট কোম্পানি চালু/বন্ধ করুন।",
+    "enable": "চালু",
+    "disable": "বন্ধ"
   }
 }

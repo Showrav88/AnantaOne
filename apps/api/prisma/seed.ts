@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
+import { hashPassword } from "../src/lib/auth.js";
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -54,7 +55,7 @@ const mockProducts = [
     nameBn: "ব্যাটারি ওয়াটার ১ লিটার",
     sku: "BW-1L",
     category: "water",
-    unit: "BOTTLE" as const,
+    unitCode: "BOTTLE",
     priceBdt: 35,
     stockQty: 420,
     minStock: 80,
@@ -65,7 +66,7 @@ const mockProducts = [
     nameBn: "পানীয় জল ২০ লিটার",
     sku: "DW-20L",
     category: "water",
-    unit: "DRUM" as const,
+    unitCode: "DRUM",
     priceBdt: 90,
     stockQty: 65,
     minStock: 30,
@@ -76,7 +77,7 @@ const mockProducts = [
     nameBn: "পানীয় জল ৫০০ মি.লি.",
     sku: "DW-500",
     category: "water",
-    unit: "BOTTLE" as const,
+    unitCode: "BOTTLE",
     priceBdt: 18,
     stockQty: 12,
     minStock: 100,
@@ -85,6 +86,39 @@ const mockProducts = [
 ] as const;
 
 async function main() {
+  const roles = await prisma.roleLookup.findMany();
+  const units = await prisma.unitLookup.findMany();
+  if (roles.length === 0 || units.length === 0) {
+    throw new Error("Lookups missing — run migrations first");
+  }
+
+  const byRole = Object.fromEntries(roles.map((r) => [r.code, r]));
+  const byUnit = Object.fromEntries(units.map((u) => [u.code, u]));
+
+  const superEmail = (
+    process.env.SUPER_ADMIN_EMAIL ?? "superadmin@anantaone.local"
+  ).toLowerCase();
+  const superPassword = process.env.SUPER_ADMIN_PASSWORD ?? "SuperAdmin#2026";
+
+  await prisma.user.upsert({
+    where: { email: superEmail },
+    update: {
+      name: "SaaS Super Admin",
+      roleId: byRole.SUPER_ADMIN!.id,
+      tenantId: null,
+      isActive: true,
+      passwordHash: await hashPassword(superPassword),
+    },
+    create: {
+      email: superEmail,
+      name: "SaaS Super Admin",
+      phone: "01700000099",
+      tenantId: null,
+      roleId: byRole.SUPER_ADMIN!.id,
+      passwordHash: await hashPassword(superPassword),
+    },
+  });
+
   const company = await prisma.company.upsert({
     where: { slug: "ananta-water" },
     update: {
@@ -95,6 +129,7 @@ async function main() {
       tagline: "বাংলাদেশের পালস — দোকান, স্টক ও ডেলিভারি",
       description:
         "Distilled / R/O water production and B2B distribution for Lakshmipur shops.",
+      isActive: true,
     },
     create: {
       name: "Ananta Water",
@@ -127,27 +162,46 @@ async function main() {
     branchId = branch.id;
   }
 
+  const ownerEmail = "owner@anantaone.local";
   await prisma.user.upsert({
-    where: {
-      tenantId_email: {
-        tenantId: company.id,
-        email: "owner@anantaone.local",
-      },
-    },
+    where: { email: ownerEmail },
     update: {
       name: "Owner",
       phone: "01700000000",
-      role: "OWNER",
+      roleId: byRole.OWNER!.id,
+      tenantId: company.id,
       branchId,
+      passwordHash: await hashPassword("Owner#2026"),
+      isActive: true,
     },
     create: {
       tenantId: company.id,
       branchId,
-      email: "owner@anantaone.local",
+      email: ownerEmail,
       name: "Owner",
       phone: "01700000000",
-      passwordHash: "dev-only-change-me",
-      role: "OWNER",
+      passwordHash: await hashPassword("Owner#2026"),
+      roleId: byRole.OWNER!.id,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: "employee@anantaone.local" },
+    update: {
+      roleId: byRole.EMPLOYEE!.id,
+      tenantId: company.id,
+      branchId,
+      passwordHash: await hashPassword("Employee#2026"),
+      isActive: true,
+    },
+    create: {
+      tenantId: company.id,
+      branchId,
+      email: "employee@anantaone.local",
+      name: "Demo Employee",
+      phone: "01700000011",
+      passwordHash: await hashPassword("Employee#2026"),
+      roleId: byRole.EMPLOYEE!.id,
     },
   });
 
@@ -176,6 +230,7 @@ async function main() {
   }
 
   for (const product of mockProducts) {
+    const unit = byUnit[product.unitCode]!;
     await prisma.product.upsert({
       where: {
         tenantId_sku: {
@@ -187,7 +242,7 @@ async function main() {
         name: product.name,
         nameBn: product.nameBn,
         category: product.category,
-        unit: product.unit,
+        unitId: unit.id,
         priceBdt: product.priceBdt,
         stockQty: product.stockQty,
         minStock: product.minStock,
@@ -196,13 +251,25 @@ async function main() {
       },
       create: {
         tenantId: company.id,
-        ...product,
+        name: product.name,
+        nameBn: product.nameBn,
+        sku: product.sku,
+        category: product.category,
+        unitId: unit.id,
+        priceBdt: product.priceBdt,
+        stockQty: product.stockQty,
+        minStock: product.minStock,
+        description: product.description,
       },
     });
   }
 
+  console.log("Seeded:");
+  console.log(`  super admin: ${superEmail} / ${superPassword}`);
+  console.log("  owner: owner@anantaone.local / Owner#2026");
+  console.log("  employee: employee@anantaone.local / Employee#2026");
   console.log(
-    `Seeded company=${company.slug} shops=${mockShops.length} products=${mockProducts.length}`,
+    `  company=${company.slug} shops=${mockShops.length} products=${mockProducts.length}`,
   );
 }
 
