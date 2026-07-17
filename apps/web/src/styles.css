@@ -567,7 +567,9 @@ body {
 .owner-page {
   max-width: 64rem;
   width: 100%;
+  min-width: 0;
   animation: rise 400ms ease-out both;
+  overflow-x: clip;
 }
 
 .owner-header {
@@ -809,13 +811,48 @@ body {
     font-size: 0.85rem;
   }
 
-  .qty-input {
-    width: 100%;
-    min-width: 4.5rem;
-  }
-
   .catalog-list li {
     grid-template-columns: 1fr;
+  }
+
+  .owner-page,
+  .owner-main,
+  .panel-card,
+  .owner-table-wrap,
+  .table-wrap,
+  .history-layout,
+  .wallet-forms,
+  .plain-list,
+  .catalog-list {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .plain-list li,
+  .history-item,
+  .catalog-list li {
+    min-width: 0;
+  }
+
+  .plain-list li span,
+  .history-item span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .owner-form.compact {
+    grid-template-columns: 1fr !important;
+  }
+
+  input[type="number"],
+  input[type="text"],
+  input[type="date"],
+  input[type="email"],
+  input[type="tel"],
+  select,
+  textarea {
+    max-width: 100%;
+    min-width: 0;
   }
 }
 
@@ -894,6 +931,7 @@ body {
   list-style: none;
   margin: 0;
   padding: 0;
+  min-width: 0;
 }
 
 .plain-list li {
@@ -902,6 +940,7 @@ body {
   gap: 1rem;
   padding: 0.65rem 0;
   border-bottom: 1px solid var(--line);
+  min-width: 0;
 }
 
 .owner-form {
@@ -912,7 +951,7 @@ body {
 }
 
 .owner-form.compact {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
 }
 
 .owner-form label {
@@ -920,6 +959,7 @@ body {
   gap: 0.35rem;
   font-size: 0.9rem;
   color: var(--muted);
+  min-width: 0;
 }
 
 .owner-form label.full {
@@ -934,6 +974,9 @@ body {
   border: 1px solid var(--line);
   background: #fff;
   padding: 0.65rem 0.7rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .form-actions {
@@ -986,6 +1029,13 @@ body {
   padding: 0.65rem 0.4rem;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.owner-table .qty-input {
+  width: 100%;
+  max-width: 100%;
 }
 
 .owner-table th {
@@ -1088,6 +1138,29 @@ button.linkish {
 .sell-side {
   min-width: 0;
   max-width: 100%;
+  overflow: hidden;
+}
+
+.sell-cart-desktop {
+  width: 100%;
+  max-width: 100%;
+}
+
+.sell-cart-desktop .owner-table {
+  table-layout: fixed;
+}
+
+.sell-col-qty {
+  width: 5.75rem;
+}
+
+.sell-col-money {
+  width: 5.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sell-col-action {
+  width: 4.5rem;
 }
 
 .sell-cart-mobile {
@@ -1099,6 +1172,8 @@ button.linkish {
   background: #fff;
   padding: 0.85rem;
   margin-bottom: 0.75rem;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .sell-line-head {
@@ -1106,6 +1181,27 @@ button.linkish {
   justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 0.65rem;
+  min-width: 0;
+}
+
+.sell-line-head > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sell-line-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.sell-line-fields label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+  min-width: 0;
 }
 
 .sell-line-total {
@@ -1128,11 +1224,23 @@ button.linkish {
 }
 
 .qty-input {
-  width: 5.5rem;
+  display: block;
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
   font: inherit;
-  padding: 0.35rem 0.4rem;
+  padding: 0.45rem 0.4rem;
   border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  box-sizing: border-box;
+  -moz-appearance: textfield;
+}
+
+.qty-input::-webkit-outer-spin-button,
+.qty-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .post-sell-invoice {
@@ -1142,17 +1250,31 @@ button.linkish {
   overflow-x: auto;
 }
 
-@media (max-width: 900px) {
-  .sell-layout {
-    grid-template-columns: 1fr;
-  }
-
+@media (max-width: 1100px) {
   .sell-cart-desktop {
     display: none;
   }
 
   .sell-cart-mobile {
     display: block;
+  }
+
+  .sell-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sell-side {
+    order: 2;
+  }
+
+  .sell-panel {
+    order: 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .sell-layout {
+    grid-template-columns: 1fr;
   }
 
   .sell-footer {
@@ -1164,30 +1286,24 @@ button.linkish {
     width: 100%;
   }
 
-  .sell-side {
-    order: 2;
-  }
-
-  .sell-panel {
-    order: 1;
-  }
-
-  .sell-panel .owner-form.compact,
-  .sell-line-card .owner-form.compact {
+  .sell-panel .owner-form.compact {
     grid-template-columns: 1fr;
   }
 
-  .sell-line-card .owner-form.compact label,
   .sell-panel .owner-form.compact label {
     width: 100%;
   }
 
-  .sell-line-card input,
   .sell-panel select,
   .sell-panel input {
     width: 100%;
     max-width: 100%;
+    min-width: 0;
     box-sizing: border-box;
+  }
+
+  .sell-line-fields {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1199,6 +1315,10 @@ button.linkish {
 
   .reverse-form .cta {
     width: 100%;
+  }
+
+  .sell-line-fields {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1615,8 +1735,9 @@ textarea {
 
 .history-layout {
   display: grid;
-  grid-template-columns: minmax(14rem, 0.85fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.4fr);
   gap: 1.25rem;
+  min-width: 0;
 }
 
 .history-item {
@@ -1632,6 +1753,7 @@ textarea {
   font: inherit;
   cursor: pointer;
   color: inherit;
+  min-width: 0;
 }
 
 .history-item.active {

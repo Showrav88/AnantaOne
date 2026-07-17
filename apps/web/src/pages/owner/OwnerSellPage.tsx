@@ -402,11 +402,11 @@ export function OwnerSellPage({ locale }: Props) {
               <thead>
                 <tr>
                   <th>{t.owner.fieldProduct}</th>
-                  <th>{t.owner.fieldQty}</th>
-                  <th>{t.owner.catalogPrice}</th>
-                  <th>{t.owner.soldPrice}</th>
-                  <th>{t.owner.fieldLineTotal}</th>
-                  <th />
+                  <th className="sell-col-qty">{t.owner.fieldQty}</th>
+                  <th className="sell-col-money">{t.owner.catalogPrice}</th>
+                  <th className="sell-col-qty">{t.owner.soldPrice}</th>
+                  <th className="sell-col-money">{t.owner.fieldLineTotal}</th>
+                  <th className="sell-col-action" />
                 </tr>
               </thead>
               <tbody>
@@ -427,10 +427,11 @@ export function OwnerSellPage({ locale }: Props) {
                           <strong>{l.productLabel}</strong>
                           <div className="muted tiny">{l.sku}</div>
                         </td>
-                        <td>
+                        <td className="sell-col-qty">
                           <input
                             className="qty-input"
                             type="number"
+                            inputMode="decimal"
                             min={0.01}
                             step="0.01"
                             value={l.qty}
@@ -445,11 +446,14 @@ export function OwnerSellPage({ locale }: Props) {
                             }
                           />
                         </td>
-                        <td>৳{l.catalogPriceBdt.toLocaleString()}</td>
-                        <td>
+                        <td className="sell-col-money">
+                          ৳{l.catalogPriceBdt.toLocaleString()}
+                        </td>
+                        <td className="sell-col-qty">
                           <input
                             className="qty-input"
                             type="number"
+                            inputMode="decimal"
                             min={0}
                             step="0.01"
                             value={l.unitPriceBdt}
@@ -469,10 +473,10 @@ export function OwnerSellPage({ locale }: Props) {
                             </div>
                           ) : null}
                         </td>
-                        <td>
+                        <td className="sell-col-money">
                           ৳{(Number(l.qty || 0) * sold).toLocaleString()}
                         </td>
-                        <td>
+                        <td className="sell-col-action">
                           <button
                             type="button"
                             className="linkish"
@@ -510,11 +514,13 @@ export function OwnerSellPage({ locale }: Props) {
                         {t.owner.removeLine}
                       </button>
                     </div>
-                    <div className="owner-form compact">
+                    <div className="sell-line-fields">
                       <label>
                         {t.owner.fieldQty}
                         <input
+                          className="qty-input"
                           type="number"
+                          inputMode="decimal"
                           min={0.01}
                           step="0.01"
                           value={l.qty}
@@ -532,7 +538,9 @@ export function OwnerSellPage({ locale }: Props) {
                       <label>
                         {t.owner.soldPrice}
                         <input
+                          className="qty-input"
                           type="number"
+                          inputMode="decimal"
                           min={0}
                           step="0.01"
                           value={l.unitPriceBdt}
