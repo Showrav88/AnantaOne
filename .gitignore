@@ -43,6 +43,7 @@ coverage/
 # Prisma / DB
 *.db
 *.sqlite
+apps/api/src/generated/
 
 # Uploads & temp
 uploads/

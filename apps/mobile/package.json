@@ -1,0 +1,12 @@
+{
+  "name": "@anantaone/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Expo mobile app placeholder — scaffolded in Phase 4",
+  "scripts": {
+    "dev": "node -e \"console.log('@anantaone/mobile: Expo scaffold comes in Phase 4 (see docs/ROADMAP.md)')\"",
+    "build": "node -e \"console.log('mobile: skip until Expo scaffold')\"",
+    "lint": "node -e \"process.exit(0)\"",
+    "test": "node -e \"process.exit(0)\""
+  }
+}

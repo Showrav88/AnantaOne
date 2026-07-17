@@ -1,0 +1,132 @@
+:root {
+  --bg-top: #0c3b2e;
+  --bg-mid: #145c45;
+  --bg-bottom: #1a6b4f;
+  --ink: #f4f7f5;
+  --muted: rgba(244, 247, 245, 0.78);
+  --accent: #c6f26d;
+  --accent-ink: #0c3b2e;
+  --font-display: "Noto Sans Bengali", "Source Sans 3", sans-serif;
+  --font-body: "Source Sans 3", "Noto Sans Bengali", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-body);
+  background:
+    radial-gradient(ellipse 90% 60% at 10% 0%, rgba(198, 242, 109, 0.18), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 90% 20%, rgba(20, 80, 60, 0.9), transparent 50%),
+    linear-gradient(165deg, var(--bg-top), var(--bg-mid) 45%, var(--bg-bottom));
+}
+
+.shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+}
+
+.hero {
+  width: min(42rem, 100%);
+  animation: rise 700ms ease-out both;
+}
+
+.brand {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 8vw, 4rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  animation: fade 900ms ease-out both;
+}
+
+h1 {
+  margin: 0 0 0.85rem;
+  font-family: var(--font-display);
+  font-size: clamp(1.15rem, 3.2vw, 1.55rem);
+  font-weight: 600;
+  line-height: 1.35;
+  max-width: 28ch;
+}
+
+.lede {
+  margin: 0 0 1.5rem;
+  color: var(--muted);
+  font-size: 1.05rem;
+  max-width: 36ch;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+button {
+  appearance: none;
+  border: 1px solid rgba(244, 247, 245, 0.35);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  padding: 0.7rem 1.1rem;
+  cursor: pointer;
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(244, 247, 245, 0.7);
+}
+
+button.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+
+.status {
+  margin: 1.25rem 0 0;
+  min-height: 1.5rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .shell {
+    place-items: start center;
+    padding-top: 18vh;
+  }
+}

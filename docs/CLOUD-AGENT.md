@@ -2,6 +2,25 @@
 
 Use this when coding from **mobile**, **cursor.com**, or **any PC**.
 
+## Cloud without Docker (recommended start)
+
+Docker is **not** required on the Cloud Agent VM. Use **Neon PostgreSQL** + Prisma migrations.
+
+1. Read [DATABASE.md](DATABASE.md) — create a free Neon project
+2. Set `DATABASE_URL` + `DIRECT_DATABASE_URL` in `.env` / `apps/api/.env` (or cloud secrets)
+3. Run:
+
+```bash
+# Node 26 (nvm use / .nvmrc)
+npm install
+npm run db:migrate:deploy
+npm run db:generate
+npm run db:seed   # optional
+npm run dev
+```
+
+Schema syncs later to your PC via the same migration files in Git.
+
 ## Start Cloud Agent
 
 1. Cursor → **Agents** → **New Cloud Agent**
@@ -17,6 +36,7 @@ READ FIRST:
 - docs/ARCHITECTURE.md  → modules, multi-tenant, payments, EN/BN
 - docs/ROADMAP.md       → what to build next
 - docs/GIT-WORKFLOW.md  → branch rules (local-dev vs cloud-dev)
+- docs/DATABASE.md      → Neon (cloud) + Docker (PC) Prisma workflow
 
 RULES:
 - Work on cloud-dev branch (or feature/* branched from cloud-dev)
@@ -24,11 +44,11 @@ RULES:
 - Multi-tenant (tenant_id on all tables)
 - EN + Bengali i18n
 - Never commit .env
+- Never use db:push on shared branches — use db:migrate / db:migrate:deploy
 - Mobile-first buyer UI
 - Bangladesh payments: bKash, Nagad, Rocket, SSLCommerz, COD, wallet
 
-START WITH: Monorepo scaffold (apps/api, apps/web, apps/mobile) if not done yet.
-Then follow ROADMAP.md Phase 1 checklist.
+CONTINUE from the first unchecked item in ROADMAP.md Phase 1.
 ```
 
 ## Branch rules (quick)

@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  COUNTER
+  PRODUCTION
+  DELIVERY
+  BUYER
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  locale    String   @default("bn")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches Branch[]
+  users    User[]
+  buyers   Buyer[]
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users   User[]
+
+  @@index([tenantId])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  tenantId     String
+  branchId     String?
+  email        String
+  phone        String?
+  name         String
+  passwordHash String
+  role         Role     @default(COUNTER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  createdBy    String?
+  updatedBy    String?
+
+  company Company @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch  Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([branchId])
+}
+
+model Buyer {
+  id        String   @id @default(cuid())
+  tenantId  String
+  shopName  String
+  phone     String
+  address   String?
+  locale    String   @default("bn")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+}

@@ -1,0 +1,17 @@
+{
+  "app": {
+    "name": "AnantaOne",
+    "tagline": "Distilled water production & B2B ordering"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "orders": "Orders",
+    "inventory": "Inventory",
+    "buyers": "Buyers"
+  },
+  "common": {
+    "loading": "Loading…",
+    "save": "Save",
+    "cancel": "Cancel"
+  }
+}

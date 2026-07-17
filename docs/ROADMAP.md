@@ -2,13 +2,13 @@
 
 ## Phase 1 — Foundation (Week 1–2)
 
-- [ ] Monorepo scaffold (`apps/api`, `apps/web`, `apps/mobile`)
-- [ ] Docker Compose: PostgreSQL 18 + Redis 8
-- [ ] Prisma schema: companies, users, roles, tenant base
+- [x] Monorepo scaffold (`apps/api`, `apps/web`, `apps/mobile` placeholder)
+- [x] Docker Compose: PostgreSQL 18 + Redis 8
+- [x] Prisma schema: companies, users, roles, tenant base (+ Neon cloud path)
 - [ ] Auth: JWT + refresh + RBAC
-- [ ] EN/BN i18n shell
+- [x] EN/BN i18n shell (`packages/i18n`)
 - [ ] GitHub Actions CI (Node 26, lint, test, build)
-- [ ] `npm run dev` starts all apps
+- [x] `npm run dev` starts api + web (mobile later)
 
 ## Phase 2 — Core business (Week 3–5)
 
@@ -90,6 +90,9 @@ git add . && git commit -m "message" && git push -u origin feature/my-task
 | GitHub repo | Done — `Showrav88/AnantaOne` |
 | Docker compose (PG + Redis) | Done (starter) |
 | Planning docs | Done |
-| Monorepo scaffold | **Next** |
+| Neon / cloud DB docs | Done — `docs/DATABASE.md` |
+| Monorepo scaffold | Done — `apps/api`, `apps/web`, `apps/mobile` (placeholder), packages |
+| Prisma tenant base + init migration | Done |
+| Auth: JWT + refresh + RBAC | **Next** |
 | CI pipeline | Pending |
 | Production deploy | Pending |
