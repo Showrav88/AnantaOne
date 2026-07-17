@@ -12,17 +12,31 @@ const extraOrigins = (process.env.CORS_ORIGINS ?? "")
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean);
-const allowedOrigins = [
+const allowedOrigins = new Set([
   appUrl,
   "https://anantaone.onrender.com",
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   ...extraOrigins,
-];
+]);
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin(origin, callback) {
+      // Non-browser clients (curl, Render health checks) send no Origin
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      if (
+        allowedOrigins.has(origin) ||
+        /^https:\/\/[a-z0-9-]+\.onrender\.com$/i.test(origin)
+      ) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
   }),
 );
 app.use(express.json());
