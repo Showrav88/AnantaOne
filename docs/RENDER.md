@@ -46,14 +46,16 @@ Dashboard → **New** → **Web Service** → connect `Showrav88/AnantaOne`
 |---|---|
 | `NODE_VERSION` | `26` |
 | `NODE_ENV` | `production` |
-| `DATABASE_URL` | Internal Database URL from Render Postgres (or Neon) |
-| `DIRECT_DATABASE_URL` | Same as `DATABASE_URL` on Render (or Neon direct URL) |
+| `DATABASE_URL` | Render Postgres URL + `?sslmode=require` |
+| `DIRECT_DATABASE_URL` | **Same** as `DATABASE_URL` |
 | `APP_URL` | Your Static Site URL, e.g. `https://anantaone-web.onrender.com` |
 | `CORS_ORIGINS` | Optional extra origins, comma-separated |
 | `JWT_SECRET` | long random string |
 | `JWT_REFRESH_SECRET` | long random string |
 
-Link the database in Render UI (**Connect** → select `anantaone-db`) so `DATABASE_URL` can be injected automatically — then still set `DIRECT_DATABASE_URL` to the same value if Render only injects one.
+**If build fails with `localhost:5432`:** Web Service env is missing `DATABASE_URL`. Paste External/Internal URL + `?sslmode=require`, save, redeploy.
+
+Link the DB in Render (**Connect**) *and* confirm both env keys exist.
 
 Health checks:
 
@@ -79,7 +81,14 @@ Dashboard → **New** → **Static Site**
 | `NODE_VERSION` | `26` |
 | `VITE_API_URL` | Web Service URL, e.g. `https://anantaone-api.onrender.com` (no trailing slash) |
 
-Rebuild the Static Site after the API URL is known.
+`VITE_*` vars are baked in at **build time**. After setting `VITE_API_URL`, click **Manual Deploy** (Clear cache) on the Static Site.
+
+**If the site says “Waiting for API…”:** the browser cannot reach the API. Usually:
+1. API Web Service failed to deploy / is sleeping / crashed  
+2. Static Site was built **without** `VITE_API_URL` (defaults to `http://localhost:5000`)  
+3. `APP_URL` on API does not match the Static Site URL (CORS)
+
+Check in browser: open `https://YOUR-API.onrender.com/health` — must return `{"ok":true,...}`.
 
 ---
 

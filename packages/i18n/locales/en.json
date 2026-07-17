@@ -30,6 +30,7 @@
     "branchesLabel": "Branches",
     "emptyBuyers": "No shops yet — run seed or add a buyer.",
     "connected": "Frontend ↔ Backend connected",
-    "notConnected": "Waiting for API…"
+    "notConnected": "Waiting for API…",
+    "apiTarget": "API URL"
   }
 }

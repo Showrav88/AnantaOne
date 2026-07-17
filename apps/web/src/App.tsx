@@ -25,7 +25,7 @@ export function App() {
       setDbState("down");
       setOverview(undefined);
       setBuyers([]);
-      setError(t.home.notConnected);
+      setError(`${t.home.notConnected} → ${api.baseUrl}`);
       return;
     }
 
@@ -102,7 +102,11 @@ export function App() {
           </button>
         </div>
         <p className="hero-status" aria-live="polite">
-          {connected ? t.home.connected : apiState === "loading" ? t.common.loading : t.home.notConnected}
+          {connected
+            ? t.home.connected
+            : apiState === "loading"
+              ? t.common.loading
+              : `${t.home.notConnected} (${t.home.apiTarget}: ${api.baseUrl})`}
         </p>
       </section>
 
