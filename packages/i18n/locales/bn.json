@@ -22,10 +22,7 @@
     "themeToggle": "থিম",
     "themeLight": "লাইট",
     "themeDark": "ডার্ক",
-    "themeNight": "নাইট",
-    "fontSize": "অক্ষরের সাইজ",
-    "fontSmaller": "ছোট লেখা",
-    "fontLarger": "বড় লেখা"
+    "themeNight": "নাইট"
   },
   "home": {
     "ctaPrimary": "লাইভ ড্যাশবোর্ড খুলুন",

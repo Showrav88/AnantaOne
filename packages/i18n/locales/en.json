@@ -22,10 +22,7 @@
     "themeToggle": "Theme",
     "themeLight": "Light",
     "themeDark": "Dark",
-    "themeNight": "Night",
-    "fontSize": "Text size",
-    "fontSmaller": "Smaller text",
-    "fontLarger": "Larger text"
+    "themeNight": "Night"
   },
   "home": {
     "ctaPrimary": "Open live dashboard",

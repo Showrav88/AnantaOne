@@ -65,23 +65,6 @@ html[data-theme="night"] {
   --err-bg: rgba(224, 138, 106, 0.16);
 }
 
-html[data-font="sm"] {
-  font-size: 14px;
-}
-
-html[data-font="md"],
-html:not([data-font]) {
-  font-size: 16px;
-}
-
-html[data-font="lg"] {
-  font-size: 18px;
-}
-
-html[data-font="xl"] {
-  font-size: 20px;
-}
-
 * {
   box-sizing: border-box;
 }
@@ -622,19 +605,6 @@ body {
   border-color: rgba(243, 250, 246, 0.8);
 }
 
-.font-size-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.15rem;
-}
-
-.font-size-label {
-  font-size: 0.72rem;
-  opacity: 0.75;
-  min-width: 1.4rem;
-  text-align: center;
-}
-
 .owner-nav-foot .display-controls {
   color: var(--foam);
 }
@@ -642,16 +612,6 @@ body {
 .owner-nav-foot .display-btn {
   width: 100%;
   text-align: center;
-}
-
-.owner-nav-foot .font-size-group {
-  width: 100%;
-  justify-content: space-between;
-}
-
-.owner-nav-foot .font-size-group .display-btn {
-  width: auto;
-  flex: 1;
 }
 
 .nav-backdrop {
@@ -858,10 +818,6 @@ body {
     width: 1.15rem;
     height: 2px;
     background: currentColor;
-  }
-
-  .owner-topbar .display-controls.compact .font-size-label {
-    display: none;
   }
 
   .nav-backdrop {
@@ -2077,10 +2033,6 @@ textarea {
 }
 
 @media print {
-  html {
-    font-size: 16px !important;
-  }
-
   html,
   body {
     color: #111 !important;
