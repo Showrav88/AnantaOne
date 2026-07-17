@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import type { LocaleCode } from "@anantaone/i18n";
 import { HomePulsePage } from "./pages/HomePulsePage";
 import { OwnerLayout } from "./pages/owner/OwnerLayout";
@@ -16,7 +16,9 @@ export function App() {
   }
 
   return (
-    <BrowserRouter>
+    // HashRouter: Render Static Sites 404 on /owner without a rewrite rule.
+    // URLs look like https://anantaone.onrender.com/#/owner
+    <HashRouter>
       <Routes>
         <Route
           path="/"
@@ -33,6 +35,6 @@ export function App() {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }

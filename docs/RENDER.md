@@ -102,15 +102,20 @@ https://anantaoneapi.onrender.com/health/db
 
 After API `/health` works, refresh the static site (rebuild only if you change `VITE_API_URL`).
 
-### SPA rewrite (required for `/owner` routes)
+### Owner dashboard URL (Static Site)
 
-Static Site → **Redirects/Rewrites** → add:
+Use hash routes (works without Render rewrite):
+
+```text
+https://anantaone.onrender.com/#/owner
+https://anantaone.onrender.com/#/owner/products
+```
+
+Optional clean URLs (`/owner` without `#`): Static Site → **Redirects/Rewrites**:
 
 | Source | Destination | Action |
 |---|---|---|
 | `/*` | `/index.html` | Rewrite |
-
-Without this, opening/refreshing `/owner/products` returns 404 on Render.
 
 ---
 
