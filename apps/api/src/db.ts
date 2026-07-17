@@ -13,14 +13,15 @@ function createPrismaClient() {
     throw new Error("DATABASE_URL is required");
   }
 
+  const needsSsl =
+    connectionString.includes("sslmode=require") ||
+    connectionString.includes("neon.tech") ||
+    connectionString.includes("render.com") ||
+    process.env.NODE_ENV === "production";
+
   const adapter = new PrismaPg({
     connectionString,
-    // Neon and some managed Postgres providers need this in cloud VMs
-    ssl:
-      connectionString.includes("neon.tech") ||
-      connectionString.includes("sslmode=require")
-        ? { rejectUnauthorized: false }
-        : undefined,
+    ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
   });
 
   return new PrismaClient({ adapter });

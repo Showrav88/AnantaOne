@@ -16,6 +16,7 @@ PERN-based SaaS platform for distilled water production, inventory, B2B ordering
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modules, SaaS design, payments |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Build phases + checklist |
 | [docs/DATABASE.md](docs/DATABASE.md) | Neon (cloud) + Docker (PC) + Prisma migrations |
+| [docs/RENDER.md](docs/RENDER.md) | Render Static Site + Web Service + Postgres |
 | [docs/CLOUD-AGENT.md](docs/CLOUD-AGENT.md) | Start coding from mobile/cloud |
 | [docs/GIT-WORKFLOW.md](docs/GIT-WORKFLOW.md) | Local vs cloud branch rules |
 

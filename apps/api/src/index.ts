@@ -8,10 +8,20 @@ import { v1Router } from "./routes/v1.js";
 const app = express();
 const port = Number(process.env.PORT ?? 5000);
 const appUrl = process.env.APP_URL ?? "http://localhost:5173";
+const extraOrigins = (process.env.CORS_ORIGINS ?? "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+const allowedOrigins = [
+  appUrl,
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  ...extraOrigins,
+];
 
 app.use(
   cors({
-    origin: [appUrl, "http://localhost:5173", "http://127.0.0.1:5173"],
+    origin: allowedOrigins,
   }),
 );
 app.use(express.json());
@@ -36,6 +46,6 @@ app.get("/health/db", async (_req, res) => {
 
 app.use("/api/v1", v1Router);
 
-app.listen(port, () => {
-  console.log(`${APP_NAME} API listening on http://localhost:${port}`);
+app.listen(port, "0.0.0.0", () => {
+  console.log(`${APP_NAME} API listening on http://0.0.0.0:${port}`);
 });
