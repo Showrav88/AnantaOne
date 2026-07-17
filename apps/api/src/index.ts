@@ -14,6 +14,7 @@ const extraOrigins = (process.env.CORS_ORIGINS ?? "")
   .filter(Boolean);
 const allowedOrigins = [
   appUrl,
+  "https://anantaone.onrender.com",
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   ...extraOrigins,
@@ -25,6 +26,15 @@ app.use(
   }),
 );
 app.use(express.json());
+
+app.get("/", (_req, res) => {
+  res.json({
+    ok: true,
+    app: APP_NAME,
+    health: "/health",
+    db: "/health/db",
+  });
+});
 
 app.get("/health", (_req, res) => {
   res.json({

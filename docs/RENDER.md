@@ -4,109 +4,101 @@ Three services: **Static Site** (web) · **Web Service** (API) · **PostgreSQL**
 
 Deploy order: **Database → Web Service → Static Site**.
 
+You can deploy from PR branch `Cloudenv-setup-neon-d75c` (no merge required). Set **Branch** to that name on both services.
+
+---
+
+## Your live URLs (current)
+
+| Service | URL |
+|---|---|
+| Static Site | `https://anantaone.onrender.com` |
+| Web Service (API) | `https://anantaone-api.onrender.com` |
+
+If the static page says **Waiting for API…** but `VITE_API_URL` is correct, the **API Web Service is not running**.  
+`https://anantaone-api.onrender.com/health` must return JSON `{"ok":true}` — if you see Render “Not Found” / `no-server`, fix the **Web Service** deploy (not the Static Site).
+
 ---
 
 ## 1) Database (Render PostgreSQL)
 
-Dashboard → **New** → **PostgreSQL**
+Dashboard → **New** → **PostgreSQL** (or use the one you already created).
 
-| Setting | Value |
-|---|---|
-| Name | `anantaone-db` |
-| Database | `anantaone` |
-| User | `anantaone` |
-| Region | same as Web Service |
-| Plan | Basic (or free if available) |
-
-After create, open the DB → **Connections** → copy:
-
-- **Internal Database URL** → use on Web Service as `DATABASE_URL` / `DIRECT_DATABASE_URL`
-- (Optional) External URL — only for local laptop access
-
-> Prefer Render Postgres **or** Neon. Do not commit either URL to Git.
+Copy **External** or **Internal** Database URL.
 
 ---
 
-## 2) Web Service (API — Express)
+## 2) Web Service (API) — this is what is broken right now
 
-Dashboard → **New** → **Web Service** → connect `Showrav88/AnantaOne`
+Dashboard → open service named like **anantaone-api** (type **Web Service**, not Static Site).
 
 | Setting | Value |
 |---|---|
-| **Language** | Node |
-| **Branch** | `cloud-dev` (or merged branch) |
+| **Branch** | `Cloudenv-setup-neon-d75c` |
 | **Root Directory** | *(leave blank)* |
 | **Build Command** | `npm install && npm run render:api:build` |
 | **Start Command** | `npm run render:api:start` |
-| **Instance** | Free / Starter |
 
-### Environment variables (Web Service)
+`render:api:build` already runs **Prisma migrate deploy on every deploy**.
+
+### Environment (Web Service only — not Static Site)
 
 | Key | Value |
 |---|---|
 | `NODE_VERSION` | `26` |
 | `NODE_ENV` | `production` |
-| `DATABASE_URL` | Render Postgres URL + `?sslmode=require` |
-| `DIRECT_DATABASE_URL` | **Same** as `DATABASE_URL` |
-| `APP_URL` | Your Static Site URL, e.g. `https://anantaone-web.onrender.com` |
-| `CORS_ORIGINS` | Optional extra origins, comma-separated |
+| `DATABASE_URL` | your Render Postgres URL + `?sslmode=require` |
+| `DIRECT_DATABASE_URL` | **same** as `DATABASE_URL` |
+| `APP_URL` | `https://anantaone.onrender.com` |
 | `JWT_SECRET` | long random string |
 | `JWT_REFRESH_SECRET` | long random string |
 
-**If build fails with `localhost:5432`:** Web Service env is missing `DATABASE_URL`. Paste External/Internal URL + `?sslmode=require`, save, redeploy.
+Example (replace password; do not commit):
 
-Link the DB in Render (**Connect**) *and* confirm both env keys exist.
+```text
+DATABASE_URL=postgresql://USER:PASS@dpg-xxxxx-a.singapore-postgres.render.com/anantaonerender?sslmode=require
+DIRECT_DATABASE_URL=postgresql://USER:PASS@dpg-xxxxx-a.singapore-postgres.render.com/anantaonerender?sslmode=require
+APP_URL=https://anantaone.onrender.com
+```
 
-Health checks:
+Then **Save** → **Manual Deploy**.
 
-- `GET /health`
-- `GET /health/db`
+Build logs must show:
+1. `DB env: set`
+2. migration applied (or “No pending migrations”)
+3. service starts (not stuck on `localhost:5432`)
+
+Verify:
+
+```text
+https://anantaone-api.onrender.com/
+https://anantaone-api.onrender.com/health
+https://anantaone-api.onrender.com/health/db
+```
 
 ---
 
-## 3) Static Site (web — Vite/React)
-
-Dashboard → **New** → **Static Site**
+## 3) Static Site (already OK on your side)
 
 | Setting | Value |
 |---|---|
-| **Root Directory** | *(leave blank)* |
+| **Branch** | `Cloudenv-setup-neon-d75c` |
+| **Root Directory** | *(blank)* |
 | **Build Command** | `npm install && npm run build -w @anantaone/web` |
 | **Publish Directory** | `apps/web/dist` |
-
-### Environment variables (Static Site)
 
 | Key | Value |
 |---|---|
 | `NODE_VERSION` | `26` |
-| `VITE_API_URL` | Web Service URL, e.g. `https://anantaone-api.onrender.com` (no trailing slash) |
+| `VITE_API_URL` | `https://anantaone-api.onrender.com` |
 
-`VITE_*` vars are baked in at **build time**. After setting `VITE_API_URL`, click **Manual Deploy** (Clear cache) on the Static Site.
-
-**If the site says “Waiting for API…”:** the browser cannot reach the API. Usually:
-1. API Web Service failed to deploy / is sleeping / crashed  
-2. Static Site was built **without** `VITE_API_URL` (defaults to `http://localhost:5000`)  
-3. `APP_URL` on API does not match the Static Site URL (CORS)
-
-Check in browser: open `https://YOUR-API.onrender.com/health` — must return `{"ok":true,...}`.
+After API `/health` works, refresh the static site (rebuild only if you change `VITE_API_URL`).
 
 ---
 
 ## Wire-up checklist
 
-1. Create Postgres → copy Internal URL  
-2. Create Web Service → set env → deploy → confirm `/health` and `/health/db`  
-3. Create Static Site → set `VITE_API_URL` → deploy  
-4. Set Web Service `APP_URL` to the Static Site URL → **Manual Deploy** API again (CORS)
-
----
-
-## Local ↔ Render
-
-| Place | DB |
-|---|---|
-| Cloud Agent VM | localhost Postgres (`scripts/setup-cloud-postgres.sh`) |
-| Your PC | Docker Compose |
-| Render | Render PostgreSQL or Neon |
-
-Same Prisma migration files in Git — always `migrate deploy` on new DBs.
+1. Postgres URL set on **Web Service** env  
+2. Web Service deploy green → `/health` OK  
+3. Static Site `VITE_API_URL` points at API  
+4. Web Service `APP_URL=https://anantaone.onrender.com`
