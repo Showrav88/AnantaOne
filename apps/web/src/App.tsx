@@ -26,8 +26,9 @@ export function App() {
   return (
     <HashRouter>
       <Routes>
+        <Route path="/" element={<Navigate to="/login" replace />} />
         <Route
-          path="/"
+          path="/pulse"
           element={<HomePulsePage locale={locale} onLocale={toggleLocale} />}
         />
         <Route
@@ -65,7 +66,7 @@ export function App() {
             element={<AdminCompaniesPage locale={locale} />}
           />
         </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </HashRouter>
   );

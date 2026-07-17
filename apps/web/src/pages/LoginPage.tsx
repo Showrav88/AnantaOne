@@ -68,7 +68,7 @@ export function LoginPage({ locale, onLocale }: Props) {
           {t.auth.noAccount} <Link to="/register">{t.auth.registerCta}</Link>
         </p>
         <p className="auth-foot">
-          <Link to="/">{t.owner.navPublic}</Link>
+          <Link to="/pulse">{t.owner.navPublic}</Link>
         </p>
       </form>
     </div>

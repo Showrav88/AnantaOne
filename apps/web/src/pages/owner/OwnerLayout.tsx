@@ -39,7 +39,7 @@ export function OwnerLayout({ locale, onLocale }: Props) {
           <NavLink to="/owner/buyers">{t.owner.navBuyers}</NavLink>
         </nav>
         <div className="owner-nav-foot">
-          <NavLink to="/">{t.owner.navPublic}</NavLink>
+          <NavLink to="/pulse">{t.owner.navPublic}</NavLink>
           <button type="button" className="lang" onClick={onLocale}>
             {t.common.language}
           </button>
