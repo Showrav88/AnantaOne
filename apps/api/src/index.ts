@@ -6,6 +6,7 @@ import { prisma } from "./db.js";
 import { v1Router } from "./routes/v1.js";
 import { ownerRouter } from "./routes/owner.js";
 import { ownerFinanceRouter } from "./routes/ownerFinance.js";
+import { ownerSellRouter } from "./routes/ownerSell.js";
 import { authRouter } from "./routes/auth.js";
 import { adminRouter } from "./routes/admin.js";
 
@@ -77,6 +78,7 @@ app.use("/api/v1", v1Router);
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/owner", ownerRouter);
 app.use("/api/v1/owner", ownerFinanceRouter);
+app.use("/api/v1/owner", ownerSellRouter);
 app.use("/api/v1/admin", adminRouter);
 
 app.listen(port, "0.0.0.0", () => {

@@ -34,6 +34,9 @@ export function OwnerLayout({ locale, onLocale }: Props) {
           <NavLink to="/owner" end>
             {t.owner.navDashboard}
           </NavLink>
+          <NavLink to="/owner/sell">{t.owner.navSell}</NavLink>
+          <NavLink to="/owner/batches">{t.owner.navBatches}</NavLink>
+          <NavLink to="/owner/tags">{t.owner.navTags}</NavLink>
           <NavLink to="/owner/company">{t.owner.navCompany}</NavLink>
           <NavLink to="/owner/staff">{t.owner.navStaff}</NavLink>
           <NavLink to="/owner/wallet">{t.owner.navWallet}</NavLink>

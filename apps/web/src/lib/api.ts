@@ -162,6 +162,92 @@ export type SalaryPaymentRow = {
   };
 };
 
+export type ProductionBatch = {
+  id: string;
+  productId: string;
+  batchCode: string;
+  manufacturedAt: string;
+  expiresAt: string | null;
+  qtyProduced: number;
+  qtyRemaining: number;
+  note: string | null;
+  isActive: boolean;
+  product: {
+    id: string;
+    name: string;
+    nameBn: string | null;
+    sku: string;
+    priceBdt: number;
+    description: string | null;
+  } | null;
+};
+
+export type SalesOrderLine = {
+  id: string;
+  productId: string;
+  batchId: string;
+  qty: number;
+  unitPriceBdt: number;
+  lineTotalBdt: number;
+  product: {
+    name: string;
+    nameBn: string | null;
+    sku: string;
+    description: string | null;
+  } | null;
+  batch: {
+    batchCode: string;
+    manufacturedAt: string;
+    expiresAt: string | null;
+  } | null;
+};
+
+export type SalesOrder = {
+  id: string;
+  buyerId: string | null;
+  buyerName: string | null;
+  totalBdt: number;
+  note: string | null;
+  orderedAt: string;
+  confirmedAt: string | null;
+  source: { code: string; nameEn: string; nameBn: string } | null;
+  status: { code: string; nameEn: string; nameBn: string } | null;
+  lines: SalesOrderLine[];
+};
+
+export type TagTemplate = {
+  id: string;
+  name: string;
+  widthMm: number;
+  heightMm: number;
+  showSku: boolean;
+  showPrice: boolean;
+  showDescription: boolean;
+  showMfgDate: boolean;
+  showExpDate: boolean;
+  showBatch: boolean;
+  showQr: boolean;
+  showCompany: boolean;
+  tagDescription: string | null;
+  isDefault: boolean;
+};
+
+export type TagPreview = {
+  size: { widthMm: number; heightMm: number };
+  fields: {
+    company: string | null;
+    phone: string | null;
+    productName: string;
+    sku: string | null;
+    priceBdt: number | null;
+    description: string | null;
+    batchCode: string | null;
+    manufacturedAt: string | null;
+    expiresAt: string | null;
+    qrValue: string | null;
+  };
+};
+
 type AuthResponse = {
   ok: boolean;
   accessToken: string;
@@ -444,7 +530,82 @@ export const api = {
         { method: "POST", body: JSON.stringify(body) },
         true,
       ),
+    batches: (productId?: string) =>
+      getJson<{ ok: boolean; batches: ProductionBatch[] }>(
+        `/api/v1/owner/batches${productId ? `?productId=${productId}` : ""}`,
+        2,
+        undefined,
+        true,
+      ),
+    createBatch: (body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; batch: ProductionBatch }>(
+        "/api/v1/owner/batches",
+        1,
+        { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
+    orders: () =>
+      getJson<{ ok: boolean; orders: SalesOrder[] }>(
+        "/api/v1/owner/orders",
+        2,
+        undefined,
+        true,
+      ),
+    confirmSell: (body: Record<string, unknown>) =>
+      getJson<{
+        ok: boolean;
+        order: SalesOrder;
+        sale: { id: string; amountBdt: number } | null;
+        wallet: WalletSummary | null;
+      }>("/api/v1/owner/sell", 1, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }, true),
+    tagTemplates: () =>
+      getJson<{ ok: boolean; templates: TagTemplate[] }>(
+        "/api/v1/owner/tags/templates",
+        2,
+        undefined,
+        true,
+      ),
+    createTagTemplate: (body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; template: TagTemplate }>(
+        "/api/v1/owner/tags/templates",
+        1,
+        { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
+    previewTag: (body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; tag: TagPreview }>(
+        "/api/v1/owner/tags/preview",
+        1,
+        { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
   },
+  publicTag: (companySlug: string, sku: string, batchCode: string) =>
+    getJson<{
+      ok: boolean;
+      tag: {
+        company: { name: string; phone: string | null; address: string | null };
+        product: {
+          name: string;
+          nameBn: string | null;
+          sku: string;
+          unit: string;
+          priceBdt: number;
+          description: string | null;
+        };
+        batch: {
+          batchCode: string;
+          manufacturedAt: string;
+          expiresAt: string | null;
+          qtyRemaining: number;
+        };
+      };
+    }>(
+      `/api/v1/tag/${encodeURIComponent(companySlug)}/${encodeURIComponent(sku)}/${encodeURIComponent(batchCode)}`,
+    ),
   admin: {
     dashboard: () =>
       getJson<{

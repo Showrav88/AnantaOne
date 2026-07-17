@@ -89,7 +89,13 @@ async function main() {
   const roles = await prisma.roleLookup.findMany();
   const units = await prisma.unitLookup.findMany();
   const walletTypes = await prisma.walletTxnTypeLookup.findMany();
-  if (roles.length === 0 || units.length === 0 || walletTypes.length === 0) {
+  const orderSources = await prisma.orderSourceLookup.findMany();
+  if (
+    roles.length === 0 ||
+    units.length === 0 ||
+    walletTypes.length === 0 ||
+    orderSources.length === 0
+  ) {
     throw new Error("Lookups missing — run migrations first");
   }
 
@@ -344,13 +350,70 @@ async function main() {
     });
   }
 
+  const products = await prisma.product.findMany({
+    where: { tenantId: company.id },
+  });
+  for (const product of products) {
+    const batchCode = `${product.sku}-B1`;
+    await prisma.productionBatch.upsert({
+      where: {
+        tenantId_batchCode: {
+          tenantId: company.id,
+          batchCode,
+        },
+      },
+      update: {
+        qtyRemaining: Number(product.stockQty),
+        qtyProduced: Math.max(
+          Number(product.stockQty),
+          Number(product.stockQty),
+        ),
+        isActive: true,
+      },
+      create: {
+        tenantId: company.id,
+        productId: product.id,
+        batchCode,
+        manufacturedAt: new Date("2026-06-01"),
+        expiresAt: new Date("2026-12-01"),
+        qtyProduced: Number(product.stockQty),
+        qtyRemaining: Number(product.stockQty),
+        note: "Seed production batch",
+      },
+    });
+  }
+
+  const existingDefaultTag = await prisma.tagTemplate.findFirst({
+    where: { tenantId: company.id, isDefault: true },
+  });
+  if (!existingDefaultTag) {
+    await prisma.tagTemplate.create({
+      data: {
+        tenantId: company.id,
+        name: "Standard 50×30mm",
+        widthMm: 50,
+        heightMm: 30,
+        showSku: true,
+        showPrice: true,
+        showDescription: true,
+        showMfgDate: true,
+        showExpDate: true,
+        showBatch: true,
+        showQr: true,
+        showCompany: true,
+        tagDescription: "Ananta Water — purified for shops",
+        isDefault: true,
+      },
+    });
+  }
+
   console.log("Seeded:");
   console.log(`  super admin: ${superEmail} / ${superPassword}`);
   console.log("  owner: owner@anantaone.local / Owner#2026");
   console.log("  manager: manager@anantaone.local / Manager#2026");
   console.log("  employee: employee@anantaone.local / Employee#2026");
   console.log(
-    `  company=${company.slug} shops=${mockShops.length} products=${mockProducts.length}`,
+    `  company=${company.slug} shops=${mockShops.length} products=${mockProducts.length} batches=${products.length}`,
   );
 }
 

@@ -13,6 +13,10 @@ import { OwnerBuyersPage } from "./pages/owner/OwnerBuyersPage";
 import { OwnerStaffPage } from "./pages/owner/OwnerStaffPage";
 import { OwnerWalletPage } from "./pages/owner/OwnerWalletPage";
 import { OwnerPaymentsPage } from "./pages/owner/OwnerPaymentsPage";
+import { OwnerSellPage } from "./pages/owner/OwnerSellPage";
+import { OwnerBatchesPage } from "./pages/owner/OwnerBatchesPage";
+import { OwnerTagsPage } from "./pages/owner/OwnerTagsPage";
+import { PublicTagPage } from "./pages/PublicTagPage";
 import {
   AdminCompaniesPage,
   AdminDashboardPage,
@@ -43,6 +47,10 @@ export function App() {
           element={<RegisterPage locale={locale} onLocale={toggleLocale} />}
         />
         <Route
+          path="/tag/:companySlug/:sku/:batchCode"
+          element={<PublicTagPage locale={locale} onLocale={toggleLocale} />}
+        />
+        <Route
           path="/owner"
           element={
             <RequireAuth roles={["OWNER", "MANAGER", "EMPLOYEE"]}>
@@ -52,6 +60,9 @@ export function App() {
         >
           <Route index element={<OwnerDashboardPage locale={locale} />} />
           <Route path="company" element={<OwnerCompanyPage locale={locale} />} />
+          <Route path="sell" element={<OwnerSellPage locale={locale} />} />
+          <Route path="batches" element={<OwnerBatchesPage locale={locale} />} />
+          <Route path="tags" element={<OwnerTagsPage locale={locale} />} />
           <Route path="staff" element={<OwnerStaffPage locale={locale} />} />
           <Route path="wallet" element={<OwnerWalletPage locale={locale} />} />
           <Route path="payments" element={<OwnerPaymentsPage locale={locale} />} />

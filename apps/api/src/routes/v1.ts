@@ -119,3 +119,69 @@ v1Router.get("/products", async (_req, res) => {
     res.status(500).json({ ok: false, message, products: [] });
   }
 });
+
+/** Public QR tag lookup — no auth (scanned from product sticker). */
+v1Router.get("/tag/:companySlug/:sku/:batchCode", async (req, res) => {
+  try {
+    const companySlug = String(req.params.companySlug);
+    const sku = decodeURIComponent(String(req.params.sku));
+    const batchCode = decodeURIComponent(String(req.params.batchCode));
+
+    const company = await prisma.company.findUnique({
+      where: { slug: companySlug },
+    });
+    if (!company || !company.isActive) {
+      res.status(404).json({ ok: false, message: "Company not found" });
+      return;
+    }
+
+    const product = await prisma.product.findFirst({
+      where: { tenantId: company.id, sku, isActive: true },
+      include: { unit: true },
+    });
+    if (!product) {
+      res.status(404).json({ ok: false, message: "Product not found" });
+      return;
+    }
+
+    const batch = await prisma.productionBatch.findFirst({
+      where: {
+        tenantId: company.id,
+        productId: product.id,
+        batchCode: batchCode.toUpperCase(),
+      },
+    });
+    if (!batch) {
+      res.status(404).json({ ok: false, message: "Batch not found" });
+      return;
+    }
+
+    res.json({
+      ok: true,
+      tag: {
+        company: {
+          name: company.name,
+          phone: company.phone,
+          address: company.address,
+        },
+        product: {
+          name: product.name,
+          nameBn: product.nameBn,
+          sku: product.sku,
+          unit: product.unit.code,
+          priceBdt: Number(product.priceBdt),
+          description: product.description,
+        },
+        batch: {
+          batchCode: batch.batchCode,
+          manufacturedAt: batch.manufacturedAt,
+          expiresAt: batch.expiresAt,
+          qtyRemaining: Number(batch.qtyRemaining),
+        },
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    res.status(500).json({ ok: false, message });
+  }
+});
