@@ -94,7 +94,6 @@ export function OwnerTagsPage({ locale }: Props) {
   }, []);
 
   const productBatches = batches.filter((b) => b.productId === productId);
-  const selectedBatch = productBatches.find((b) => b.id === batchId);
   const selectedProduct = products.find((p) => p.id === productId);
   const productCreatedMin = selectedProduct?.createdAt
     ? toDateInput(selectedProduct.createdAt)
