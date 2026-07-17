@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import {
@@ -29,6 +36,57 @@ type SupplyKind = {
 type UnitOpt = { code: string; nameEn: string; nameBn: string };
 
 type Tab = "record" | "ledger" | "analytics";
+type RecordPanel = "supply" | "expense" | "adjust" | null;
+type AnalyticsPanel =
+  | "summary"
+  | "kinds"
+  | "expenses"
+  | "purchases"
+  | "txns"
+  | null;
+
+function CollapsePanel({
+  id,
+  title,
+  summary,
+  open,
+  onToggle,
+  children,
+}: {
+  id: string;
+  title: string;
+  summary?: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <section className={`collapse-panel${open ? " open" : ""}`}>
+      <button
+        type="button"
+        className="collapse-head"
+        aria-expanded={open}
+        aria-controls={`panel-${id}`}
+        onClick={onToggle}
+      >
+        <span className="collapse-titles">
+          <strong>{title}</strong>
+          {!open && summary ? (
+            <span className="muted tiny">{summary}</span>
+          ) : null}
+        </span>
+        <span className="collapse-chevron" aria-hidden>
+          {open ? "▾" : "▸"}
+        </span>
+      </button>
+      {open ? (
+        <div className="collapse-body" id={`panel-${id}`}>
+          {children}
+        </div>
+      ) : null}
+    </section>
+  );
+}
 
 export function OwnerWalletPage({ locale }: Props) {
   const t = getMessages(locale);
@@ -45,6 +103,10 @@ export function OwnerWalletPage({ locale }: Props) {
   const [units, setUnits] = useState<UnitOpt[]>([]);
   const [analytics, setAnalytics] = useState<WalletAnalytics | null>(null);
   const [expandedTxn, setExpandedTxn] = useState<string | null>(null);
+  const [openRecord, setOpenRecord] = useState<RecordPanel>(null);
+  const [openAnalytics, setOpenAnalytics] =
+    useState<AnalyticsPanel>("summary");
+  const [tripOpen, setTripOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -289,7 +351,6 @@ export function OwnerWalletPage({ locale }: Props) {
         <div>
           <p className="eyebrow">{t.owner.navWallet}</p>
           <h1>{t.owner.walletTitle}</h1>
-          <p className="muted">{t.owner.walletHint}</p>
           <p className="muted tiny">
             {t.owner.walletSaleNote}{" "}
             <Link to="/owner/sell">{t.owner.navSell}</Link>
@@ -329,284 +390,285 @@ export function OwnerWalletPage({ locale }: Props) {
 
       {tab === "record" ? (
         canWrite ? (
-          <div className="wallet-forms">
-            <form className="owner-form compact" onSubmit={onMaterial}>
-              <h2>{t.owner.materialDebit}</h2>
-              <p className="muted tiny full">{t.owner.materialDebitHint}</p>
-              <label>
-                {t.owner.fieldMaterial}
-                <input
-                  required
-                  value={material.materialName}
-                  onChange={(e) =>
-                    setMaterial({ ...material, materialName: e.target.value })
-                  }
-                  placeholder={t.owner.supplyNameHint}
-                />
-              </label>
-              <label>
-                {t.owner.fieldSupplyKind}
-                <select
-                  value={material.kindCode}
-                  onChange={(e) =>
-                    setMaterial({ ...material, kindCode: e.target.value })
-                  }
-                >
-                  {(kinds.length
-                    ? kinds
-                    : [
-                        { code: "RAW_MATERIAL", nameEn: "Raw", nameBn: "কাঁচা" },
-                        { code: "BOTTLE", nameEn: "Bottle", nameBn: "বোতল" },
-                        { code: "ACID", nameEn: "Acid", nameBn: "অ্যাসিড" },
-                      ]
-                  ).map((k) => (
-                    <option key={k.code} value={k.code}>
-                      {labelKind(k)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                {t.owner.fieldQty}
-                <input
-                  required
-                  type="number"
-                  min={0.001}
-                  step="any"
-                  value={material.qty}
-                  onChange={(e) =>
-                    setMaterial({ ...material, qty: e.target.value })
-                  }
-                />
-              </label>
-              <label>
-                {t.owner.fieldUnit}
-                <select
-                  value={material.unitCode}
-                  onChange={(e) =>
-                    setMaterial({ ...material, unitCode: e.target.value })
-                  }
-                >
-                  {(units.length
-                    ? units
-                    : [
-                        { code: "LITER", nameEn: "Liter", nameBn: "লিটার" },
-                        { code: "BOTTLE", nameEn: "Bottle", nameBn: "বোতল" },
-                        { code: "PIECE", nameEn: "Piece", nameBn: "পিস" },
-                        { code: "KG", nameEn: "Kg", nameBn: "কেজি" },
-                      ]
-                  ).map((u) => (
-                    <option key={u.code} value={u.code}>
-                      {locale === "bn" ? u.nameBn : u.nameEn} ({u.code})
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                {t.owner.costGoods}
-                <input
-                  required
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={material.goodsAmountBdt}
-                  onChange={(e) =>
-                    setMaterial({
-                      ...material,
-                      goodsAmountBdt: e.target.value,
-                    })
-                  }
-                />
-              </label>
-              <label>
-                {t.owner.costTransport}
-                <input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={material.transportBdt}
-                  onChange={(e) =>
-                    setMaterial({ ...material, transportBdt: e.target.value })
-                  }
-                />
-              </label>
-              <label>
-                {t.owner.costDriver}
-                <input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={material.driverBdt}
-                  onChange={(e) =>
-                    setMaterial({ ...material, driverBdt: e.target.value })
-                  }
-                />
-              </label>
-              <label>
-                {t.owner.costTravel}
-                <input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={material.travelBdt}
-                  onChange={(e) =>
-                    setMaterial({ ...material, travelBdt: e.target.value })
-                  }
-                />
-              </label>
-              <label>
-                {t.owner.fieldSupplier}
-                <input
-                  value={material.supplierName}
-                  onChange={(e) =>
-                    setMaterial({ ...material, supplierName: e.target.value })
-                  }
-                />
-              </label>
-              <label>
-                {t.owner.fieldSupplierPhone}
-                <input
-                  type="tel"
-                  inputMode="tel"
-                  value={material.supplierPhone}
-                  onChange={(e) =>
-                    setMaterial({ ...material, supplierPhone: e.target.value })
-                  }
-                  placeholder="01XXXXXXXXX"
-                />
-              </label>
-              <label className="full">
-                {t.owner.fieldNote}
-                <input
-                  value={material.note}
-                  onChange={(e) =>
-                    setMaterial({ ...material, note: e.target.value })
-                  }
-                />
-              </label>
-              <p className="muted tiny full">
-                {t.owner.costTotal}: ৳{materialTotal.toLocaleString()}
-                {landedHint != null
-                  ? ` · ${t.owner.landedUnitCost}: ৳${landedHint.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-                  : ""}
-              </p>
-              <button
-                type="submit"
-                className="cta"
-                disabled={pending || !(materialTotal > 0)}
-              >
-                {t.owner.addMaterial}
-              </button>
-            </form>
-
-            <form className="owner-form compact" onSubmit={onExpense}>
-              <h2>{t.owner.expenseDebit}</h2>
-              <p className="muted tiny full">{t.owner.expenseDebitHint}</p>
-              <label>
-                {t.owner.fieldExpenseCategory}
-                <select
-                  value={expense.categoryCode}
-                  onChange={(e) =>
-                    setExpense({ ...expense, categoryCode: e.target.value })
-                  }
-                >
-                  {(categories.length
-                    ? categories
-                    : [
-                        { code: "UTILITY", nameEn: "Utility", nameBn: "ইউটিলিটি" },
-                        {
-                          code: "TRANSPORT",
-                          nameEn: "Transport",
-                          nameBn: "পরিবহন",
-                        },
-                        { code: "DRIVER", nameEn: "Driver", nameBn: "ড্রাইভার" },
-                        { code: "TRAVEL", nameEn: "Travel", nameBn: "ভ্রমণ" },
-                      ]
-                  ).map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {locale === "bn" ? c.nameBn : c.nameEn}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                {t.owner.fieldExpenseTitle}
-                <input
-                  required
-                  value={expense.title}
-                  onChange={(e) =>
-                    setExpense({ ...expense, title: e.target.value })
-                  }
-                  placeholder={t.owner.expenseTitleHint}
-                />
-              </label>
-              <label>
-                {t.owner.fieldAmount}
-                <input
-                  required
-                  type="number"
-                  min={0.01}
-                  step="0.01"
-                  value={expense.amountBdt}
-                  onChange={(e) =>
-                    setExpense({ ...expense, amountBdt: e.target.value })
-                  }
-                />
-              </label>
-              <label>
-                {t.owner.fieldContactName}
-                <input
-                  value={expense.contactName}
-                  onChange={(e) =>
-                    setExpense({ ...expense, contactName: e.target.value })
-                  }
-                />
-              </label>
-              <label>
-                {t.owner.fieldContactPhone}
-                <input
-                  type="tel"
-                  inputMode="tel"
-                  value={expense.contactPhone}
-                  onChange={(e) =>
-                    setExpense({ ...expense, contactPhone: e.target.value })
-                  }
-                />
-              </label>
-              <label className="full">
-                {t.owner.fieldNote}
-                <input
-                  value={expense.note}
-                  onChange={(e) =>
-                    setExpense({ ...expense, note: e.target.value })
-                  }
-                />
-              </label>
-              <button type="submit" className="cta" disabled={pending}>
-                {t.owner.addExpense}
-              </button>
-            </form>
-
-            {isOwner ? (
-              <form className="owner-form compact" onSubmit={onAdjust}>
-                <h2>{t.owner.adjustCash}</h2>
+          <div className="wallet-accordion">
+            <CollapsePanel
+              id="supply"
+              title={t.owner.materialDebit}
+              summary={t.owner.collapseSupplyHint}
+              open={openRecord === "supply"}
+              onToggle={() =>
+                setOpenRecord((v) => (v === "supply" ? null : "supply"))
+              }
+            >
+              <form className="owner-form compact" onSubmit={onMaterial}>
+                <p className="muted tiny full">{t.owner.materialDebitHint}</p>
                 <label>
-                  {t.owner.fieldTxnType}
-                  <select
-                    value={adjust.typeCode}
+                  {t.owner.fieldMaterial}
+                  <input
+                    required
+                    value={material.materialName}
                     onChange={(e) =>
-                      setAdjust({
-                        ...adjust,
-                        typeCode: e.target.value as typeof adjust.typeCode,
-                      })
+                      setMaterial({ ...material, materialName: e.target.value })
+                    }
+                    placeholder={t.owner.supplyNameHint}
+                  />
+                </label>
+                <label>
+                  {t.owner.fieldSupplyKind}
+                  <select
+                    value={material.kindCode}
+                    onChange={(e) =>
+                      setMaterial({ ...material, kindCode: e.target.value })
                     }
                   >
-                    <option value="OPENING">{t.owner.txnOpening}</option>
-                    <option value="ADJUSTMENT_IN">{t.owner.txnAdjIn}</option>
-                    <option value="ADJUSTMENT_OUT">{t.owner.txnAdjOut}</option>
-                    <option value="OTHER_IN">{t.owner.txnOtherIn}</option>
-                    <option value="OTHER_OUT">{t.owner.txnOtherOut}</option>
+                    {(kinds.length
+                      ? kinds
+                      : [
+                          { code: "RAW_MATERIAL", nameEn: "Raw", nameBn: "কাঁচা" },
+                          { code: "BOTTLE", nameEn: "Bottle", nameBn: "বোতল" },
+                          { code: "ACID", nameEn: "Acid", nameBn: "অ্যাসিড" },
+                        ]
+                    ).map((k) => (
+                      <option key={k.code} value={k.code}>
+                        {labelKind(k)}
+                      </option>
+                    ))}
                   </select>
+                </label>
+                <label>
+                  {t.owner.fieldQty}
+                  <input
+                    required
+                    type="number"
+                    min={0.001}
+                    step="any"
+                    value={material.qty}
+                    onChange={(e) =>
+                      setMaterial({ ...material, qty: e.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  {t.owner.fieldUnit}
+                  <select
+                    value={material.unitCode}
+                    onChange={(e) =>
+                      setMaterial({ ...material, unitCode: e.target.value })
+                    }
+                  >
+                    {(units.length
+                      ? units
+                      : [
+                          { code: "LITER", nameEn: "Liter", nameBn: "লিটার" },
+                          { code: "BOTTLE", nameEn: "Bottle", nameBn: "বোতল" },
+                          { code: "PIECE", nameEn: "Piece", nameBn: "পিস" },
+                          { code: "KG", nameEn: "Kg", nameBn: "কেজি" },
+                        ]
+                    ).map((u) => (
+                      <option key={u.code} value={u.code}>
+                        {locale === "bn" ? u.nameBn : u.nameEn} ({u.code})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t.owner.costGoods}
+                  <input
+                    required
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={material.goodsAmountBdt}
+                    onChange={(e) =>
+                      setMaterial({
+                        ...material,
+                        goodsAmountBdt: e.target.value,
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  {t.owner.fieldSupplier}
+                  <input
+                    value={material.supplierName}
+                    onChange={(e) =>
+                      setMaterial({ ...material, supplierName: e.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  {t.owner.fieldSupplierPhone}
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    value={material.supplierPhone}
+                    onChange={(e) =>
+                      setMaterial({
+                        ...material,
+                        supplierPhone: e.target.value,
+                      })
+                    }
+                    placeholder="01XXXXXXXXX"
+                  />
+                </label>
+
+                <div className="nested-collapse full">
+                  <button
+                    type="button"
+                    className="collapse-head nested"
+                    aria-expanded={tripOpen}
+                    onClick={() => setTripOpen((v) => !v)}
+                  >
+                    <span>
+                      <strong>{t.owner.tripCosts}</strong>
+                      <span className="muted tiny">
+                        {" "}
+                        · ৳
+                        {(
+                          Number(material.transportBdt || 0) +
+                          Number(material.driverBdt || 0) +
+                          Number(material.travelBdt || 0)
+                        ).toLocaleString()}
+                      </span>
+                    </span>
+                    <span aria-hidden>{tripOpen ? "▾" : "▸"}</span>
+                  </button>
+                  {tripOpen ? (
+                    <div className="owner-form compact nested-body">
+                      <label>
+                        {t.owner.costTransport}
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={material.transportBdt}
+                          onChange={(e) =>
+                            setMaterial({
+                              ...material,
+                              transportBdt: e.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        {t.owner.costDriver}
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={material.driverBdt}
+                          onChange={(e) =>
+                            setMaterial({
+                              ...material,
+                              driverBdt: e.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        {t.owner.costTravel}
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={material.travelBdt}
+                          onChange={(e) =>
+                            setMaterial({
+                              ...material,
+                              travelBdt: e.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                </div>
+
+                <label className="full">
+                  {t.owner.fieldNote}
+                  <input
+                    value={material.note}
+                    onChange={(e) =>
+                      setMaterial({ ...material, note: e.target.value })
+                    }
+                  />
+                </label>
+                <p className="muted tiny full">
+                  {t.owner.costTotal}: ৳{materialTotal.toLocaleString()}
+                  {landedHint != null
+                    ? ` · ${t.owner.landedUnitCost}: ৳${landedHint.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                    : ""}
+                </p>
+                <button
+                  type="submit"
+                  className="cta"
+                  disabled={pending || !(materialTotal > 0)}
+                >
+                  {t.owner.addMaterial}
+                </button>
+              </form>
+            </CollapsePanel>
+
+            <CollapsePanel
+              id="expense"
+              title={t.owner.expenseDebit}
+              summary={t.owner.collapseExpenseHint}
+              open={openRecord === "expense"}
+              onToggle={() =>
+                setOpenRecord((v) => (v === "expense" ? null : "expense"))
+              }
+            >
+              <form className="owner-form compact" onSubmit={onExpense}>
+                <p className="muted tiny full">{t.owner.expenseDebitHint}</p>
+                <label>
+                  {t.owner.fieldExpenseCategory}
+                  <select
+                    value={expense.categoryCode}
+                    onChange={(e) =>
+                      setExpense({ ...expense, categoryCode: e.target.value })
+                    }
+                  >
+                    {(categories.length
+                      ? categories
+                      : [
+                          {
+                            code: "UTILITY",
+                            nameEn: "Utility",
+                            nameBn: "ইউটিলিটি",
+                          },
+                          {
+                            code: "TRANSPORT",
+                            nameEn: "Transport",
+                            nameBn: "পরিবহন",
+                          },
+                          {
+                            code: "DRIVER",
+                            nameEn: "Driver",
+                            nameBn: "ড্রাইভার",
+                          },
+                          {
+                            code: "TRAVEL",
+                            nameEn: "Travel",
+                            nameBn: "ভ্রমণ",
+                          },
+                        ]
+                    ).map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {locale === "bn" ? c.nameBn : c.nameEn}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t.owner.fieldExpenseTitle}
+                  <input
+                    required
+                    value={expense.title}
+                    onChange={(e) =>
+                      setExpense({ ...expense, title: e.target.value })
+                    }
+                    placeholder={t.owner.expenseTitleHint}
+                  />
                 </label>
                 <label>
                   {t.owner.fieldAmount}
@@ -615,25 +677,105 @@ export function OwnerWalletPage({ locale }: Props) {
                     type="number"
                     min={0.01}
                     step="0.01"
-                    value={adjust.amountBdt}
+                    value={expense.amountBdt}
                     onChange={(e) =>
-                      setAdjust({ ...adjust, amountBdt: e.target.value })
+                      setExpense({ ...expense, amountBdt: e.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  {t.owner.fieldContactName}
+                  <input
+                    value={expense.contactName}
+                    onChange={(e) =>
+                      setExpense({ ...expense, contactName: e.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  {t.owner.fieldContactPhone}
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    value={expense.contactPhone}
+                    onChange={(e) =>
+                      setExpense({ ...expense, contactPhone: e.target.value })
                     }
                   />
                 </label>
                 <label className="full">
                   {t.owner.fieldNote}
                   <input
-                    value={adjust.note}
+                    value={expense.note}
                     onChange={(e) =>
-                      setAdjust({ ...adjust, note: e.target.value })
+                      setExpense({ ...expense, note: e.target.value })
                     }
                   />
                 </label>
                 <button type="submit" className="cta" disabled={pending}>
-                  {t.owner.applyAdjust}
+                  {t.owner.addExpense}
                 </button>
               </form>
+            </CollapsePanel>
+
+            {isOwner ? (
+              <CollapsePanel
+                id="adjust"
+                title={t.owner.adjustCash}
+                summary={t.owner.collapseAdjustHint}
+                open={openRecord === "adjust"}
+                onToggle={() =>
+                  setOpenRecord((v) => (v === "adjust" ? null : "adjust"))
+                }
+              >
+                <form className="owner-form compact" onSubmit={onAdjust}>
+                  <label>
+                    {t.owner.fieldTxnType}
+                    <select
+                      value={adjust.typeCode}
+                      onChange={(e) =>
+                        setAdjust({
+                          ...adjust,
+                          typeCode: e.target.value as typeof adjust.typeCode,
+                        })
+                      }
+                    >
+                      <option value="OPENING">{t.owner.txnOpening}</option>
+                      <option value="ADJUSTMENT_IN">{t.owner.txnAdjIn}</option>
+                      <option value="ADJUSTMENT_OUT">
+                        {t.owner.txnAdjOut}
+                      </option>
+                      <option value="OTHER_IN">{t.owner.txnOtherIn}</option>
+                      <option value="OTHER_OUT">{t.owner.txnOtherOut}</option>
+                    </select>
+                  </label>
+                  <label>
+                    {t.owner.fieldAmount}
+                    <input
+                      required
+                      type="number"
+                      min={0.01}
+                      step="0.01"
+                      value={adjust.amountBdt}
+                      onChange={(e) =>
+                        setAdjust({ ...adjust, amountBdt: e.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="full">
+                    {t.owner.fieldNote}
+                    <input
+                      value={adjust.note}
+                      onChange={(e) =>
+                        setAdjust({ ...adjust, note: e.target.value })
+                      }
+                    />
+                  </label>
+                  <button type="submit" className="cta" disabled={pending}>
+                    {t.owner.applyAdjust}
+                  </button>
+                </form>
+              </CollapsePanel>
             ) : null}
           </div>
         ) : (
@@ -696,206 +838,254 @@ export function OwnerWalletPage({ locale }: Props) {
       ) : null}
 
       {tab === "analytics" && analytics ? (
-        <div className="wallet-analytics">
+        <div className="wallet-analytics wallet-accordion">
           <p className="muted tiny">
             {t.owner.analyticsHint} ({analytics.days} {t.owner.days})
           </p>
 
-          <div className="stat-grid analytics-stats">
-            <article>
-              <p>{t.owner.statSalesIn}</p>
-              <strong className="credit">
-                ৳{analytics.totals.salesCreditBdt.toLocaleString()}
-              </strong>
-            </article>
-            <article>
-              <p>{t.owner.statMaterialOut}</p>
-              <strong className="debit">
-                ৳{analytics.totals.materialTotalBdt.toLocaleString()}
-              </strong>
-            </article>
-            <article>
-              <p>{t.owner.costGoods}</p>
-              <strong>
-                ৳{analytics.totals.materialGoodsBdt.toLocaleString()}
-              </strong>
-            </article>
-            <article>
-              <p>{t.owner.costTransport}</p>
-              <strong>
-                ৳
-                {(
-                  analytics.totals.materialTransportBdt +
-                  analytics.totals.standaloneTransportBdt
-                ).toLocaleString()}
-              </strong>
-            </article>
-            <article>
-              <p>{t.owner.costDriver}</p>
-              <strong>
-                ৳{analytics.totals.materialDriverBdt.toLocaleString()}
-              </strong>
-            </article>
-            <article>
-              <p>{t.owner.costTravel}</p>
-              <strong>
-                ৳{analytics.totals.materialTravelBdt.toLocaleString()}
-              </strong>
-            </article>
-            <article>
-              <p>{t.owner.statUtility}</p>
-              <strong>
-                ৳{analytics.totals.utilityBdt.toLocaleString()}
-              </strong>
-            </article>
-            <article>
-              <p>{t.owner.statNetFlow}</p>
-              <strong
-                className={
-                  analytics.totals.netCashFlowBdt >= 0 ? "credit" : "debit"
-                }
-              >
-                ৳{analytics.totals.netCashFlowBdt.toLocaleString()}
-              </strong>
-            </article>
-          </div>
+          <CollapsePanel
+            id="summary"
+            title={t.owner.analyticsSummary}
+            summary={`৳${analytics.totals.netCashFlowBdt.toLocaleString()} ${t.owner.statNetFlow}`}
+            open={openAnalytics === "summary"}
+            onToggle={() =>
+              setOpenAnalytics((v) => (v === "summary" ? null : "summary"))
+            }
+          >
+            <div className="stat-grid analytics-stats">
+              <article>
+                <p>{t.owner.statSalesIn}</p>
+                <strong className="credit">
+                  ৳{analytics.totals.salesCreditBdt.toLocaleString()}
+                </strong>
+              </article>
+              <article>
+                <p>{t.owner.statMaterialOut}</p>
+                <strong className="debit">
+                  ৳{analytics.totals.materialTotalBdt.toLocaleString()}
+                </strong>
+              </article>
+              <article>
+                <p>{t.owner.costGoods}</p>
+                <strong>
+                  ৳{analytics.totals.materialGoodsBdt.toLocaleString()}
+                </strong>
+              </article>
+              <article>
+                <p>{t.owner.costTransport}</p>
+                <strong>
+                  ৳
+                  {(
+                    analytics.totals.materialTransportBdt +
+                    analytics.totals.standaloneTransportBdt
+                  ).toLocaleString()}
+                </strong>
+              </article>
+              <article>
+                <p>{t.owner.costDriver}</p>
+                <strong>
+                  ৳{analytics.totals.materialDriverBdt.toLocaleString()}
+                </strong>
+              </article>
+              <article>
+                <p>{t.owner.costTravel}</p>
+                <strong>
+                  ৳{analytics.totals.materialTravelBdt.toLocaleString()}
+                </strong>
+              </article>
+              <article>
+                <p>{t.owner.statUtility}</p>
+                <strong>
+                  ৳{analytics.totals.utilityBdt.toLocaleString()}
+                </strong>
+              </article>
+              <article>
+                <p>{t.owner.statNetFlow}</p>
+                <strong
+                  className={
+                    analytics.totals.netCashFlowBdt >= 0 ? "credit" : "debit"
+                  }
+                >
+                  ৳{analytics.totals.netCashFlowBdt.toLocaleString()}
+                </strong>
+              </article>
+            </div>
+          </CollapsePanel>
 
-          <h2 className="section-title">{t.owner.bySupplyKind}</h2>
-          <ul className="plain-list">
-            {analytics.bySupplyKind.length === 0 ? (
-              <li className="muted">{t.owner.analyticsEmpty}</li>
-            ) : (
-              analytics.bySupplyKind.map((k) => (
-                <li key={k.code}>
-                  <span>
-                    {locale === "bn" ? k.nameBn : k.nameEn}
-                    <div className="muted tiny">
-                      {t.owner.fieldQty}: {k.qty}
-                    </div>
-                  </span>
-                  <span>৳{k.totalBdt.toLocaleString()}</span>
-                </li>
-              ))
-            )}
-          </ul>
-
-          <h2 className="section-title">{t.owner.byExpenseCategory}</h2>
-          <ul className="plain-list">
-            {analytics.byExpenseCategory.length === 0 ? (
-              <li className="muted">{t.owner.analyticsEmpty}</li>
-            ) : (
-              analytics.byExpenseCategory.map((c) => (
-                <li key={c.code}>
-                  <span>
-                    {locale === "bn" ? c.nameBn : c.nameEn}
-                    <div className="muted tiny">{c.count}×</div>
-                  </span>
-                  <span>৳{c.totalBdt.toLocaleString()}</span>
-                </li>
-              ))
-            )}
-          </ul>
-
-          <h2 className="section-title">{t.owner.supplyPurchases}</h2>
-          <p className="muted tiny">{t.owner.landedCostHint}</p>
-          <div className="purchase-cards">
-            {analytics.purchases.length === 0 ? (
-              <p className="muted">{t.owner.analyticsEmpty}</p>
-            ) : (
-              analytics.purchases.map((p) => (
-                <article key={p.id} className="panel-card">
-                  <p className="muted tiny">
-                    {new Date(p.purchasedAt).toLocaleString()}
-                  </p>
-                  {renderPurchaseBreakdown(p)}
-                </article>
-              ))
-            )}
-          </div>
-
-          <h2 className="section-title">{t.owner.txnBreakdown}</h2>
-          <ul className="txn-breakdown-list">
-            {analytics.transactions.map((txn) => {
-              const open = expandedTxn === txn.id;
-              const detail = txn.detail as SupplyPurchase | null;
-              return (
-                <li key={txn.id}>
-                  <button
-                    type="button"
-                    className="history-item"
-                    onClick={() =>
-                      setExpandedTxn(open ? null : txn.id)
-                    }
-                  >
+          <CollapsePanel
+            id="kinds"
+            title={t.owner.bySupplyKind}
+            summary={`${analytics.bySupplyKind.length}`}
+            open={openAnalytics === "kinds"}
+            onToggle={() =>
+              setOpenAnalytics((v) => (v === "kinds" ? null : "kinds"))
+            }
+          >
+            <ul className="plain-list">
+              {analytics.bySupplyKind.length === 0 ? (
+                <li className="muted">{t.owner.analyticsEmpty}</li>
+              ) : (
+                analytics.bySupplyKind.map((k) => (
+                  <li key={k.code}>
                     <span>
-                      {locale === "bn"
-                        ? (txn.type?.nameBn ?? txn.type?.code)
-                        : (txn.type?.nameEn ?? txn.type?.code)}
+                      {locale === "bn" ? k.nameBn : k.nameEn}
                       <div className="muted tiny">
-                        {new Date(txn.occurredAt).toLocaleString()}
-                        {txn.detailType === "material"
-                          ? ` · ${t.owner.tapForBreakdown}`
-                          : ""}
+                        {t.owner.fieldQty}: {k.qty}
                       </div>
                     </span>
-                    <span
-                      className={
-                        txn.type?.direction === "credit"
-                          ? "credit"
-                          : "debit"
+                    <span>৳{k.totalBdt.toLocaleString()}</span>
+                  </li>
+                ))
+              )}
+            </ul>
+          </CollapsePanel>
+
+          <CollapsePanel
+            id="expenses"
+            title={t.owner.byExpenseCategory}
+            summary={`${analytics.byExpenseCategory.length}`}
+            open={openAnalytics === "expenses"}
+            onToggle={() =>
+              setOpenAnalytics((v) => (v === "expenses" ? null : "expenses"))
+            }
+          >
+            <ul className="plain-list">
+              {analytics.byExpenseCategory.length === 0 ? (
+                <li className="muted">{t.owner.analyticsEmpty}</li>
+              ) : (
+                analytics.byExpenseCategory.map((c) => (
+                  <li key={c.code}>
+                    <span>
+                      {locale === "bn" ? c.nameBn : c.nameEn}
+                      <div className="muted tiny">{c.count}×</div>
+                    </span>
+                    <span>৳{c.totalBdt.toLocaleString()}</span>
+                  </li>
+                ))
+              )}
+            </ul>
+          </CollapsePanel>
+
+          <CollapsePanel
+            id="purchases"
+            title={t.owner.supplyPurchases}
+            summary={`${analytics.purchases.length}`}
+            open={openAnalytics === "purchases"}
+            onToggle={() =>
+              setOpenAnalytics((v) =>
+                v === "purchases" ? null : "purchases",
+              )
+            }
+          >
+            <p className="muted tiny">{t.owner.landedCostHint}</p>
+            <div className="purchase-cards">
+              {analytics.purchases.length === 0 ? (
+                <p className="muted">{t.owner.analyticsEmpty}</p>
+              ) : (
+                analytics.purchases.map((p) => (
+                  <article key={p.id} className="panel-card">
+                    <p className="muted tiny">
+                      {new Date(p.purchasedAt).toLocaleString()}
+                    </p>
+                    {renderPurchaseBreakdown(p)}
+                  </article>
+                ))
+              )}
+            </div>
+          </CollapsePanel>
+
+          <CollapsePanel
+            id="txns"
+            title={t.owner.txnBreakdown}
+            summary={`${analytics.transactions.length}`}
+            open={openAnalytics === "txns"}
+            onToggle={() =>
+              setOpenAnalytics((v) => (v === "txns" ? null : "txns"))
+            }
+          >
+            <ul className="txn-breakdown-list">
+              {analytics.transactions.map((txn) => {
+                const open = expandedTxn === txn.id;
+                const detail = txn.detail as SupplyPurchase | null;
+                return (
+                  <li key={txn.id}>
+                    <button
+                      type="button"
+                      className="history-item"
+                      onClick={() =>
+                        setExpandedTxn(open ? null : txn.id)
                       }
                     >
-                      ৳{txn.amountBdt.toLocaleString()}
-                    </span>
-                  </button>
-                  {open && txn.detailType === "material" && detail ? (
-                    <div className="txn-detail panel-card">
-                      {renderPurchaseBreakdown(detail)}
-                    </div>
-                  ) : null}
-                  {open && txn.detailType === "expense" && txn.detail ? (
-                    <div className="txn-detail panel-card">
-                      {(() => {
-                        const d = txn.detail as {
-                          title: string;
-                          amountBdt: number;
-                          contactName?: string | null;
-                          contactPhone?: string | null;
-                          category?: {
-                            code: string;
-                            nameEn: string;
-                            nameBn: string;
+                      <span>
+                        {locale === "bn"
+                          ? (txn.type?.nameBn ?? txn.type?.code)
+                          : (txn.type?.nameEn ?? txn.type?.code)}
+                        <div className="muted tiny">
+                          {new Date(txn.occurredAt).toLocaleString()}
+                          {txn.detailType === "material"
+                            ? ` · ${t.owner.tapForBreakdown}`
+                            : ""}
+                        </div>
+                      </span>
+                      <span
+                        className={
+                          txn.type?.direction === "credit"
+                            ? "credit"
+                            : "debit"
+                        }
+                      >
+                        ৳{txn.amountBdt.toLocaleString()}
+                      </span>
+                    </button>
+                    {open && txn.detailType === "material" && detail ? (
+                      <div className="txn-detail panel-card">
+                        {renderPurchaseBreakdown(detail)}
+                      </div>
+                    ) : null}
+                    {open && txn.detailType === "expense" && txn.detail ? (
+                      <div className="txn-detail panel-card">
+                        {(() => {
+                          const d = txn.detail as {
+                            title: string;
+                            amountBdt: number;
+                            contactName?: string | null;
+                            contactPhone?: string | null;
+                            category?: {
+                              code: string;
+                              nameEn: string;
+                              nameBn: string;
+                            };
                           };
-                        };
-                        return (
-                          <>
-                            <p>
-                              <strong>{d.title}</strong>
-                              {d.category ? (
-                                <span className="muted tiny">
-                                  {" "}
-                                  ·{" "}
-                                  {locale === "bn"
-                                    ? d.category.nameBn
-                                    : d.category.nameEn}
-                                </span>
-                              ) : null}
-                            </p>
-                            <p className="muted tiny">
-                              ৳{d.amountBdt.toLocaleString()}
-                              {d.contactName || d.contactPhone
-                                ? ` · ${[d.contactName, d.contactPhone].filter(Boolean).join(" · ")}`
-                                : ""}
-                            </p>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
+                          return (
+                            <>
+                              <p>
+                                <strong>{d.title}</strong>
+                                {d.category ? (
+                                  <span className="muted tiny">
+                                    {" "}
+                                    ·{" "}
+                                    {locale === "bn"
+                                      ? d.category.nameBn
+                                      : d.category.nameEn}
+                                  </span>
+                                ) : null}
+                              </p>
+                              <p className="muted tiny">
+                                ৳{d.amountBdt.toLocaleString()}
+                                {d.contactName || d.contactPhone
+                                  ? ` · ${[d.contactName, d.contactPhone].filter(Boolean).join(" · ")}`
+                                  : ""}
+                              </p>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </CollapsePanel>
         </div>
       ) : null}
 

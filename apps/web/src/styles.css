@@ -967,6 +967,73 @@ body {
   margin: 0 0 0.25rem;
 }
 
+.wallet-accordion {
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 1.5rem;
+}
+
+.collapse-panel {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+  min-width: 0;
+}
+
+.collapse-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+}
+
+.collapse-head.nested {
+  padding: 0.55rem 0.65rem;
+  background: #f3faf6;
+  border: 1px solid var(--line);
+}
+
+.collapse-titles {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.collapse-titles strong {
+  font-size: 1.02rem;
+}
+
+.collapse-chevron {
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+
+.collapse-body {
+  padding: 0 1rem 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.collapse-body .owner-form {
+  margin-bottom: 0;
+  padding-top: 0.85rem;
+}
+
+.nested-collapse.full {
+  grid-column: 1 / -1;
+}
+
+.nested-body {
+  margin-top: 0.55rem !important;
+  margin-bottom: 0 !important;
+}
+
 .wallet-tabs {
   display: flex;
   flex-wrap: wrap;
