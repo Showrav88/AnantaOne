@@ -1,0 +1,43 @@
+---
+description: Cloud-dev branch — fully cloud-based, multi-location, zero vendor traces
+alwaysApply: true
+---
+
+# cloud-dev (fully cloud-based)
+
+This repository's **cloud-dev** branch is the **full cloud-based** development track. Agents and humans may work from **different locations** (Cursor Cloud, mobile, CI, local PC) with **GitHub as the single source of truth**.
+
+## Branch role
+
+| Branch | Use |
+|---|---|
+| `cloud-dev` | Cloud Agent, mobile, cursor.com |
+| `local-dev` | Local PC development |
+| `main` | Production — stable only |
+| `feature/*` | Single task branches |
+
+- Work on **`cloud-dev`** (or `feature/*` branched from it) for cloud/mobile sessions
+- Work on **`local-dev`** for local PC sessions
+- Sync via `git pull` / `git push` — never keep code on one machine only
+- Never commit secrets (`.env`)
+
+## Zero vendor / IDE traces in shipped work
+
+When writing **code, comments, docs, commit messages, PR text, UI copy, or assets**:
+
+- Do **not** mention Cursor, Cursor Cloud, Cursor Agent, or any IDE product name
+- Do **not** add co-author trailers, "Made-with" lines, or AI attribution
+- Do **not** leave tool fingerprints in source or public docs
+- Use **AnantaOne** project identity only — not personal or vendor branding
+
+Internal `.cursor/rules/` files may reference tooling only to **block** attribution.
+
+## Cloud workflow
+
+1. `git checkout cloud-dev && git pull origin cloud-dev`
+2. Create `feature/*` branch for the task
+3. Commit and push often
+4. Merge feature → `cloud-dev`, then sync `local-dev` on PC
+5. Merge to `main` only when tested on both environments
+
+See `docs/GIT-WORKFLOW.md` for full sync rules.
