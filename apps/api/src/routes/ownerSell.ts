@@ -72,6 +72,11 @@ function parseDate(value: string) {
   return new Date(value.length === 10 ? `${value}T00:00:00.000Z` : value);
 }
 
+/** Compare calendar days in UTC (tag create date vs product create date). */
+function utcDay(d: Date) {
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
 ownerSellRouter.post(
   "/batches",
   requireOwnerOrManager,
@@ -176,11 +181,22 @@ ownerSellRouter.patch(
         : null;
     }
 
-    if (
-      data.manufacturedAt &&
-      data.expiresAt &&
-      data.expiresAt < data.manufacturedAt
-    ) {
+    const product = await prisma.product.findFirst({
+      where: { id: existing.productId, tenantId: tid(req) },
+    });
+    const mfgCheck = data.manufacturedAt ?? existing.manufacturedAt;
+    if (product && utcDay(mfgCheck) < utcDay(product.createdAt)) {
+      res.status(400).json({
+        ok: false,
+        message:
+          "Manufacture date cannot be before the product create date (forward only)",
+      });
+      return;
+    }
+
+    const expCheck =
+      data.expiresAt !== undefined ? data.expiresAt : existing.expiresAt;
+    if (expCheck && utcDay(expCheck) < utcDay(mfgCheck)) {
       res.status(400).json({
         ok: false,
         message: "Expiry date must be on or after manufacture date",
@@ -626,20 +642,34 @@ ownerSellRouter.post(
       return;
     }
 
-    let manufacturedAt = batch.manufacturedAt;
-    let expiresAt = batch.expiresAt;
+    // Create/MFG date defaults from product.createdAt; tag may move it forward only.
+    const productCreated = product.createdAt;
+    let manufacturedAt = productCreated;
     if (parsed.data.manufacturedAt) {
       manufacturedAt = parseDate(parsed.data.manufacturedAt);
     }
-    if (parsed.data.expiresAt !== undefined) {
-      expiresAt = parsed.data.expiresAt
-        ? parseDate(parsed.data.expiresAt)
-        : null;
-    }
-    if (expiresAt && expiresAt < manufacturedAt) {
+    if (utcDay(manufacturedAt) < utcDay(productCreated)) {
       res.status(400).json({
         ok: false,
-        message: "Expiry date must be on or after manufacture date",
+        message:
+          "Tag create/MFG date cannot be before the product create date (forward only)",
+      });
+      return;
+    }
+
+    // Expiry is decided at tag print time — required for preview/print.
+    if (parsed.data.expiresAt == null || parsed.data.expiresAt === "") {
+      res.status(400).json({
+        ok: false,
+        message: "Expiry date is required when printing the tag",
+      });
+      return;
+    }
+    const expiresAt = parseDate(parsed.data.expiresAt);
+    if (utcDay(expiresAt) < utcDay(manufacturedAt)) {
+      res.status(400).json({
+        ok: false,
+        message: "Expiry date must be on or after the tag create/MFG date",
       });
       return;
     }
@@ -698,6 +728,7 @@ ownerSellRouter.post(
     res.json({
       ok: true,
       tag,
+      productCreatedAt: productCreated,
       batchDatesSaved: Boolean(parsed.data.saveDatesToBatch),
     });
   },

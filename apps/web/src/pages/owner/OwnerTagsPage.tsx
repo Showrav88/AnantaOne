@@ -95,21 +95,26 @@ export function OwnerTagsPage({ locale }: Props) {
 
   const productBatches = batches.filter((b) => b.productId === productId);
   const selectedBatch = productBatches.find((b) => b.id === batchId);
+  const selectedProduct = products.find((p) => p.id === productId);
+  const productCreatedMin = selectedProduct?.createdAt
+    ? toDateInput(selectedProduct.createdAt)
+    : "";
 
   useEffect(() => {
     if (productBatches[0]) setBatchId(productBatches[0].id);
     else setBatchId("");
   }, [productId, batches]);
 
+  // MFG defaults from product create date; EXP is chosen at print time (blank).
   useEffect(() => {
-    if (!selectedBatch) {
+    if (!selectedProduct?.createdAt) {
       setMfgDate("");
       setExpDate("");
       return;
     }
-    setMfgDate(toDateInput(selectedBatch.manufacturedAt));
-    setExpDate(toDateInput(selectedBatch.expiresAt));
-  }, [batchId, selectedBatch?.id, selectedBatch?.manufacturedAt, selectedBatch?.expiresAt]);
+    setMfgDate(toDateInput(selectedProduct.createdAt));
+    setExpDate("");
+  }, [productId, selectedProduct?.createdAt]);
 
   useEffect(() => {
     const tpl = templates.find((x) => x.id === templateId);
@@ -145,14 +150,26 @@ export function OwnerTagsPage({ locale }: Props) {
     }
   }
 
+  function assertMfgForward(value: string) {
+    if (productCreatedMin && value < productCreatedMin) {
+      setError(t.owner.mfgForwardOnly);
+      return false;
+    }
+    return true;
+  }
+
   async function onSaveDatesOnly() {
-    if (!batchId || !mfgDate) return;
+    if (!batchId || !mfgDate || !expDate) {
+      setError(t.owner.expRequiredAtPrint);
+      return;
+    }
+    if (!assertMfgForward(mfgDate)) return;
     setError(null);
     setOkMsg(null);
     try {
       await api.owner.updateBatch(batchId, {
         manufacturedAt: mfgDate,
-        expiresAt: expDate || null,
+        expiresAt: expDate,
       });
       setOkMsg(t.owner.datesSaved);
       await load();
@@ -164,13 +181,22 @@ export function OwnerTagsPage({ locale }: Props) {
   async function onPreview() {
     setError(null);
     setOkMsg(null);
+    if (!mfgDate) {
+      setError(t.owner.mfgRequired);
+      return;
+    }
+    if (!expDate) {
+      setError(t.owner.expRequiredAtPrint);
+      return;
+    }
+    if (!assertMfgForward(mfgDate)) return;
     try {
       const res = await api.owner.previewTag({
         productId,
         batchId,
         templateId: templateId || undefined,
-        manufacturedAt: mfgDate || undefined,
-        expiresAt: expDate || null,
+        manufacturedAt: mfgDate,
+        expiresAt: expDate,
         saveDatesToBatch: saveDates,
         widthMm: Number(printWidth),
         heightMm: Number(printHeight),
@@ -213,6 +239,11 @@ export function OwnerTagsPage({ locale }: Props) {
         <section className="panel-card">
           <h2>{t.owner.printPreview}</h2>
           <p className="muted tiny">{t.owner.tagDateHint}</p>
+          {productCreatedMin ? (
+            <p className="muted tiny">
+              {t.owner.productCreatedLabel}: {productCreatedMin}
+            </p>
+          ) : null}
           <div className="owner-form compact">
             <label>
               {t.owner.fieldTemplate}
@@ -259,17 +290,31 @@ export function OwnerTagsPage({ locale }: Props) {
               <input
                 type="date"
                 required
+                min={productCreatedMin || undefined}
                 value={mfgDate}
-                onChange={(e) => setMfgDate(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (productCreatedMin && next < productCreatedMin) {
+                    setError(t.owner.mfgForwardOnly);
+                    setMfgDate(productCreatedMin);
+                    return;
+                  }
+                  setError(null);
+                  setMfgDate(next);
+                }}
               />
+              <span className="muted tiny">{t.owner.mfgForwardHint}</span>
             </label>
             <label>
               {t.owner.fieldExpDate}
               <input
                 type="date"
+                required
+                min={mfgDate || productCreatedMin || undefined}
                 value={expDate}
                 onChange={(e) => setExpDate(e.target.value)}
               />
+              <span className="muted tiny">{t.owner.expAtPrintHint}</span>
             </label>
             <label className="full">
               {t.owner.tagPrintSize}
@@ -327,7 +372,7 @@ export function OwnerTagsPage({ locale }: Props) {
               type="button"
               className="cta"
               onClick={() => void onPreview()}
-              disabled={!productId || !batchId || !mfgDate}
+              disabled={!productId || !batchId || !mfgDate || !expDate}
             >
               {t.owner.previewTag}
             </button>
@@ -336,7 +381,7 @@ export function OwnerTagsPage({ locale }: Props) {
                 type="button"
                 className="cta secondary"
                 onClick={() => void onSaveDatesOnly()}
-                disabled={!batchId || !mfgDate}
+                disabled={!batchId || !mfgDate || !expDate}
               >
                 {t.owner.saveDatesOnly}
               </button>
