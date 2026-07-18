@@ -14,12 +14,23 @@ export function makeSerialCode(opts: {
   return makeShortSerialCode(opts.sku, opts.serialNo);
 }
 
+/**
+ * QR payload for a unit tag — short code only (not a URL).
+ * Example: MW001000001
+ */
+export function buildUnitQrPayload(opts: { serialCode: string }) {
+  return opts.serialCode;
+}
+
+/** @deprecated Use buildUnitQrPayload — tags encode short codes, not URLs. */
 export function buildUnitQrUrl(opts: {
-  publicBaseUrl: string;
-  companySlug: string;
+  publicBaseUrl?: string;
+  companySlug?: string;
   serialCode: string;
 }) {
-  return `${opts.publicBaseUrl.replace(/\/$/, "")}/#/unit/${opts.companySlug}/${encodeURIComponent(opts.serialCode)}`;
+  void opts.publicBaseUrl;
+  void opts.companySlug;
+  return buildUnitQrPayload({ serialCode: opts.serialCode });
 }
 
 export async function nextSerialStart(
