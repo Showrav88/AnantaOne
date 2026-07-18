@@ -37,6 +37,7 @@ export function setTheme(theme: ThemeMode) {
     /* ignore */
   }
   applyDisplayPrefs(theme);
+  window.dispatchEvent(new Event("anantaone:theme-change"));
 }
 
 export function cycleTheme(): ThemeMode {

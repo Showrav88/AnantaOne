@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import { cycleTheme, getTheme, type ThemeMode } from "../lib/prefs";
 
@@ -16,6 +16,14 @@ function themeLabel(theme: ThemeMode, t: ReturnType<typeof getMessages>) {
 export function DisplayControls({ locale, compact }: Props) {
   const t = getMessages(locale);
   const [theme, setThemeState] = useState<ThemeMode>(() => getTheme());
+
+  useEffect(() => {
+    function sync() {
+      setThemeState(getTheme());
+    }
+    window.addEventListener("anantaone:theme-change", sync);
+    return () => window.removeEventListener("anantaone:theme-change", sync);
+  }, []);
 
   return (
     <div className={`display-controls${compact ? " compact" : ""}`}>

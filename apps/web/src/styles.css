@@ -2285,11 +2285,74 @@ textarea {
 }
 
 /* —— Public multi-tenant shop —— */
+/* Public shop — theme-aware surfaces so brand + light/dark/night stay readable */
 .shop-page {
+  --shop-fg: #f3faf6;
+  --shop-muted: rgba(243, 250, 246, 0.82);
+  --shop-line: rgba(243, 250, 246, 0.18);
+  --shop-surface: rgba(255, 255, 255, 0.07);
+  --shop-surface-strong: rgba(0, 0, 0, 0.28);
+  --shop-topbar-bg: rgba(0, 0, 0, 0.42);
+  --shop-input-bg: rgba(0, 0, 0, 0.35);
+  --shop-page-bg: color-mix(in srgb, var(--shop-bg, #06281f) 82%, #020806);
+  --shop-catalog-bg: color-mix(in srgb, var(--shop-bg, #06281f) 88%, #000);
+  --shop-chip-ok-fg: #e8fff2;
+  --shop-chip-ok-bg: color-mix(in srgb, var(--shop-primary, #0f6b4c) 55%, #000);
   min-height: 100vh;
-  background: var(--shop-bg, #06281f);
-  color: #f3faf6;
+  background: var(--shop-page-bg);
+  color: var(--shop-fg);
   font-family: var(--shop-font, "Source Sans 3", sans-serif);
+}
+
+html[data-theme="light"] .shop-page {
+  --shop-fg: #06281f;
+  --shop-muted: rgba(6, 40, 31, 0.78);
+  --shop-line: rgba(6, 40, 31, 0.14);
+  --shop-surface: rgba(255, 255, 255, 0.92);
+  --shop-surface-strong: #ffffff;
+  --shop-topbar-bg: color-mix(in srgb, var(--shop-primary, #0f6b4c) 12%, #f3faf6);
+  --shop-input-bg: #ffffff;
+  --shop-page-bg: color-mix(in srgb, var(--shop-bg, #06281f) 8%, #f3faf6);
+  --shop-catalog-bg: color-mix(in srgb, var(--shop-bg, #06281f) 5%, #eef6f1);
+  --shop-chip-ok-fg: #043d2a;
+  --shop-chip-ok-bg: color-mix(in srgb, var(--shop-primary, #0f6b4c) 18%, #fff);
+}
+
+html[data-theme="dark"] .shop-page {
+  --shop-fg: #eaf6ef;
+  --shop-muted: rgba(234, 246, 239, 0.8);
+  --shop-line: rgba(234, 246, 239, 0.18);
+  --shop-surface: rgba(255, 255, 255, 0.06);
+  --shop-surface-strong: rgba(8, 22, 16, 0.72);
+  --shop-topbar-bg: rgba(4, 14, 10, 0.78);
+  --shop-input-bg: rgba(8, 24, 18, 0.88);
+  --shop-page-bg: color-mix(in srgb, var(--shop-bg, #06281f) 55%, #0b1a14);
+  --shop-catalog-bg: color-mix(in srgb, var(--shop-bg, #06281f) 45%, #081410);
+  --shop-chip-ok-fg: #d8ffe9;
+  --shop-chip-ok-bg: color-mix(in srgb, var(--shop-primary, #0f6b4c) 45%, #000);
+}
+
+html[data-theme="night"] .shop-page {
+  --shop-fg: #f2e8d8;
+  --shop-muted: rgba(242, 232, 216, 0.78);
+  --shop-line: rgba(242, 232, 216, 0.18);
+  --shop-surface: rgba(255, 240, 220, 0.06);
+  --shop-surface-strong: rgba(28, 20, 14, 0.78);
+  --shop-topbar-bg: rgba(18, 12, 8, 0.82);
+  --shop-input-bg: rgba(32, 24, 16, 0.9);
+  --shop-page-bg: color-mix(in srgb, var(--shop-bg, #06281f) 35%, #17110c);
+  --shop-catalog-bg: color-mix(in srgb, var(--shop-bg, #06281f) 28%, #120e0a);
+  --shop-chip-ok-fg: #f2e8d8;
+  --shop-chip-ok-bg: color-mix(in srgb, var(--shop-primary, #0f6b4c) 30%, #241c14);
+}
+
+.shop-page .muted,
+.shop-page .muted.tiny {
+  color: var(--shop-muted);
+}
+
+.shop-page .error {
+  color: color-mix(in srgb, var(--shop-accent, #f42a41) 75%, var(--shop-fg));
 }
 
 .shop-loading,
@@ -2299,6 +2362,7 @@ textarea {
   gap: 1rem;
   padding: 2rem;
   text-align: center;
+  color: var(--shop-fg);
 }
 
 .shop-topbar {
@@ -2307,11 +2371,13 @@ textarea {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.85rem 1.25rem;
-  background: rgba(0, 0, 0, 0.28);
+  background: var(--shop-topbar-bg);
+  color: var(--shop-fg);
   position: sticky;
   top: 0;
   z-index: 5;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--shop-line);
 }
 
 .shop-brand-lockup {
@@ -2343,6 +2409,30 @@ textarea {
   font-weight: 700;
 }
 
+.shop-topbar .lang,
+.shop-topbar .display-btn {
+  border-color: var(--shop-line);
+  color: var(--shop-fg);
+  background: transparent;
+}
+
+.shop-topbar .lang:hover,
+.shop-topbar .display-btn:hover {
+  border-color: color-mix(in srgb, var(--shop-primary, #0f6b4c) 55%, var(--shop-fg));
+}
+
+.shop-topbar .display-controls {
+  display: inline-flex;
+}
+
+.shop-sku {
+  margin: 0;
+  color: var(--shop-muted);
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
 .shop-toast {
   position: fixed;
   left: 50%;
@@ -2352,9 +2442,9 @@ textarea {
   max-width: min(92vw, 22rem);
   padding: 0.75rem 1.1rem;
   border-radius: 999px;
-  background: rgba(8, 24, 18, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: #f3faf6;
+  background: var(--shop-surface-strong);
+  border: 1px solid var(--shop-line);
+  color: var(--shop-fg);
   font-weight: 600;
   text-align: center;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
@@ -2400,15 +2490,21 @@ textarea {
 }
 
 .shop-stock-chip.ok {
-  color: #d8ffe9;
-  background: rgba(15, 107, 76, 0.55);
-  border-color: rgba(120, 220, 170, 0.35);
+  color: var(--shop-chip-ok-fg);
+  background: var(--shop-chip-ok-bg);
+  border-color: color-mix(in srgb, var(--shop-primary, #0f6b4c) 45%, var(--shop-line));
 }
 
 .shop-stock-chip.oos {
-  color: #ffe4e4;
-  background: rgba(140, 40, 40, 0.55);
-  border-color: rgba(255, 140, 140, 0.35);
+  color: color-mix(in srgb, var(--shop-accent, #f42a41) 25%, #fff);
+  background: color-mix(in srgb, var(--shop-accent, #f42a41) 28%, #000);
+  border-color: color-mix(in srgb, var(--shop-accent, #f42a41) 45%, transparent);
+}
+
+html[data-theme="light"] .shop-stock-chip.oos {
+  color: #7a1420;
+  background: color-mix(in srgb, var(--shop-accent, #f42a41) 16%, #fff);
+  border-color: color-mix(in srgb, var(--shop-accent, #f42a41) 40%, #fff);
 }
 
 .shop-logo-sm {
@@ -2467,6 +2563,13 @@ textarea {
   max-width: 40rem;
   display: grid;
   gap: 0.85rem;
+  /* Hero sits on a dark veil — keep light type in every theme */
+  color: #f3faf6;
+}
+
+.shop-hero-copy .btn.ghost {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
 }
 
 .shop-logo-hero {
@@ -2511,14 +2614,22 @@ textarea {
   animation: shop-rise 1s ease 0.24s both;
 }
 
-.shop-cta.btn.primary {
+.shop-cta.btn.primary,
+.shop-page .btn.primary {
   background: var(--shop-primary, #0f6b4c);
   border-color: var(--shop-primary, #0f6b4c);
+  color: #fff;
 }
 
-.shop-cta.btn.ghost {
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.45);
+.shop-cta.btn.ghost,
+.shop-page .btn.ghost {
+  color: var(--shop-fg);
+  border-color: var(--shop-line);
+  background: transparent;
+}
+
+.shop-page .btn.ghost:hover {
+  border-color: color-mix(in srgb, var(--shop-primary, #0f6b4c) 50%, var(--shop-fg));
 }
 
 @keyframes shop-rise {
@@ -2534,21 +2645,24 @@ textarea {
 
 .shop-catalog {
   padding: clamp(1.5rem, 4vw, 3rem);
-  background: color-mix(in srgb, var(--shop-bg, #06281f) 88%, #000);
+  background: var(--shop-catalog-bg);
+  color: var(--shop-fg);
 }
 
 .shop-section-head {
   margin-bottom: 1.25rem;
 }
 
-.shop-section-head h2 {
+.shop-section-head h2,
+.shop-section-head h1 {
   margin: 0 0 0.35rem;
   font-size: 1.6rem;
+  color: var(--shop-fg);
 }
 
 .shop-section-head p {
   margin: 0;
-  opacity: 0.75;
+  color: var(--shop-muted);
 }
 
 .shop-product-grid {
@@ -2565,8 +2679,9 @@ textarea {
 }
 
 .shop-product-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--shop-surface);
+  border: 1px solid var(--shop-line);
+  color: var(--shop-fg);
   overflow: hidden;
   display: grid;
   height: 100%;
@@ -2577,8 +2692,8 @@ textarea {
 .shop-product-card:hover,
 .shop-product-card:focus-visible {
   transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--shop-primary, #0f6b4c) 55%, #fff);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: color-mix(in srgb, var(--shop-primary, #0f6b4c) 55%, var(--shop-fg));
+  background: var(--shop-surface-strong);
   outline: none;
 }
 
@@ -2624,12 +2739,13 @@ textarea {
   margin: 0;
   font-size: 1.05rem;
   line-height: 1.25;
+  color: var(--shop-fg);
 }
 
 .shop-product-desc {
   margin: 0.2rem 0 0;
   font-size: 0.9rem;
-  opacity: 0.8;
+  color: var(--shop-muted);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -2648,7 +2764,11 @@ textarea {
 .shop-price {
   margin: 0;
   font-weight: 700;
-  color: color-mix(in srgb, var(--shop-accent, #f42a41) 80%, #fff);
+  color: color-mix(in srgb, var(--shop-accent, #f42a41) 70%, var(--shop-fg));
+}
+
+html[data-theme="light"] .shop-price {
+  color: color-mix(in srgb, var(--shop-accent, #f42a41) 85%, #06281f);
 }
 
 .shop-price-lg {
@@ -2662,7 +2782,8 @@ textarea {
   gap: 1rem;
   flex-wrap: wrap;
   padding: 1.5rem clamp(1.25rem, 4vw, 3rem);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--shop-line);
+  color: var(--shop-muted);
 }
 
 .shop-foot p {
@@ -2895,15 +3016,15 @@ input[type="color"] {
   display: grid;
   grid-template-columns: 2.4rem 1fr 2.4rem;
   align-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--shop-line);
+  background: var(--shop-input-bg);
   overflow: hidden;
 }
 
 .shop-qty-stepper button {
   border: 0;
-  background: rgba(255, 255, 255, 0.08);
-  color: inherit;
+  background: color-mix(in srgb, var(--shop-fg) 8%, transparent);
+  color: var(--shop-fg);
   font: inherit;
   font-size: 1.15rem;
   height: 2.5rem;
@@ -2971,8 +3092,9 @@ input[type="color"] {
   gap: 0.75rem;
   align-items: center;
   padding: 0.85rem 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--shop-line);
+  background: var(--shop-surface);
+  color: var(--shop-fg);
 }
 
 .shop-cart-list.modern li {
@@ -3056,8 +3178,9 @@ input[type="color"] {
   justify-items: center;
   max-width: 26rem;
   padding: 1.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--shop-line);
+  background: var(--shop-surface-strong);
+  color: var(--shop-fg);
 }
 
 .shop-invoice-code {
@@ -3075,9 +3198,9 @@ input[type="color"] {
 .shop-cart-list input {
   width: 4.5rem;
   padding: 0.4rem 0.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(0, 0, 0, 0.25);
-  color: inherit;
+  border: 1px solid var(--shop-line);
+  background: var(--shop-input-bg);
+  color: var(--shop-fg);
   font: inherit;
 }
 
@@ -3085,23 +3208,30 @@ input[type="color"] {
   display: grid;
   gap: 0.75rem;
   padding: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--shop-line);
+  background: var(--shop-surface);
+  color: var(--shop-fg);
 }
 
 .shop-checkout-form label {
   display: grid;
   gap: 0.3rem;
   font-size: 0.92rem;
+  color: var(--shop-fg);
 }
 
 .shop-checkout-form input,
 .shop-checkout-form select {
   padding: 0.55rem 0.65rem;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(0, 0, 0, 0.25);
-  color: inherit;
+  border: 1px solid var(--shop-line);
+  background: var(--shop-input-bg);
+  color: var(--shop-fg);
   font: inherit;
+}
+
+.shop-checkout-form option {
+  color: var(--shop-fg);
+  background: var(--shop-input-bg);
 }
 
 .shop-quote {
@@ -3109,7 +3239,7 @@ input[type="color"] {
   gap: 0.35rem;
   margin-top: 0.35rem;
   padding-top: 0.75rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-top: 1px solid var(--shop-line);
 }
 
 .shop-quote p {

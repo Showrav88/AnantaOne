@@ -7,6 +7,7 @@ import {
 } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import { DisplayControls } from "../components/DisplayControls";
 import { makeToast, ShopToast, type ShopToastMessage } from "../components/ShopToast";
 import { api, type PublicShop, type ShopProduct } from "../lib/api";
 import {
@@ -121,6 +122,7 @@ export function PublicProductPage({ locale, onLocale }: Props) {
           <Link className="lang shop-cart-pill" to={`/shop/${companySlug}/checkout`}>
             {t.shop.cart} <span>{count}</span>
           </Link>
+          <DisplayControls locale={locale} compact />
           <button type="button" className="lang" onClick={onLocale}>
             {t.common.language}
           </button>
@@ -137,13 +139,13 @@ export function PublicProductPage({ locale, onLocale }: Props) {
         </div>
         <div className="shop-product-detail-body">
           <div className="shop-detail-meta">
-            <p className="muted tiny">{product.category}</p>
+            <p className="shop-sku">{product.category}</p>
             <span className={`shop-stock-chip ${available ? "ok" : "oos"}`}>
               {available ? t.shop.available : t.shop.outOfStock}
             </span>
           </div>
           <h1>{title}</h1>
-          <p className="muted">SKU {product.sku}</p>
+          <p className="shop-sku">SKU {product.sku}</p>
           <p className="shop-price shop-price-lg">৳{product.priceBdt}</p>
           {product.description ? (
             <p className="shop-detail-desc">{product.description}</p>

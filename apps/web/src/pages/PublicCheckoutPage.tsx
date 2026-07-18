@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import { DisplayControls } from "../components/DisplayControls";
 import { makeToast, ShopToast, type ShopToastMessage } from "../components/ShopToast";
 import {
   api,
@@ -261,6 +262,7 @@ export function PublicCheckoutPage({ locale, onLocale }: Props) {
           <Link className="lang" to={`/shop/${companySlug}`}>
             {t.shop.continueShopping}
           </Link>
+          <DisplayControls locale={locale} compact />
           <button type="button" className="lang" onClick={onLocale}>
             {t.common.language}
           </button>
@@ -306,7 +308,7 @@ export function PublicCheckoutPage({ locale, onLocale }: Props) {
                       >
                         {title}
                       </Link>
-                      <p className="muted tiny">
+                      <p className="shop-sku">
                         ৳{l.priceBdt} · {l.category}
                       </p>
                       <div className="shop-cart-controls">

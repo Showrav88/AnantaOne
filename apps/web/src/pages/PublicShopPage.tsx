@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import { DisplayControls } from "../components/DisplayControls";
 import { makeToast, ShopToast, type ShopToastMessage } from "../components/ShopToast";
 import { api, type PublicShop } from "../lib/api";
 import {
@@ -131,6 +132,7 @@ export function PublicShopPage({ locale, onLocale }: Props) {
           <Link className="lang shop-cart-pill" to={`/shop/${companySlug}/checkout`}>
             {t.shop.cart} <span>{count}</span>
           </Link>
+          <DisplayControls locale={locale} compact />
           <button type="button" className="lang" onClick={onLocale}>
             {t.common.language}
           </button>
@@ -226,7 +228,7 @@ export function PublicShopPage({ locale, onLocale }: Props) {
                     </div>
                     <div className="shop-product-body">
                       <h3>{title}</h3>
-                      <p className="muted tiny">
+                      <p className="shop-sku">
                         {p.sku} · {p.category}
                       </p>
                       {p.description ? (
