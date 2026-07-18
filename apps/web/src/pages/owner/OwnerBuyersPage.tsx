@@ -1,27 +1,78 @@
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
-import { api, type BuyersResponse } from "../../lib/api";
+import { api, type BuyerRow } from "../../lib/api";
+import { getStoredUser } from "../../lib/session";
 
 type Props = { locale: LocaleCode };
 
+const empty = {
+  shopName: "",
+  contactName: "",
+  phone: "",
+  address: "",
+  wardId: "",
+};
+
 export function OwnerBuyersPage({ locale }: Props) {
   const t = getMessages(locale);
-  const [buyers, setBuyers] = useState<BuyersResponse["buyers"]>([]);
+  const user = getStoredUser();
+  const canWrite = user?.role.code === "OWNER" || user?.role.code === "MANAGER";
+  const [buyers, setBuyers] = useState<BuyerRow[]>([]);
+  const [wards, setWards] = useState<
+    Array<{ id: string; name: string; nameBn: string | null }>
+  >([]);
+  const [analytics, setAnalytics] = useState<{
+    buyerCount: number;
+    totalRevenueBdt: number;
+    buyers: Array<{ id: string; onlineSpentBdt: number }>;
+  } | null>(null);
+  const [form, setForm] = useState(empty);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  async function load() {
+    const [b, w, a] = await Promise.all([
+      api.owner.buyers(),
+      api.owner.deliveryWards(),
+      api.owner.buyerAnalytics(),
+    ]);
+    setBuyers(b.buyers);
+    setWards(w.wards);
+    setAnalytics({
+      buyerCount: a.analytics.buyerCount,
+      totalRevenueBdt: a.analytics.totalRevenueBdt,
+      buyers: a.analytics.buyers.map((row) => ({
+        id: row.id,
+        onlineSpentBdt: row.onlineSpentBdt,
+      })),
+    });
+  }
+
   useEffect(() => {
     startTransition(() => {
-      void (async () => {
-        try {
-          const res = await api.owner.buyers();
-          setBuyers(res.buyers);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Failed");
-        }
-      })();
+      void load().catch((err) =>
+        setError(err instanceof Error ? err.message : "Failed"),
+      );
     });
   }, []);
+
+  async function onCreate(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api.owner.createBuyer({
+        shopName: form.shopName,
+        contactName: form.contactName || null,
+        phone: form.phone,
+        address: form.address || null,
+        wardId: form.wardId || null,
+      });
+      setForm(empty);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Create failed");
+    }
+  }
 
   return (
     <div className="owner-page">
@@ -33,22 +84,114 @@ export function OwnerBuyersPage({ locale }: Props) {
         </div>
       </header>
 
+      {analytics ? (
+        <section className="stat-grid">
+          <article>
+            <p>{t.owner.statBuyers}</p>
+            <strong>{analytics.buyerCount}</strong>
+          </article>
+          <article>
+            <p>{t.owner.buyerRevenue}</p>
+            <strong>৳{analytics.totalRevenueBdt.toLocaleString()}</strong>
+          </article>
+        </section>
+      ) : null}
+
       {error ? <p className="error">{error}</p> : null}
-      {pending && buyers.length === 0 ? (
-        <p className="muted">{t.common.loading}</p>
-      ) : (
-        <ul className="buyer-list owner">
-          {buyers.map((buyer) => (
-            <li key={buyer.id}>
-              <div className="buyer-row static">
-                <span className="shop">{buyer.shopName}</span>
-                <span className="phone">{buyer.phone}</span>
-                <span className="addr">{buyer.address ?? "—"}</span>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+
+      {canWrite ? (
+        <form className="owner-form compact" onSubmit={onCreate}>
+          <label>
+            {t.owner.fieldShopName}
+            <input
+              required
+              value={form.shopName}
+              onChange={(e) => setForm({ ...form, shopName: e.target.value })}
+            />
+          </label>
+          <label>
+            {t.owner.fieldContactName}
+            <input
+              value={form.contactName}
+              onChange={(e) =>
+                setForm({ ...form, contactName: e.target.value })
+              }
+            />
+          </label>
+          <label>
+            {t.owner.fieldPhone}
+            <input
+              required
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            />
+          </label>
+          <label>
+            {t.owner.fieldAddress}
+            <input
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+            />
+          </label>
+          <label>
+            {t.owner.fieldWard}
+            <select
+              value={form.wardId}
+              onChange={(e) => setForm({ ...form, wardId: e.target.value })}
+            >
+              <option value="">—</option>
+              {wards.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {locale === "bn" && w.nameBn ? w.nameBn : w.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="btn primary" type="submit" disabled={pending}>
+            {t.owner.addBuyer}
+          </button>
+        </form>
+      ) : null}
+
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>{t.owner.fieldShopName}</th>
+              <th>{t.owner.fieldContactName}</th>
+              <th>{t.owner.fieldPhone}</th>
+              <th>{t.owner.fieldWard}</th>
+              <th>{t.owner.buyerOrders}</th>
+              <th>{t.owner.buyerSpent}</th>
+              <th>{t.owner.buyerOnlineSpent}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {buyers.map((b) => {
+              const online =
+                analytics?.buyers.find((row) => row.id === b.id)
+                  ?.onlineSpentBdt ?? 0;
+              return (
+                <tr key={b.id} className={b.isActive ? "" : "dim"}>
+                  <td>{b.shopName}</td>
+                  <td>{b.contactName ?? "—"}</td>
+                  <td>{b.phone}</td>
+                  <td>
+                    {b.ward
+                      ? locale === "bn" && b.ward.nameBn
+                        ? b.ward.nameBn
+                        : b.ward.name
+                      : "—"}
+                  </td>
+                  <td>{b.orderCount}</td>
+                  <td>৳{b.totalSpentBdt.toLocaleString()}</td>
+                  <td>৳{online.toLocaleString()}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

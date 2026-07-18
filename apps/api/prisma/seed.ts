@@ -54,7 +54,7 @@ const mockProducts = [
     name: "Battery Water 1L",
     nameBn: "ব্যাটারি ওয়াটার ১ লিটার",
     sku: "BW-1L",
-    category: "water",
+    category: "BATTERY",
     unitCode: "BOTTLE",
     priceBdt: 35,
     stockQty: 420,
@@ -65,7 +65,7 @@ const mockProducts = [
     name: "Drinking Water 20L",
     nameBn: "পানীয় জল ২০ লিটার",
     sku: "DW-20L",
-    category: "water",
+    category: "DRINKING",
     unitCode: "DRUM",
     priceBdt: 90,
     stockQty: 65,
@@ -73,10 +73,21 @@ const mockProducts = [
     description: "R/O drinking water jar",
   },
   {
+    name: "Distilled Water 5L",
+    nameBn: "ডিস্টিলড ওয়াটার ৫ লিটার",
+    sku: "DI-5L",
+    category: "DISTILLED",
+    unitCode: "BOTTLE",
+    priceBdt: 55,
+    stockQty: 140,
+    minStock: 40,
+    description: "Lab-grade distilled water",
+  },
+  {
     name: "Drinking Water 500ml",
     nameBn: "পানীয় জল ৫০০ মি.লি.",
     sku: "DW-500",
-    category: "water",
+    category: "DRINKING",
     unitCode: "BOTTLE",
     priceBdt: 18,
     stockQty: 12,
@@ -405,6 +416,57 @@ async function main() {
       },
     });
   }
+
+  // Demo wards: nearest free, farther charged
+  for (let i = 1; i <= 15; i += 1) {
+    const name = `Ward ${i}`;
+    const existing = await prisma.deliveryWard.findFirst({
+      where: { tenantId: company.id, name, branchId: null },
+    });
+    if (!existing) {
+      await prisma.deliveryWard.create({
+        data: {
+          tenantId: company.id,
+          name,
+          nameBn: `ওয়ার্ড ${i}`,
+          sortOrder: i,
+          freeDelivery: i <= 5,
+          baseChargeBdt: i <= 5 ? 0 : 30 + i * 5,
+        },
+      });
+    }
+  }
+
+  const rateDefaults = [
+    { category: "DRINKING", chargePerUnitBdt: 5, note: "Per bottle/jar by weight" },
+    { category: "DISTILLED", chargePerUnitBdt: 8, note: "Distilled water delivery" },
+    { category: "BATTERY", chargePerUnitBdt: 10, note: "Battery water delivery" },
+    { category: "OTHER", chargePerUnitBdt: 6, note: "Fallback" },
+  ] as const;
+  for (const d of rateDefaults) {
+    await prisma.deliveryCategoryRate.upsert({
+      where: {
+        tenantId_category: { tenantId: company.id, category: d.category },
+      },
+      create: { tenantId: company.id, ...d },
+      update: {},
+    });
+  }
+
+  await prisma.coupon.upsert({
+    where: {
+      tenantId_code: { tenantId: company.id, code: "WELCOME10" },
+    },
+    create: {
+      tenantId: company.id,
+      code: "WELCOME10",
+      discountType: "PERCENT",
+      discountValue: 10,
+      minOrderBdt: 100,
+      isActive: true,
+    },
+    update: { isActive: true },
+  });
 
   console.log("Seeded:");
   console.log(`  super admin: ${superEmail} / ${superPassword}`);

@@ -299,13 +299,7 @@ ownerRouter.delete("/products/:id", requireOwnerOrManager, async (req, res) => {
   res.json({ ok: true, product: serializeProduct(product) });
 });
 
-ownerRouter.get("/buyers", async (req, res) => {
-  const buyers = await prisma.buyer.findMany({
-    where: { tenantId: tenantId(req), isActive: true },
-    orderBy: { shopName: "asc" },
-  });
-  res.json({ ok: true, buyers });
-});
+/* Buyers CRUD + analytics live on ownerCommerceRouter */
 
 function serializeProduct(product: {
   id: string;

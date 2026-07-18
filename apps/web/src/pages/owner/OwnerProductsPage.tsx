@@ -10,13 +10,20 @@ const emptyForm = {
   name: "",
   nameBn: "",
   sku: "",
-  category: "water",
+  category: "DRINKING",
   unitCode: "BOTTLE",
   priceBdt: "0",
   stockQty: "0",
   minStock: "0",
   description: "",
 };
+
+const PRODUCT_CATEGORIES = [
+  "DRINKING",
+  "DISTILLED",
+  "BATTERY",
+  "OTHER",
+] as const;
 
 export function OwnerProductsPage({ locale }: Props) {
   const t = getMessages(locale);
@@ -183,6 +190,25 @@ export function OwnerProductsPage({ locale }: Props) {
             />
           </label>
           <label>
+            {t.owner.fieldCategory}
+            <select
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+            >
+              {PRODUCT_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c === "DRINKING"
+                    ? t.owner.catDrinking
+                    : c === "DISTILLED"
+                      ? t.owner.catDistilled
+                      : c === "BATTERY"
+                        ? t.owner.catBattery
+                        : t.owner.catOther}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             {t.owner.fieldUnit}
             <select
               value={form.unitCode}
@@ -284,6 +310,7 @@ export function OwnerProductsPage({ locale }: Props) {
               <th>{t.owner.uploadProductImage}</th>
               <th>{t.owner.fieldProductName}</th>
               <th>SKU</th>
+              <th>{t.owner.fieldCategory}</th>
               <th>{t.owner.fieldPrice}</th>
               <th>{t.owner.fieldStock}</th>
               <th>{t.owner.fieldStatus}</th>
@@ -324,6 +351,7 @@ export function OwnerProductsPage({ locale }: Props) {
                 </td>
                 <td>{locale === "bn" && p.nameBn ? p.nameBn : p.name}</td>
                 <td>{p.sku}</td>
+                <td>{p.category}</td>
                 <td>৳{p.priceBdt}</td>
                 <td className={p.stockQty <= p.minStock ? "warn" : ""}>
                   {p.stockQty}
