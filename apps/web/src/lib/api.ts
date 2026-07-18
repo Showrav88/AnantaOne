@@ -362,6 +362,9 @@ export type SupplyPurchase = {
   landedUnitCostBdt: number | null;
   purchasedAt: string;
   note: string | null;
+  isReversed?: boolean;
+  reverseReason?: string | null;
+  reversedAt?: string | null;
   kind: { code: string; nameEn: string; nameBn: string } | null;
   unit: { code: string; nameEn: string; nameBn: string } | null;
   breakdown: {
@@ -1230,10 +1233,34 @@ export const api = {
         true,
       ),
     recordMaterial: (body: Record<string, unknown>) =>
-      getJson<{ ok: boolean; wallet: WalletSummary }>(
+      getJson<{ ok: boolean; wallet: WalletSummary; purchase: SupplyPurchase }>(
         "/api/v1/owner/wallet/materials",
         1,
         { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
+    updateMaterial: (id: string, body: Record<string, unknown>) =>
+      getJson<{
+        ok: boolean;
+        wallet: WalletSummary;
+        purchase: SupplyPurchase;
+        walletDeltaBdt: number;
+      }>(
+        `/api/v1/owner/wallet/materials/${encodeURIComponent(id)}`,
+        1,
+        { method: "PATCH", body: JSON.stringify(body) },
+        true,
+      ),
+    reverseMaterial: (id: string, reason: string) =>
+      getJson<{
+        ok: boolean;
+        wallet: WalletSummary;
+        purchase: SupplyPurchase;
+        cashCreditedBdt: number;
+      }>(
+        `/api/v1/owner/wallet/materials/${encodeURIComponent(id)}/reverse`,
+        1,
+        { method: "POST", body: JSON.stringify({ reason }) },
         true,
       ),
     supplyMeta: () =>

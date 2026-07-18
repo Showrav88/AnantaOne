@@ -566,6 +566,8 @@ function serializePurchase(p: {
   amountBdt: { toString(): string } | number;
   purchasedAt: Date;
   note: string | null;
+  reversedAt?: Date | null;
+  reverseReason?: string | null;
   kind?: { code: string; nameEn: string; nameBn: string };
   unit?: { code: string; nameEn: string; nameBn: string };
 }) {
@@ -589,6 +591,9 @@ function serializePurchase(p: {
     landedUnitCostBdt: qty > 0 ? total / qty : null,
     purchasedAt: p.purchasedAt,
     note: p.note,
+    isReversed: Boolean(p.reversedAt),
+    reverseReason: p.reverseReason ?? null,
+    reversedAt: p.reversedAt ?? null,
     kind: p.kind
       ? { code: p.kind.code, nameEn: p.kind.nameEn, nameBn: p.kind.nameBn }
       : null,
@@ -603,6 +608,22 @@ function serializePurchase(p: {
       totalBdt: total,
     },
   };
+}
+
+function resolvePurchaseTotals(data: {
+  goodsAmountBdt: number;
+  transportBdt?: number;
+  driverBdt?: number;
+  travelBdt?: number;
+  amountBdt?: number;
+}) {
+  const transportBdt = data.transportBdt ?? 0;
+  const driverBdt = data.driverBdt ?? 0;
+  const travelBdt = data.travelBdt ?? 0;
+  const goodsAmountBdt =
+    data.goodsAmountBdt > 0 ? data.goodsAmountBdt : (data.amountBdt ?? 0);
+  const totalBdt = goodsAmountBdt + transportBdt + driverBdt + travelBdt;
+  return { goodsAmountBdt, transportBdt, driverBdt, travelBdt, totalBdt };
 }
 
 ownerFinanceRouter.get("/wallet/supply-meta", async (_req, res) => {
@@ -670,14 +691,13 @@ ownerFinanceRouter.post(
         return;
       }
 
-      const transportBdt = parsed.data.transportBdt ?? 0;
-      const driverBdt = parsed.data.driverBdt ?? 0;
-      const travelBdt = parsed.data.travelBdt ?? 0;
-      const goodsAmountBdt =
-        parsed.data.goodsAmountBdt > 0
-          ? parsed.data.goodsAmountBdt
-          : (parsed.data.amountBdt ?? 0);
-      const totalBdt = goodsAmountBdt + transportBdt + driverBdt + travelBdt;
+      const {
+        goodsAmountBdt,
+        transportBdt,
+        driverBdt,
+        travelBdt,
+        totalBdt,
+      } = resolvePurchaseTotals(parsed.data);
       if (!(totalBdt > 0)) {
         res.status(400).json({
           ok: false,
@@ -743,6 +763,226 @@ ownerFinanceRouter.post(
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed";
+      res.status(400).json({ ok: false, message });
+    }
+  },
+);
+
+ownerFinanceRouter.patch(
+  "/wallet/materials/:id",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const parsed = materialSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: parsed.error.message });
+      return;
+    }
+
+    const existing = await prisma.materialPurchase.findFirst({
+      where: { id: String(req.params.id), tenantId: tid(req) },
+      include: { kind: true, unit: true },
+    });
+    if (!existing) {
+      res.status(404).json({ ok: false, message: "Purchase not found" });
+      return;
+    }
+    if (existing.reversedAt) {
+      res.status(400).json({
+        ok: false,
+        message: "Reversed purchase cannot be edited",
+      });
+      return;
+    }
+
+    try {
+      const kind = await prisma.supplyKindLookup.findUnique({
+        where: { code: parsed.data.kindCode },
+      });
+      const unit = await prisma.unitLookup.findUnique({
+        where: { code: parsed.data.unitCode },
+      });
+      if (!kind?.isActive || !unit?.isActive) {
+        res.status(400).json({
+          ok: false,
+          message: "Unknown supply kind or unit",
+        });
+        return;
+      }
+
+      const {
+        goodsAmountBdt,
+        transportBdt,
+        driverBdt,
+        travelBdt,
+        totalBdt,
+      } = resolvePurchaseTotals(parsed.data);
+      if (!(totalBdt > 0)) {
+        res.status(400).json({
+          ok: false,
+          message: "Total purchase amount must be greater than zero",
+        });
+        return;
+      }
+
+      const oldTotal = Number(existing.amountBdt);
+      const delta = Math.round((totalBdt - oldTotal) * 100) / 100;
+      const purchasedAt = parsed.data.purchasedAt
+        ? new Date(parsed.data.purchasedAt)
+        : existing.purchasedAt;
+      const supplierBits = [
+        parsed.data.supplierName,
+        parsed.data.supplierPhone,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      const qtyLabel = `${parsed.data.qty} ${unit.code}`;
+      const ledgerNote =
+        parsed.data.note ??
+        `${parsed.data.materialName} (${kind.code} · ${qtyLabel})${supplierBits ? ` — ${supplierBits}` : ""} · goods ৳${goodsAmountBdt}` +
+          (transportBdt || driverBdt || travelBdt
+            ? ` + trip ৳${transportBdt + driverBdt + travelBdt}`
+            : "");
+
+      const result = await prisma.$transaction(async (tx) => {
+        const wallet = await ensureCashWallet(tid(req), tx);
+        if (delta !== 0) {
+          const next = Number(wallet.balanceBdt) - delta;
+          if (next < 0) {
+            throw new Error("Insufficient cash drawer balance");
+          }
+          await tx.cashWallet.update({
+            where: { id: wallet.id },
+            data: { balanceBdt: next },
+          });
+        }
+
+        // Keep the original MATERIAL_BUY ledger row in sync with the edit.
+        await tx.cashTransaction.update({
+          where: { id: existing.cashTransactionId },
+          data: {
+            amountBdt: totalBdt,
+            note: ledgerNote,
+            updatedBy: req.auth!.id,
+          },
+        });
+
+        const purchase = await tx.materialPurchase.update({
+          where: { id: existing.id },
+          data: {
+            materialName: parsed.data.materialName,
+            kindId: kind.id,
+            unitId: unit.id,
+            qty: parsed.data.qty,
+            goodsAmountBdt,
+            transportBdt,
+            driverBdt,
+            travelBdt,
+            supplierName: parsed.data.supplierName ?? null,
+            supplierPhone: parsed.data.supplierPhone ?? null,
+            amountBdt: totalBdt,
+            note: parsed.data.note ?? null,
+            purchasedAt,
+            updatedBy: req.auth!.id,
+          },
+          include: { kind: true, unit: true },
+        });
+
+        const freshWallet = await tx.cashWallet.findUniqueOrThrow({
+          where: { id: wallet.id },
+        });
+        return { purchase, wallet: freshWallet };
+      });
+
+      res.json({
+        ok: true,
+        purchase: serializePurchase(result.purchase),
+        walletDeltaBdt: delta,
+        wallet: {
+          id: result.wallet.id,
+          balanceBdt: Number(result.wallet.balanceBdt),
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed";
+      res.status(400).json({ ok: false, message });
+    }
+  },
+);
+
+const reverseMaterialSchema = z.object({
+  reason: z.string().min(5).max(500),
+});
+
+ownerFinanceRouter.post(
+  "/wallet/materials/:id/reverse",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const parsed = reverseMaterialSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        ok: false,
+        message: "Clear reverse reason required (min 5 characters)",
+      });
+      return;
+    }
+
+    const purchase = await prisma.materialPurchase.findFirst({
+      where: { id: String(req.params.id), tenantId: tid(req) },
+      include: { kind: true, unit: true },
+    });
+    if (!purchase) {
+      res.status(404).json({ ok: false, message: "Purchase not found" });
+      return;
+    }
+    if (purchase.reversedAt) {
+      res.status(400).json({
+        ok: false,
+        message: "Purchase already reversed",
+      });
+      return;
+    }
+
+    const reason = parsed.data.reason.trim();
+    const amountBdt = Number(purchase.amountBdt);
+
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const walletResult = await recordWalletTxn({
+          tenantId: tid(req),
+          typeCode: "MATERIAL_REVERSE",
+          amountBdt,
+          note: `Supply reverse — ${purchase.materialName}: ${reason}`,
+          reference: purchase.id,
+          createdBy: req.auth!.id,
+          tx,
+        });
+        const updated = await tx.materialPurchase.update({
+          where: { id: purchase.id },
+          data: {
+            reverseReason: reason,
+            reversedAt: new Date(),
+            reversedBy: req.auth!.id,
+            reverseCashTransactionId: walletResult.transaction.id,
+            updatedBy: req.auth!.id,
+          },
+          include: { kind: true, unit: true },
+        });
+        return { updated, walletResult };
+      });
+
+      res.json({
+        ok: true,
+        purchase: serializePurchase(result.updated),
+        cashCreditedBdt: amountBdt,
+        wallet: {
+          id: result.walletResult.wallet.id,
+          balanceBdt: Number(result.walletResult.wallet.balanceBdt),
+        },
+        transaction: serializeTxn(result.walletResult.transaction),
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Material reverse failed";
       res.status(400).json({ ok: false, message });
     }
   },
@@ -885,7 +1125,11 @@ ownerFinanceRouter.get("/wallet/analytics", requireOwnerOnly, async (req, res) =
       take: 300,
     }),
     prisma.materialPurchase.findMany({
-      where: { tenantId, purchasedAt: { gte: since } },
+      where: {
+        tenantId,
+        purchasedAt: { gte: since },
+        reversedAt: null,
+      },
       include: { kind: true, unit: true },
       orderBy: { purchasedAt: "desc" },
       take: 100,
@@ -900,7 +1144,6 @@ ownerFinanceRouter.get("/wallet/analytics", requireOwnerOnly, async (req, res) =
   ]);
 
   let salesCredit = 0;
-  let materialTotal = 0;
   let salaryTotal = 0;
   let salaryReverseTotal = 0;
   let utilityTotal = 0;
@@ -915,15 +1158,18 @@ ownerFinanceRouter.get("/wallet/analytics", requireOwnerOnly, async (req, res) =
     if (txn.type.direction === "credit") {
       if (code === "SALE") salesCredit += amt;
       else if (code === "SALARY_REVERSE") salaryReverseTotal += amt;
+      else if (code === "MATERIAL_REVERSE") otherCredit += amt;
       else otherCredit += amt;
-    } else if (code === "MATERIAL_BUY") materialTotal += amt;
-    else if (code === "SALARY") salaryTotal += amt;
+    } else if (code === "MATERIAL_BUY") {
+      // Material totals come from active purchase rows (supports edits).
+    } else if (code === "SALARY") salaryTotal += amt;
     else if (code === "UTILITY") utilityTotal += amt;
     else if (code === "TRANSPORT") transportExtra += amt;
     else if (code === "EXPENSE") otherExpense += amt;
     else otherDebit += amt;
   }
 
+  let materialTotal = 0;
   let goodsSum = 0;
   let tripTransport = 0;
   let tripDriver = 0;
@@ -934,6 +1180,7 @@ ownerFinanceRouter.get("/wallet/analytics", requireOwnerOnly, async (req, res) =
   > = {};
 
   for (const p of purchases) {
+    materialTotal += Number(p.amountBdt);
     goodsSum += Number(p.goodsAmountBdt);
     tripTransport += Number(p.transportBdt);
     tripDriver += Number(p.driverBdt);
