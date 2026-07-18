@@ -2496,6 +2496,26 @@ a.cta.secondary {
   display: none;
 }
 
+.scan-panel {
+  margin-bottom: 1.25rem;
+}
+
+.scan-result {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line, #ddd);
+}
+
+.qr-scan-panel {
+  margin-top: 0.5rem;
+}
+
+.row-highlight {
+  outline: 2px solid var(--brand-primary, #0f6b4c);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--brand-primary, #0f6b4c) 8%, transparent);
+}
+
 .reverse-form {
   margin-top: 1.25rem;
   padding-top: 1rem;

@@ -1431,6 +1431,31 @@ export const api = {
         { method: "POST", body: JSON.stringify({ reason }) },
         true,
       ),
+    lookupUnitScan: (q: string) =>
+      getJson<{
+        ok: boolean;
+        kind: "unit" | "tag";
+        product: {
+          id: string;
+          name: string;
+          nameBn: string | null;
+          sku: string;
+          priceBdt: number;
+          isActive: boolean;
+          stockQty?: number;
+        };
+        batch: ProductionBatch | null;
+        unit: ProductUnitTag | null;
+        sellableBatchCount?: number;
+        canSell?: boolean;
+        code?: string;
+        message?: string;
+      }>(
+        `/api/v1/owner/units/lookup?q=${encodeURIComponent(q)}`,
+        1,
+        undefined,
+        true,
+      ),
     batchUnits: (
       id: string,
       opts?: {
