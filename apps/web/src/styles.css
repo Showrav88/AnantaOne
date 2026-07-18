@@ -1430,17 +1430,29 @@ html[data-theme="night"] .owner-nav a.active {
 .wallet-tab {
   font: inherit;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--input-bg);
   color: var(--ink);
   padding: 0.5rem 0.85rem;
   cursor: pointer;
 }
 
+.wallet-tab:hover {
+  border-color: var(--tide, #0f6b4c);
+  color: var(--tide, #0f6b4c);
+}
+
 .wallet-tab.active {
   border-color: var(--tide, #0f6b4c);
-  background: #e8f6ef;
+  background: var(--ok-bg);
   color: var(--tide, #0f6b4c);
-  font-weight: 600;
+  font-weight: 700;
+}
+
+html[data-theme="dark"] .wallet-tab.active,
+html[data-theme="night"] .wallet-tab.active {
+  color: var(--foam);
+  background: color-mix(in srgb, var(--tide, #3ecf95) 28%, var(--panel-bg));
+  border-color: var(--tide, #3ecf95);
 }
 
 .wallet-analytics .analytics-stats {
@@ -1489,14 +1501,36 @@ html[data-theme="night"] .owner-nav a.active {
 .stat-grid .credit,
 .plain-list .credit,
 .txn-breakdown-list .credit {
-  color: #0f6b4c;
+  color: var(--tide, #0f6b4c);
 }
 
 .owner-table .debit,
 .stat-grid .debit,
 .plain-list .debit,
 .txn-breakdown-list .debit {
-  color: #9a3412;
+  color: var(--bd-red-deep, #9a3412);
+}
+
+html[data-theme="dark"] .owner-table .credit,
+html[data-theme="dark"] .stat-grid .credit,
+html[data-theme="dark"] .plain-list .credit,
+html[data-theme="dark"] .txn-breakdown-list .credit,
+html[data-theme="night"] .owner-table .credit,
+html[data-theme="night"] .stat-grid .credit,
+html[data-theme="night"] .plain-list .credit,
+html[data-theme="night"] .txn-breakdown-list .credit {
+  color: #5ee4a8;
+}
+
+html[data-theme="dark"] .owner-table .debit,
+html[data-theme="dark"] .stat-grid .debit,
+html[data-theme="dark"] .plain-list .debit,
+html[data-theme="dark"] .txn-breakdown-list .debit,
+html[data-theme="night"] .owner-table .debit,
+html[data-theme="night"] .stat-grid .debit,
+html[data-theme="night"] .plain-list .debit,
+html[data-theme="night"] .txn-breakdown-list .debit {
+  color: #ff8a96;
 }
 
 @media (max-width: 700px) {
