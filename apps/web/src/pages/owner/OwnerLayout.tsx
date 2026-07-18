@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import { DisplayControls } from "../../components/DisplayControls";
 import { api, type BranchRow } from "../../lib/api";
@@ -17,6 +17,7 @@ type Props = {
 export function OwnerLayout({ locale, onLocale }: Props) {
   const t = getMessages(locale);
   const navigate = useNavigate();
+  const location = useLocation();
   const user = getStoredUser();
   const isOwner = user?.role.code === "OWNER";
   const isManager = user?.role.code === "MANAGER";
@@ -43,6 +44,31 @@ export function OwnerLayout({ locale, onLocale }: Props) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // Close drawer after navigation (mobile).
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
+  // Escape closes open menu.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMenuOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
+
+  // Lock page scroll while drawer is open.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [menuOpen]);
+
   useEffect(() => {
     void api.owner
       .branches()
@@ -63,6 +89,10 @@ export function OwnerLayout({ locale, onLocale }: Props) {
     setMenuOpen(false);
   }
 
+  function toggleMenu() {
+    setMenuOpen((v) => !v);
+  }
+
   function onSwitchBranch(value: string) {
     setActiveBranchId(value);
     setActiveBranch(value);
@@ -81,7 +111,7 @@ export function OwnerLayout({ locale, onLocale }: Props) {
           className="nav-toggle"
           aria-expanded={menuOpen}
           aria-label={menuOpen ? t.owner.closeMenu : t.owner.openMenu}
-          onClick={() => setMenuOpen((v) => !v)}
+          onClick={toggleMenu}
         >
           <span />
           <span />
