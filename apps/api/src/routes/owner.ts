@@ -343,6 +343,7 @@ const productCreateSchema = z.object({
   sku: z.string().min(2).max(64),
   category: z.string().min(2).max(64).default("water"),
   unitCode: z.string().min(2).max(32).default("BOTTLE"),
+  size: z.coerce.number().positive().nullable().optional(),
   priceBdt: z.coerce.number().nonnegative(),
   stockQty: z.coerce.number().nonnegative().default(0),
   minStock: z.coerce.number().nonnegative().default(0),
@@ -376,6 +377,7 @@ ownerRouter.post("/products", requireOwnerOnly, async (req, res) => {
         sku: parsed.data.sku,
         category: parsed.data.category,
         unitId: unit.id,
+        size: parsed.data.size ?? null,
         priceBdt: parsed.data.priceBdt,
         stockQty: parsed.data.stockQty,
         minStock: parsed.data.minStock,
@@ -457,6 +459,48 @@ ownerRouter.delete("/products/:id", requireOwnerOnly, async (req, res) => {
   res.json({ ok: true, product: serializeProduct(product) });
 });
 
+/** Owner can add a custom unit (EN + BN) for the catalog dropdown. */
+ownerRouter.post("/units", requireOwnerOnly, async (req, res) => {
+  const parsed = z
+    .object({
+      code: z
+        .string()
+        .min(2)
+        .max(32)
+        .regex(/^[A-Z][A-Z0-9_]*$/i, "Use letters/numbers/underscore"),
+      nameEn: z.string().min(1).max(64),
+      nameBn: z.string().min(1).max(64),
+    })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, message: parsed.error.message });
+    return;
+  }
+  const code = parsed.data.code.trim().toUpperCase();
+  try {
+    const unit = await prisma.unitLookup.upsert({
+      where: { code },
+      create: {
+        code,
+        nameEn: parsed.data.nameEn.trim(),
+        nameBn: parsed.data.nameBn.trim(),
+        sortOrder: 100,
+      },
+      update: {
+        nameEn: parsed.data.nameEn.trim(),
+        nameBn: parsed.data.nameBn.trim(),
+        isActive: true,
+      },
+    });
+    res.status(201).json({ ok: true, unit });
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      message: error instanceof Error ? error.message : "Failed",
+    });
+  }
+});
+
 /* Buyers CRUD + analytics live on ownerCommerceRouter */
 
 function serializeProduct(product: {
@@ -467,6 +511,7 @@ function serializeProduct(product: {
   sku: string;
   category: string;
   unitId: string;
+  size?: { toString(): string } | number | string | null;
   unit?: { code: string; nameEn: string; nameBn: string };
   priceBdt: { toString(): string } | number | string;
   stockQty: { toString(): string } | number | string;
@@ -486,6 +531,7 @@ function serializeProduct(product: {
     sku: product.sku,
     category: product.category,
     unitId: product.unitId,
+    size: product.size == null ? null : Number(product.size),
     unit: product.unit?.code ?? null,
     unitLabel: product.unit
       ? { en: product.unit.nameEn, bn: product.unit.nameBn }

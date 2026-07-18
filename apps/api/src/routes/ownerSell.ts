@@ -2,6 +2,12 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import {
+  buildUnitQrUrl,
+  createBatchUnits,
+  serializeProductUnit,
+  voidUnusedBatchUnits,
+} from "../lib/productUnits.js";
+import {
   buildInvoiceQrUrl,
   buildTagPayload,
   confirmSell,
@@ -48,7 +54,10 @@ ownerSellRouter.get("/batches", async (req, res) => {
       ...(productId ? { productId } : {}),
       isActive: true,
     },
-    include: { product: true },
+    include: {
+      product: true,
+      _count: { select: { units: true } },
+    },
     orderBy: [{ expiresAt: "asc" }, { manufacturedAt: "desc" }],
   });
   res.json({ ok: true, batches: batches.map(serializeBatch) });
@@ -56,7 +65,7 @@ ownerSellRouter.get("/batches", async (req, res) => {
 
 const batchCreateSchema = z.object({
   productId: z.string().min(1),
-  batchCode: z.string().min(2).max(64),
+  batchCode: z.string().min(2).max(64).optional(),
   manufacturedAt: z
     .string()
     .datetime()
@@ -71,6 +80,8 @@ const batchCreateSchema = z.object({
   note: z.string().max(500).nullable().optional(),
   /** When true, also increase product.stockQty by qtyProduced */
   addToStock: z.boolean().optional().default(true),
+  /** Generate unique QR unit tags for each produced item (default true). */
+  generateUnitTags: z.boolean().optional().default(true),
 });
 
 function parseDate(value: string) {
@@ -100,14 +111,19 @@ ownerSellRouter.post(
       return;
     }
 
+    const mfg = parseDate(parsed.data.manufacturedAt);
+    const autoCode =
+      parsed.data.batchCode?.trim() ||
+      `${product.sku}-${mfg.toISOString().slice(0, 10).replace(/-/g, "")}`;
+
     try {
       const batch = await prisma.$transaction(async (tx) => {
         const created = await tx.productionBatch.create({
           data: {
             tenantId: tid(req),
             productId: product.id,
-            batchCode: parsed.data.batchCode.trim().toUpperCase(),
-            manufacturedAt: parseDate(parsed.data.manufacturedAt),
+            batchCode: autoCode.toUpperCase(),
+            manufacturedAt: mfg,
             expiresAt: parsed.data.expiresAt
               ? parseDate(parsed.data.expiresAt)
               : null,
@@ -118,6 +134,29 @@ ownerSellRouter.post(
           },
           include: { product: true },
         });
+
+        let serialStart: number | null = null;
+        let serialEnd: number | null = null;
+        if (parsed.data.generateUnitTags !== false) {
+          const range = await createBatchUnits({
+            tenantId: tid(req),
+            productId: product.id,
+            productSku: product.sku,
+            batchId: created.id,
+            batchCode: created.batchCode,
+            qty: parsed.data.qtyProduced,
+            tx,
+          });
+          serialStart = range.serialStart;
+          serialEnd = range.serialEnd;
+          if (serialStart != null && serialEnd != null) {
+            await tx.productionBatch.update({
+              where: { id: created.id },
+              data: { serialStart, serialEnd },
+            });
+          }
+        }
+
         if (parsed.data.addToStock) {
           await tx.product.update({
             where: { id: product.id },
@@ -127,7 +166,14 @@ ownerSellRouter.post(
             },
           });
         }
-        return created;
+
+        return tx.productionBatch.findUniqueOrThrow({
+          where: { id: created.id },
+          include: {
+            product: true,
+            _count: { select: { units: true } },
+          },
+        });
       });
       res.status(201).json({ ok: true, batch: serializeBatch(batch) });
     } catch (error) {
@@ -212,9 +258,141 @@ ownerSellRouter.patch(
     const batch = await prisma.productionBatch.update({
       where: { id: existing.id },
       data,
-      include: { product: true },
+      include: {
+        product: true,
+        _count: { select: { units: true } },
+      },
     });
     res.json({ ok: true, batch: serializeBatch(batch) });
+  },
+);
+
+/** Full reverse of unused production — stock + unit tags return / void. */
+ownerSellRouter.post(
+  "/batches/:id/reverse",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const parsed = z
+      .object({ reason: z.string().min(5).max(500) })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        ok: false,
+        message: "Clear reverse reason required (min 5 characters)",
+      });
+      return;
+    }
+
+    const existing = await prisma.productionBatch.findFirst({
+      where: { id: String(req.params.id), tenantId: tid(req) },
+      include: { product: true },
+    });
+    if (!existing) {
+      res.status(404).json({ ok: false, message: "Batch not found" });
+      return;
+    }
+    if (existing.reversedAt || !existing.isActive) {
+      res.status(400).json({ ok: false, message: "Batch already reversed" });
+      return;
+    }
+
+    const remaining = Number(existing.qtyRemaining);
+    const produced = Number(existing.qtyProduced);
+    if (remaining < produced) {
+      res.status(400).json({
+        ok: false,
+        message: `Cannot reverse — ${produced - remaining} unit(s) already sold. Reverse those sales first.`,
+      });
+      return;
+    }
+
+    try {
+      const batch = await prisma.$transaction(async (tx) => {
+        await voidUnusedBatchUnits({
+          tenantId: tid(req),
+          batchId: existing.id,
+          tx,
+        });
+        await tx.product.update({
+          where: { id: existing.productId },
+          data: {
+            stockQty: Math.max(
+              0,
+              Number(existing.product.stockQty) - remaining,
+            ),
+            updatedBy: req.auth!.id,
+          },
+        });
+        return tx.productionBatch.update({
+          where: { id: existing.id },
+          data: {
+            qtyRemaining: 0,
+            isActive: false,
+            reversedAt: new Date(),
+            reverseReason: parsed.data.reason.trim(),
+          },
+          include: {
+            product: true,
+            _count: { select: { units: true } },
+          },
+        });
+      });
+      res.json({
+        ok: true,
+        batch: serializeBatch(batch),
+        stockRemoved: remaining,
+      });
+    } catch (error) {
+      res.status(400).json({
+        ok: false,
+        message: error instanceof Error ? error.message : "Reverse failed",
+      });
+    }
+  },
+);
+
+ownerSellRouter.get(
+  "/batches/:id/units",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const batch = await prisma.productionBatch.findFirst({
+      where: { id: String(req.params.id), tenantId: tid(req) },
+    });
+    if (!batch) {
+      res.status(404).json({ ok: false, message: "Batch not found" });
+      return;
+    }
+    const status = req.query.status ? String(req.query.status) : undefined;
+    const units = await prisma.productUnit.findMany({
+      where: {
+        tenantId: tid(req),
+        batchId: batch.id,
+        ...(status ? { status } : {}),
+      },
+      include: {
+        product: { include: { unit: true } },
+        batch: true,
+      },
+      orderBy: { serialNo: "asc" },
+      take: Math.min(Number(req.query.limit) || 500, 2000),
+    });
+    const company = await prisma.company.findUniqueOrThrow({
+      where: { id: tid(req) },
+      select: { slug: true },
+    });
+    const base = publicBaseUrl(req);
+    res.json({
+      ok: true,
+      batch: serializeBatch(batch),
+      units: units.map((u) => ({
+        ...serializeProductUnit(u),
+        qrUrl: buildUnitQrUrl({
+          publicBaseUrl: base,
+          companySlug: company.slug,
+          serialCode: u.serialCode,
+        }),
+      })),
+    });
   },
 );
 

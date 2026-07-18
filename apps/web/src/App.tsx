@@ -20,6 +20,7 @@ import { OwnerTagsPage } from "./pages/owner/OwnerTagsPage";
 import { OwnerSalesHistoryPage } from "./pages/owner/OwnerSalesHistoryPage";
 import { OwnerSitePage } from "./pages/owner/OwnerSitePage";
 import { PublicTagPage } from "./pages/PublicTagPage";
+import { PublicUnitPage } from "./pages/PublicUnitPage";
 import { PublicInvoicePage } from "./pages/PublicInvoicePage";
 import { PublicShopPage } from "./pages/PublicShopPage";
 import { PublicProductPage } from "./pages/PublicProductPage";
@@ -58,6 +59,10 @@ export function App() {
         <Route
           path="/tag/:companySlug/:sku/:batchCode"
           element={<PublicTagPage locale={locale} onLocale={toggleLocale} />}
+        />
+        <Route
+          path="/unit/:companySlug/:serialCode"
+          element={<PublicUnitPage locale={locale} onLocale={toggleLocale} />}
         />
         <Route
           path="/invoice/:companySlug/:invoiceCode"

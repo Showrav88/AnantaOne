@@ -513,7 +513,12 @@ v1Router.get("/tag/:companySlug/:sku/:batchCode", async (req, res) => {
           name: product.name,
           nameBn: product.nameBn,
           sku: product.sku,
+          size: product.size == null ? null : Number(product.size),
           unit: product.unit.code,
+          unitLabel: {
+            en: product.unit.nameEn,
+            bn: product.unit.nameBn,
+          },
           priceBdt: Number(product.priceBdt),
           description: product.description,
           imageUrl: product.imageUrl,
@@ -523,6 +528,75 @@ v1Router.get("/tag/:companySlug/:sku/:batchCode", async (req, res) => {
           manufacturedAt: batch.manufacturedAt,
           expiresAt: batch.expiresAt,
           qtyRemaining: Number(batch.qtyRemaining),
+          serialStart: batch.serialStart,
+          serialEnd: batch.serialEnd,
+        },
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    res.status(500).json({ ok: false, message });
+  }
+});
+
+/** Public unique unit QR lookup — one bottle / item. */
+v1Router.get("/unit/:companySlug/:serialCode", async (req, res) => {
+  try {
+    const companySlug = String(req.params.companySlug);
+    const serialCode = decodeURIComponent(String(req.params.serialCode));
+    const company = await prisma.company.findUnique({
+      where: { slug: companySlug },
+    });
+    if (!company || !company.isActive) {
+      res.status(404).json({ ok: false, message: "Company not found" });
+      return;
+    }
+
+    const unit = await prisma.productUnit.findFirst({
+      where: { tenantId: company.id, serialCode },
+      include: {
+        product: { include: { unit: true } },
+        batch: true,
+      },
+    });
+    if (!unit) {
+      res.status(404).json({ ok: false, message: "Unit tag not found" });
+      return;
+    }
+
+    res.json({
+      ok: true,
+      unit: {
+        serialNo: unit.serialNo,
+        serialCode: unit.serialCode,
+        status: unit.status,
+        soldAt: unit.soldAt,
+        company: {
+          name: company.name,
+          phone: company.phone,
+          logoUrl: company.logoUrl,
+          brandPrimary: company.brandPrimary,
+        },
+        product: {
+          name: unit.product.name,
+          nameBn: unit.product.nameBn,
+          sku: unit.product.sku,
+          size: unit.product.size == null ? null : Number(unit.product.size),
+          unit: unit.product.unit.code,
+          unitLabel: {
+            en: unit.product.unit.nameEn,
+            bn: unit.product.unit.nameBn,
+          },
+          priceBdt: Number(unit.product.priceBdt),
+          description: unit.product.description,
+          imageUrl: unit.product.imageUrl,
+        },
+        batch: {
+          batchCode: unit.batch.batchCode,
+          manufacturedAt: unit.batch.manufacturedAt,
+          expiresAt: unit.batch.expiresAt,
+          serialStart: unit.batch.serialStart,
+          serialEnd: unit.batch.serialEnd,
         },
       },
     });

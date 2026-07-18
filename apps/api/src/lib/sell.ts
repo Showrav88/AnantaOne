@@ -1,5 +1,9 @@
 import type { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../db.js";
+import {
+  allocateUnitsToLine,
+  restoreUnitsForOrderLines,
+} from "./productUnits.js";
 import { recordWalletTxn, serializeTxn } from "./wallet.js";
 
 type TxClient = Prisma.TransactionClient;
@@ -13,16 +17,22 @@ export function serializeBatch(batch: {
   expiresAt: Date | null;
   qtyProduced: { toString(): string } | number | string;
   qtyRemaining: { toString(): string } | number | string;
+  serialStart?: number | null;
+  serialEnd?: number | null;
   note: string | null;
   isActive: boolean;
+  reversedAt?: Date | null;
+  reverseReason?: string | null;
   product?: {
     id: string;
     name: string;
     nameBn: string | null;
     sku: string;
+    size?: { toString(): string } | number | string | null;
     priceBdt: { toString(): string } | number | string;
     description: string | null;
   };
+  _count?: { units?: number };
 }) {
   return {
     id: batch.id,
@@ -33,14 +43,20 @@ export function serializeBatch(batch: {
     expiresAt: batch.expiresAt,
     qtyProduced: Number(batch.qtyProduced),
     qtyRemaining: Number(batch.qtyRemaining),
+    serialStart: batch.serialStart ?? null,
+    serialEnd: batch.serialEnd ?? null,
+    unitTagCount: batch._count?.units ?? null,
     note: batch.note,
     isActive: batch.isActive,
+    reversedAt: batch.reversedAt ?? null,
+    reverseReason: batch.reverseReason ?? null,
     product: batch.product
       ? {
           id: batch.product.id,
           name: batch.product.name,
           nameBn: batch.product.nameBn,
           sku: batch.product.sku,
+          size: batch.product.size == null ? null : Number(batch.product.size),
           priceBdt: Number(batch.product.priceBdt),
           description: batch.product.description,
         }
@@ -341,7 +357,7 @@ export async function confirmSell(input: ConfirmSellInput) {
     });
 
     const finalCode = makeInvoiceCode(orderedAt, created.id);
-    return tx.salesOrder.update({
+    const withCode = await tx.salesOrder.update({
       where: { id: created.id },
       data: { invoiceCode: finalCode },
       include: {
@@ -351,6 +367,20 @@ export async function confirmSell(input: ConfirmSellInput) {
         lines: { include: { product: true, batch: true } },
       },
     });
+
+    // Mark individual unit tags SOLD (returned to IN_STOCK on sale reverse).
+    for (const line of withCode.lines) {
+      if (!line.batchId) continue;
+      await allocateUnitsToLine({
+        tenantId: input.tenantId,
+        batchId: line.batchId,
+        orderLineId: line.id,
+        qty: Number(line.qty),
+        tx,
+      });
+    }
+
+    return withCode;
   });
 
   const totalBdt = Number(order.totalBdt);
@@ -490,6 +520,13 @@ export async function reverseSell(input: {
         qty,
       });
     }
+
+    // Returned / cancelled sale → unit tags go back to IN_STOCK in their batch.
+    await restoreUnitsForOrderLines({
+      tenantId: input.tenantId,
+      orderLineIds: order.lines.map((l) => l.id),
+      tx,
+    });
 
     await tx.salesOrder.update({
       where: { id: order.id },
