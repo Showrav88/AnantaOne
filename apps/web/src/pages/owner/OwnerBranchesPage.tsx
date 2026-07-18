@@ -87,16 +87,12 @@ export function OwnerBranchesPage({ locale }: Props) {
       setError(t.owner.managerRequired);
       return;
     }
-    if (form.employeeIds.length === 0) {
-      setError(t.owner.employeeRequired);
-      return;
-    }
     const body = {
       name: form.name.trim(),
       address: form.address.trim() || null,
       phone: form.phone.trim() || null,
       managerId: form.managerId,
-      employeeIds: form.employeeIds,
+      employeeIds: form.employeeIds.filter((id) => id !== form.managerId),
     };
     try {
       if (editingId) {
@@ -180,7 +176,14 @@ export function OwnerBranchesPage({ locale }: Props) {
             <select
               required
               value={form.managerId}
-              onChange={(e) => setForm({ ...form, managerId: e.target.value })}
+              onChange={(e) => {
+                const managerId = e.target.value;
+                setForm({
+                  ...form,
+                  managerId,
+                  employeeIds: form.employeeIds.filter((id) => id !== managerId),
+                });
+              }}
             >
               <option value="">{t.owner.selectManager}</option>
               {assignable.map((s) => (
@@ -193,7 +196,7 @@ export function OwnerBranchesPage({ locale }: Props) {
           <fieldset className="full branch-employees">
             <legend>{t.owner.fieldBranchEmployees}</legend>
             <p className="muted tiny">{t.owner.branchEmployeesHint}</p>
-            {assignable.length === 0 ? (
+            {assignable.filter((s) => s.id !== form.managerId).length === 0 ? (
               <p className="muted tiny">{t.owner.noStaffToAssign}</p>
             ) : (
               <ul className="check-list">
@@ -238,7 +241,7 @@ export function OwnerBranchesPage({ locale }: Props) {
             <tr>
               <th>{t.owner.fieldBranchName}</th>
               <th>{t.owner.fieldBranchManager}</th>
-              <th>{t.owner.fieldBranchEmployees}</th>
+              <th>{t.owner.fieldBranchStaff}</th>
               <th>{t.owner.fieldStatus}</th>
               {isOwner ? <th /> : null}
             </tr>
@@ -265,10 +268,27 @@ export function OwnerBranchesPage({ locale }: Props) {
                   <td data-label={t.owner.fieldBranchManager}>
                     {b.manager ? b.manager.name : "—"}
                   </td>
-                  <td data-label={t.owner.fieldBranchEmployees}>
-                    {b.employees.length > 0
-                      ? b.employees.map((e) => e.name).join(", ")
-                      : "—"}
+                  <td data-label={t.owner.fieldBranchStaff}>
+                    {b.staff.length > 0 ? (
+                      <ul className="branch-staff-list">
+                        {b.staff.map((s) => {
+                          const isMgr = s.id === b.managerId;
+                          const roleLabel = isMgr
+                            ? t.owner.staffRoleManager
+                            : s.role.code === "MANAGER"
+                              ? t.owner.staffRoleManager
+                              : t.owner.staffRoleEmployee;
+                          return (
+                            <li key={s.id}>
+                              {s.name}
+                              <span className="muted tiny"> · {roleLabel}</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td data-label={t.owner.fieldStatus}>
                     {b.isActive ? "✓" : "—"}

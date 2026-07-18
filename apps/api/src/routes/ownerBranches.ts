@@ -66,6 +66,13 @@ function serializeBranch(branch: {
   }>;
 }) {
   const staff = branch.users.map(serializeStaffBrief);
+  // Designated manager must appear in staff even if users relation is briefly empty.
+  if (
+    branch.manager &&
+    !staff.some((u) => u.id === branch.manager!.id)
+  ) {
+    staff.unshift(serializeStaffBrief(branch.manager));
+  }
   return {
     id: branch.id,
     name: branch.name,
@@ -121,9 +128,8 @@ const branchCreateSchema = z.object({
   address: z.string().max(500).nullable().optional(),
   phone: z.string().max(32).nullable().optional(),
   managerId: z.string().cuid({ message: "Branch manager is required" }),
-  employeeIds: z
-    .array(z.string().cuid())
-    .min(1, { message: "Assign at least one employee to the branch" }),
+  /** Optional — a branch may have only a manager. */
+  employeeIds: z.array(z.string().cuid()).default([]),
 });
 
 ownerBranchesRouter.post("/branches", requireOwnerOnly, async (req, res) => {
@@ -134,7 +140,8 @@ ownerBranchesRouter.post("/branches", requireOwnerOnly, async (req, res) => {
   }
 
   const tenantId = tid(req);
-  const { name, address, phone, managerId, employeeIds } = parsed.data;
+  const { name, address, phone, managerId } = parsed.data;
+  const employeeIds = parsed.data.employeeIds.filter((id) => id !== managerId);
 
   const manager = await prisma.user.findFirst({
     where: {
@@ -150,16 +157,18 @@ ownerBranchesRouter.post("/branches", requireOwnerOnly, async (req, res) => {
     return;
   }
 
-  const count = await prisma.user.count({
-    where: {
-      id: { in: employeeIds },
-      tenantId,
-      role: { code: { in: ["MANAGER", "EMPLOYEE"] } },
-    },
-  });
-  if (count !== employeeIds.length) {
-    res.status(400).json({ ok: false, message: "One or more employees not found" });
-    return;
+  if (employeeIds.length > 0) {
+    const count = await prisma.user.count({
+      where: {
+        id: { in: employeeIds },
+        tenantId,
+        role: { code: { in: ["MANAGER", "EMPLOYEE"] } },
+      },
+    });
+    if (count !== employeeIds.length) {
+      res.status(400).json({ ok: false, message: "One or more employees not found" });
+      return;
+    }
   }
 
   try {
@@ -238,7 +247,13 @@ ownerBranchesRouter.patch(
       return;
     }
 
-    const { managerId, employeeIds, ...rest } = parsed.data;
+    const { managerId, ...rest } = parsed.data;
+    const employeeIds =
+      parsed.data.employeeIds === undefined
+        ? undefined
+        : parsed.data.employeeIds.filter(
+            (uid) => uid !== managerId && uid !== existing.managerId,
+          );
 
     if (managerId) {
       const manager = await prisma.user.findFirst({
@@ -257,7 +272,7 @@ ownerBranchesRouter.patch(
       }
     }
 
-    if (employeeIds) {
+    if (employeeIds && employeeIds.length > 0) {
       const count = await prisma.user.count({
         where: {
           id: { in: employeeIds },
@@ -301,7 +316,7 @@ ownerBranchesRouter.patch(
           },
         });
 
-        if (employeeIds) {
+        if (employeeIds !== undefined) {
           const keepIds = new Set(employeeIds);
           if (managerId) keepIds.add(managerId);
           else if (managerId === undefined && existing.managerId) {
