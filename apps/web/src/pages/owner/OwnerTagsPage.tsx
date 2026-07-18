@@ -597,53 +597,34 @@ export function OwnerTagsPage({ locale }: Props) {
                 />
               </label>
 
-              <fieldset className="tag-fields full">
-                <legend>{t.owner.tagFieldsLegend}</legend>
+              <div className="tag-field-list full">
+                <p className="tag-field-list-title">{t.owner.tagFieldsLegend}</p>
                 <p className="muted tiny">{t.owner.tagFieldsHint}</p>
-                <div className="tag-field-grid">
-                  {(
-                    [
-                      ["showCompany", t.owner.tagFieldCompany],
-                      ["showSku", t.owner.tagFieldSku],
-                      ["showPrice", t.owner.tagFieldPrice],
-                      ["showDescription", t.owner.tagFieldDescription],
-                      ["showMfgDate", t.owner.tagFieldMfg],
-                      ["showExpDate", t.owner.tagFieldExp],
-                      ["showBatch", t.owner.tagFieldBatch],
-                      ["showQr", t.owner.tagFieldQr],
-                    ] as const
-                  ).map(([key, label]) => (
-                    <label
-                      key={key}
-                      className={
-                        form[key]
-                          ? "tag-field-chip active"
-                          : "tag-field-chip"
+                {(
+                  [
+                    ["showCompany", t.owner.tagFieldCompany],
+                    ["showSku", t.owner.tagFieldSku],
+                    ["showPrice", t.owner.tagFieldPrice],
+                    ["showDescription", t.owner.tagFieldDescription],
+                    ["showMfgDate", t.owner.tagFieldMfg],
+                    ["showExpDate", t.owner.tagFieldExp],
+                    ["showBatch", t.owner.tagFieldBatch],
+                    ["showQr", t.owner.tagFieldQr],
+                    ["isDefault", t.owner.fieldDefault],
+                  ] as const
+                ).map(([key, label]) => (
+                  <label key={key} className="tag-field-row">
+                    <input
+                      type="checkbox"
+                      checked={form[key]}
+                      onChange={(e) =>
+                        setForm({ ...form, [key]: e.target.checked })
                       }
-                    >
-                      <input
-                        type="checkbox"
-                        checked={form[key]}
-                        onChange={(e) =>
-                          setForm({ ...form, [key]: e.target.checked })
-                        }
-                      />
-                      <span>{label}</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-
-              <label className="check full tag-default-check">
-                <input
-                  type="checkbox"
-                  checked={form.isDefault}
-                  onChange={(e) =>
-                    setForm({ ...form, isDefault: e.target.checked })
-                  }
-                />
-                <span>{t.owner.fieldDefault}</span>
-              </label>
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
               <button type="submit" className="cta" disabled={pending}>
                 {t.owner.saveTemplate}
               </button>

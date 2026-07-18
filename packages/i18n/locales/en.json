@@ -224,7 +224,7 @@
     "tagsHint": "Customize tag size and fields (SKU, sell price, description, dates, QR). Tag text can be independent of catalog.",
     "tagTemplateForm": "New tag template",
     "tagFieldsLegend": "Fields on the tag",
-    "tagFieldsHint": "Choose what prints. Tap to include or exclude — layout stays aligned.",
+    "tagFieldsHint": "Choose what prints on the tag.",
     "tagFieldCompany": "Company",
     "tagFieldSku": "SKU",
     "tagFieldPrice": "Price",
