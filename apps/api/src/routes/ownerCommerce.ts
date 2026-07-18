@@ -8,6 +8,11 @@ import {
 } from "../middleware/companyAccess.js";
 import { normalizeCategory } from "../lib/delivery.js";
 import {
+  ensureBdGeoSeeded,
+  getOrCreateDeliverySettings,
+  seedWardsForCompanyLocation,
+} from "../lib/bdGeo.js";
+import {
   acceptOnlineOrder,
   serializeOnlineOrder,
   setOnlineOrderStatus,
@@ -220,6 +225,8 @@ ownerCommerceRouter.get("/delivery/wards", async (req, res) => {
     wards: wards.map((w) => ({
       id: w.id,
       branchId: w.branchId,
+      districtId: w.districtId,
+      upazilaId: w.upazilaId,
       name: w.name,
       nameBn: w.nameBn,
       sortOrder: w.sortOrder,
@@ -299,52 +306,47 @@ ownerCommerceRouter.patch(
 );
 
 ownerCommerceRouter.post(
-  "/delivery/wards/seed-lakshmipur",
+  "/delivery/wards/seed-area",
   requireOwnerOrManager,
   async (req, res) => {
+    await ensureBdGeoSeeded();
     const tenantId = tid(req);
-    const branchId =
-      typeof req.body?.branchId === "string" ? req.body.branchId : null;
-    const created = [];
-    for (let i = 1; i <= 15; i += 1) {
-      const name = `Ward ${i}`;
-      const existing = await prisma.deliveryWard.findFirst({
-        where: { tenantId, name, branchId },
-      });
-      if (existing) {
-        created.push(existing);
-        continue;
-      }
-      const ward = await prisma.deliveryWard.create({
-        data: {
-          tenantId,
-          branchId,
-          name,
-          nameBn: `ওয়ার্ড ${i}`,
-          sortOrder: i,
-          freeDelivery: i <= 5,
-          baseChargeBdt: i <= 5 ? 0 : 30 + i * 5,
-        },
-      });
-      created.push(ward);
+    const company = await prisma.company.findUniqueOrThrow({
+      where: { id: tenantId },
+    });
+    const body = z
+      .object({
+        branchId: z.string().cuid().nullable().optional(),
+        districtId: z.string().cuid().optional(),
+        upazilaId: z.string().cuid().optional(),
+        wardCount: z.coerce.number().int().min(1).max(50).optional(),
+        freeWardCount: z.coerce.number().int().min(0).max(50).optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) {
+      res.status(400).json({ ok: false, message: body.error.message });
+      return;
     }
 
-    // Default category rates if missing
-    const defaults = [
-      { category: "DRINKING", chargePerUnitBdt: 5, note: "Per bottle/jar by weight" },
-      { category: "DISTILLED", chargePerUnitBdt: 8, note: "Distilled water delivery" },
-      { category: "BATTERY", chargePerUnitBdt: 10, note: "Battery water delivery" },
-      { category: "OTHER", chargePerUnitBdt: 6, note: "Fallback" },
-    ];
-    for (const d of defaults) {
-      await prisma.deliveryCategoryRate.upsert({
-        where: {
-          tenantId_category: { tenantId, category: d.category },
-        },
-        create: { tenantId, ...d },
-        update: {},
+    const districtId = body.data.districtId ?? company.districtId;
+    const upazilaId = body.data.upazilaId ?? company.upazilaId;
+    if (!districtId || !upazilaId) {
+      res.status(400).json({
+        ok: false,
+        message:
+          "Set company division → district → upazila first (Company page)",
       });
+      return;
     }
+
+    const created = await seedWardsForCompanyLocation({
+      tenantId,
+      branchId: body.data.branchId ?? null,
+      districtId,
+      upazilaId,
+      wardCount: body.data.wardCount,
+      freeWardCount: body.data.freeWardCount,
+    });
 
     res.json({
       ok: true,
@@ -352,6 +354,111 @@ ownerCommerceRouter.post(
         ...w,
         baseChargeBdt: Number(w.baseChargeBdt),
       })),
+    });
+  },
+);
+
+/** @deprecated alias — use seed-area */
+ownerCommerceRouter.post(
+  "/delivery/wards/seed-lakshmipur",
+  requireOwnerOrManager,
+  async (req, res) => {
+    await ensureBdGeoSeeded();
+    const tenantId = tid(req);
+    let company = await prisma.company.findUniqueOrThrow({
+      where: { id: tenantId },
+    });
+
+    if (!company.upazilaId) {
+      const upazila = await prisma.bdUpazila.findFirst({
+        where: { code: "lakshmipur-01" },
+        include: { district: true },
+      });
+      if (upazila) {
+        company = await prisma.company.update({
+          where: { id: tenantId },
+          data: {
+            divisionId: upazila.district.divisionId,
+            districtId: upazila.districtId,
+            upazilaId: upazila.id,
+          },
+        });
+      }
+    }
+
+    if (!company.districtId || !company.upazilaId) {
+      res.status(400).json({
+        ok: false,
+        message: "Could not resolve Lakshmipur Sadar — set company location",
+      });
+      return;
+    }
+
+    const created = await seedWardsForCompanyLocation({
+      tenantId,
+      branchId:
+        typeof req.body?.branchId === "string" ? req.body.branchId : null,
+      districtId: company.districtId,
+      upazilaId: company.upazilaId,
+      wardCount: 15,
+      freeWardCount: 5,
+    });
+
+    res.json({
+      ok: true,
+      wards: created.map((w) => ({
+        ...w,
+        baseChargeBdt: Number(w.baseChargeBdt),
+      })),
+    });
+  },
+);
+
+ownerCommerceRouter.get("/delivery/settings", async (req, res) => {
+  const settings = await getOrCreateDeliverySettings(tid(req));
+  res.json({
+    ok: true,
+    settings: {
+      outsideAreaChargeBdt: Number(settings.outsideAreaChargeBdt),
+      sameDistrictChargeBdt: Number(settings.sameDistrictChargeBdt),
+      otherDistrictChargeBdt: Number(settings.otherDistrictChargeBdt),
+      defaultWardCount: settings.defaultWardCount,
+      freeWardCount: settings.freeWardCount,
+    },
+  });
+});
+
+ownerCommerceRouter.patch(
+  "/delivery/settings",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const parsed = z
+      .object({
+        outsideAreaChargeBdt: z.coerce.number().nonnegative().optional(),
+        sameDistrictChargeBdt: z.coerce.number().nonnegative().optional(),
+        otherDistrictChargeBdt: z.coerce.number().nonnegative().optional(),
+        defaultWardCount: z.coerce.number().int().min(1).max(50).optional(),
+        freeWardCount: z.coerce.number().int().min(0).max(50).optional(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: parsed.error.message });
+      return;
+    }
+    await getOrCreateDeliverySettings(tid(req));
+    const settings = await prisma.deliverySettings.update({
+      where: { tenantId: tid(req) },
+      data: parsed.data,
+    });
+    res.json({
+      ok: true,
+      settings: {
+        outsideAreaChargeBdt: Number(settings.outsideAreaChargeBdt),
+        sameDistrictChargeBdt: Number(settings.sameDistrictChargeBdt),
+        otherDistrictChargeBdt: Number(settings.otherDistrictChargeBdt),
+        defaultWardCount: settings.defaultWardCount,
+        freeWardCount: settings.freeWardCount,
+      },
     });
   },
 );

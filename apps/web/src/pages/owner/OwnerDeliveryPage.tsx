@@ -53,22 +53,51 @@ export function OwnerDeliveryPage({ locale }: Props) {
     discountValue: "10",
     minOrderBdt: "",
   });
+  const [locationLabel, setLocationLabel] = useState("");
+  const [settings, setSettings] = useState({
+    outsideAreaChargeBdt: "80",
+    sameDistrictChargeBdt: "120",
+    otherDistrictChargeBdt: "250",
+    defaultWardCount: "15",
+    freeWardCount: "5",
+  });
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   async function load(selectedBranch?: string) {
     const branchFilter = selectedBranch ?? branchId;
-    const [company, w, r, c] = await Promise.all([
+    const [company, w, r, c, s] = await Promise.all([
       api.owner.company(),
       api.owner.deliveryWards(branchFilter || undefined),
       api.owner.deliveryRates(),
       api.owner.coupons(),
+      api.owner.deliverySettings(),
     ]);
     setBranches(company.company.branches.map((b) => ({ id: b.id, name: b.name })));
     setWards(w.wards);
     setRates(r.rates);
     setCoupons(c.coupons);
+    setSettings({
+      outsideAreaChargeBdt: String(s.settings.outsideAreaChargeBdt),
+      sameDistrictChargeBdt: String(s.settings.sameDistrictChargeBdt),
+      otherDistrictChargeBdt: String(s.settings.otherDistrictChargeBdt),
+      defaultWardCount: String(s.settings.defaultWardCount),
+      freeWardCount: String(s.settings.freeWardCount),
+    });
+    const co = company.company;
+    const parts = [
+      locale === "bn" && co.upazila?.nameBn
+        ? co.upazila.nameBn
+        : co.upazila?.name,
+      locale === "bn" && co.district?.nameBn
+        ? co.district.nameBn
+        : co.district?.name,
+      locale === "bn" && co.division?.nameBn
+        ? co.division.nameBn
+        : co.division?.name,
+    ].filter(Boolean);
+    setLocationLabel(parts.join(" · ") || t.owner.setCompanyLocationFirst);
   }
 
   useEffect(() => {
@@ -83,11 +112,33 @@ export function OwnerDeliveryPage({ locale }: Props) {
   async function seedWards() {
     setError(null);
     try {
-      await api.owner.seedLakshmipurWards(branchId || null);
+      await api.owner.seedDeliveryArea({
+        branchId: branchId || null,
+        wardCount: Number(settings.defaultWardCount) || 15,
+        freeWardCount: Number(settings.freeWardCount) || 5,
+      });
       setOkMsg(t.owner.wardsSeeded);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Seed failed");
+    }
+  }
+
+  async function saveSettings(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api.owner.updateDeliverySettings({
+        outsideAreaChargeBdt: Number(settings.outsideAreaChargeBdt),
+        sameDistrictChargeBdt: Number(settings.sameDistrictChargeBdt),
+        otherDistrictChargeBdt: Number(settings.otherDistrictChargeBdt),
+        defaultWardCount: Number(settings.defaultWardCount),
+        freeWardCount: Number(settings.freeWardCount),
+      });
+      setOkMsg(t.owner.saved);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
     }
   }
 
@@ -176,6 +227,78 @@ export function OwnerDeliveryPage({ locale }: Props) {
       {pending && wards.length === 0 ? (
         <p className="muted">{t.common.loading}</p>
       ) : null}
+
+      <section className="panel-card">
+        <h2>{t.owner.deliveryZoneCharges}</h2>
+        <p className="muted tiny">{t.owner.deliveryZoneHint}</p>
+        <p className="muted tiny">
+          {t.owner.fieldUpazila}: {locationLabel}
+        </p>
+        {canWrite ? (
+          <form className="owner-form compact" onSubmit={saveSettings}>
+            <label>
+              {t.owner.outsideAreaCharge}
+              <input
+                type="number"
+                min={0}
+                value={settings.outsideAreaChargeBdt}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    outsideAreaChargeBdt: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              {t.owner.sameDistrictCharge}
+              <input
+                type="number"
+                min={0}
+                value={settings.sameDistrictChargeBdt}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    sameDistrictChargeBdt: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              {t.owner.otherDistrictCharge}
+              <input
+                type="number"
+                min={0}
+                value={settings.otherDistrictChargeBdt}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    otherDistrictChargeBdt: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              {t.owner.wardCount}
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={settings.defaultWardCount}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    defaultWardCount: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <button className="btn primary" type="submit">
+              {t.common.save}
+            </button>
+          </form>
+        ) : null}
+      </section>
 
       <section className="panel-card">
         <h2>{t.owner.wardsTitle}</h2>

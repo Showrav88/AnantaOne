@@ -97,6 +97,15 @@ export type Product = {
   createdAt?: string;
 };
 
+export type GeoPlace = {
+  id: string;
+  code?: string;
+  name: string;
+  nameBn: string | null;
+  divisionId?: string;
+  districtId?: string;
+};
+
 export type CompanyDetails = {
   id: string;
   name: string;
@@ -104,6 +113,12 @@ export type CompanyDetails = {
   locale: string;
   phone: string | null;
   address: string | null;
+  divisionId?: string | null;
+  districtId?: string | null;
+  upazilaId?: string | null;
+  division?: GeoPlace | null;
+  district?: GeoPlace | null;
+  upazila?: GeoPlace | null;
   tagline: string | null;
   description: string | null;
   logoUrl?: string | null;
@@ -164,6 +179,8 @@ export type ShopWard = {
   id: string;
   name: string;
   nameBn: string | null;
+  districtId?: string | null;
+  upazilaId?: string | null;
   freeDelivery: boolean;
   baseChargeBdt: number;
 };
@@ -187,6 +204,8 @@ export type DeliveryQuote = {
   discountBdt: number;
   totalBdt: number;
   freeDelivery: boolean;
+  zone?: string;
+  zoneLabel?: string;
   ward: ShopWard | null;
   coupon: {
     id: string;
@@ -208,6 +227,17 @@ export type PublicShop = {
   locale: string;
   phone: string | null;
   address: string | null;
+  divisionId?: string | null;
+  districtId?: string | null;
+  upazilaId?: string | null;
+  division?: { id: string; name: string; nameBn: string | null } | null;
+  district?: { id: string; name: string; nameBn: string | null } | null;
+  upazila?: { id: string; name: string; nameBn: string | null } | null;
+  deliveryCharges?: {
+    outsideAreaBdt: number;
+    sameDistrictBdt: number;
+    otherDistrictBdt: number;
+  };
   tagline: string | null;
   description: string | null;
   logoUrl: string | null;
@@ -598,10 +628,24 @@ export const api = {
     getJson<{ ok: boolean; product: ShopProduct }>(
       `/api/v1/shop/${encodeURIComponent(companySlug)}/products/${encodeURIComponent(productId)}`,
     ),
+  geo: {
+    divisions: () =>
+      getJson<{ ok: boolean; divisions: GeoPlace[] }>("/api/v1/geo/divisions"),
+    districts: (divisionId?: string) =>
+      getJson<{ ok: boolean; districts: GeoPlace[] }>(
+        `/api/v1/geo/districts${divisionId ? `?divisionId=${encodeURIComponent(divisionId)}` : ""}`,
+      ),
+    upazilas: (districtId: string) =>
+      getJson<{ ok: boolean; upazilas: GeoPlace[] }>(
+        `/api/v1/geo/upazilas?districtId=${encodeURIComponent(districtId)}`,
+      ),
+  },
   shopQuote: (
     companySlug: string,
     body: {
-      wardId: string;
+      districtId?: string | null;
+      upazilaId?: string | null;
+      wardId?: string | null;
       branchId?: string | null;
       couponCode?: string | null;
       lines: Array<{ productId: string; qty: number }>;
@@ -619,7 +663,9 @@ export const api = {
       clientName: string;
       phone: string;
       address: string;
-      wardId: string;
+      districtId?: string | null;
+      upazilaId?: string | null;
+      wardId?: string | null;
       branchId?: string | null;
       couponCode?: string | null;
       note?: string | null;
@@ -702,8 +748,14 @@ export const api = {
         undefined,
         true,
       ),
-    updateCompany: (body: Partial<CompanyDetails>) =>
-      getJson<{ ok: boolean; company: CompanyDetails }>(
+    updateCompany: (
+      body: Partial<CompanyDetails> & {
+        setupDeliveryAreas?: boolean;
+        wardCount?: number;
+        freeWardCount?: number;
+      },
+    ) =>
+      getJson<{ ok: boolean; company: CompanyDetails; wardsSeeded?: number }>(
         "/api/v1/owner/company",
         1,
         { method: "PATCH", body: JSON.stringify(body) },
@@ -884,6 +936,22 @@ export const api = {
         { method: "PATCH", body: JSON.stringify(body) },
         true,
       ),
+    seedDeliveryArea: (body?: {
+      branchId?: string | null;
+      districtId?: string;
+      upazilaId?: string;
+      wardCount?: number;
+      freeWardCount?: number;
+    }) =>
+      getJson<{ ok: boolean; wards: unknown[] }>(
+        "/api/v1/owner/delivery/wards/seed-area",
+        1,
+        {
+          method: "POST",
+          body: JSON.stringify(body ?? {}),
+        },
+        true,
+      ),
     seedLakshmipurWards: (branchId?: string | null) =>
       getJson<{ ok: boolean; wards: unknown[] }>(
         "/api/v1/owner/delivery/wards/seed-lakshmipur",
@@ -892,6 +960,33 @@ export const api = {
           method: "POST",
           body: JSON.stringify({ branchId: branchId ?? null }),
         },
+        true,
+      ),
+    deliverySettings: () =>
+      getJson<{
+        ok: boolean;
+        settings: {
+          outsideAreaChargeBdt: number;
+          sameDistrictChargeBdt: number;
+          otherDistrictChargeBdt: number;
+          defaultWardCount: number;
+          freeWardCount: number;
+        };
+      }>("/api/v1/owner/delivery/settings", 2, undefined, true),
+    updateDeliverySettings: (body: Record<string, unknown>) =>
+      getJson<{
+        ok: boolean;
+        settings: {
+          outsideAreaChargeBdt: number;
+          sameDistrictChargeBdt: number;
+          otherDistrictChargeBdt: number;
+          defaultWardCount: number;
+          freeWardCount: number;
+        };
+      }>(
+        "/api/v1/owner/delivery/settings",
+        1,
+        { method: "PATCH", body: JSON.stringify(body) },
         true,
       ),
     deliveryRates: () =>
