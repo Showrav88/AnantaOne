@@ -1,4 +1,5 @@
 import { useEffect, useState, useTransition } from "react";
+import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import { api } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
@@ -147,12 +148,26 @@ export function OwnerOnlineOrdersPage({ locale }: Props) {
               <div className="media-actions">
                 {o.status?.code === "PENDING" ? (
                   <>
+                    {o.phone ? (
+                      <a
+                        className="btn ghost compact"
+                        href={`tel:${o.phone}`}
+                      >
+                        {t.owner.onlineCallCustomer}
+                      </a>
+                    ) : null}
+                    <Link
+                      className="btn primary compact"
+                      to={`/owner/sell?onlineOrderId=${encodeURIComponent(o.id)}`}
+                    >
+                      {t.owner.onlineConfirmSell}
+                    </Link>
                     <button
                       type="button"
-                      className="btn primary compact"
+                      className="btn ghost compact"
                       onClick={() => void accept(o.id)}
                     >
-                      {t.owner.acceptOrder}
+                      {t.owner.onlineQuickAccept}
                     </button>
                     <button
                       type="button"

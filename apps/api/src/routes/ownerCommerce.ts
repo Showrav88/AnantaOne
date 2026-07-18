@@ -683,6 +683,34 @@ ownerCommerceRouter.get("/online-orders", async (req, res) => {
   });
 });
 
+ownerCommerceRouter.get("/online-orders/:id", async (req, res) => {
+  const scope = resolveBranchScope(req);
+  const order = await prisma.salesOrder.findFirst({
+    where: {
+      id: String(req.params.id),
+      tenantId: tid(req),
+      source: { code: "ONLINE" },
+    },
+    include: {
+      source: true,
+      status: true,
+      buyer: true,
+      ward: true,
+      coupon: true,
+      lines: { include: { product: true, batch: true } },
+    },
+  });
+  if (!order) {
+    res.status(404).json({ ok: false, message: "Order not found" });
+    return;
+  }
+  if (!canAccessBranch(scope, order.branchId)) {
+    res.status(403).json({ ok: false, message: "Order belongs to another branch" });
+    return;
+  }
+  res.json({ ok: true, order: serializeOnlineOrder(order) });
+});
+
 ownerCommerceRouter.post(
   "/online-orders/:id/accept",
   requireOwnerOrManager,
@@ -701,11 +729,28 @@ ownerCommerceRouter.post(
         res.status(403).json({ ok: false, message: "Order belongs to another branch" });
         return;
       }
+      const lineSchema = z.object({
+        productId: z.string().min(1),
+        qty: z.coerce.number().positive(),
+        unitPriceBdt: z.coerce.number().nonnegative().optional(),
+        batchId: z.string().cuid().nullable().optional(),
+      });
+      const body = z
+        .object({
+          creditWallet: z.boolean().optional(),
+          lines: z.array(lineSchema).optional(),
+        })
+        .safeParse(req.body ?? {});
+      if (!body.success) {
+        res.status(400).json({ ok: false, message: body.error.message });
+        return;
+      }
       const order = await acceptOnlineOrder({
         tenantId: tid(req),
         orderId: String(req.params.id),
         userId: req.auth!.id,
-        creditWallet: req.body?.creditWallet !== false,
+        creditWallet: body.data.creditWallet !== false,
+        lines: body.data.lines,
       });
       res.json({ ok: true, order });
     } catch (err) {

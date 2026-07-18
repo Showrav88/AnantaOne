@@ -169,12 +169,24 @@ export async function placeOnlineOrder(input: OnlineCheckoutInput) {
   return { order, quote };
 }
 
-/** Accept pending online order: allocate FEFO batches, confirm, credit wallet. */
+export type AcceptOnlineLine = {
+  productId: string;
+  qty: number;
+  unitPriceBdt?: number;
+  batchId?: string | null;
+};
+
+/**
+ * Accept pending online order: allocate batches (preferred or FEFO),
+ * confirm, credit wallet. Optional `lines` let staff confirm qty with the
+ * customer on the Sell page before stock-out.
+ */
 export async function acceptOnlineOrder(opts: {
   tenantId: string;
   orderId: string;
   userId: string;
   creditWallet?: boolean;
+  lines?: AcceptOnlineLine[];
 }) {
   return prisma.$transaction(async (tx) => {
     const order = await tx.salesOrder.findFirst({
@@ -194,12 +206,72 @@ export async function acceptOnlineOrder(opts: {
       where: { code: "ACCEPTED" },
     });
 
-    for (const line of order.lines) {
+    // Confirmed lines from Sell page, or original cart.
+    const workLines: AcceptOnlineLine[] =
+      opts.lines && opts.lines.length > 0
+        ? opts.lines
+        : order.lines.map((l) => ({
+            productId: l.productId,
+            qty: Number(l.qty),
+            unitPriceBdt: Number(l.unitPriceBdt),
+            batchId: null,
+          }));
+
+    if (opts.lines && opts.lines.length > 0) {
+      await tx.orderLine.deleteMany({ where: { orderId: order.id } });
+      let subtotal = 0;
+      for (const line of workLines) {
+        if (!(line.qty > 0)) throw new Error("Line qty must be positive");
+        const product = await tx.product.findFirst({
+          where: {
+            id: line.productId,
+            tenantId: opts.tenantId,
+            isActive: true,
+          },
+        });
+        if (!product) throw new Error("Product not found");
+        const unitPrice =
+          line.unitPriceBdt != null
+            ? line.unitPriceBdt
+            : Number(product.priceBdt);
+        const lineTotal = unitPrice * line.qty;
+        subtotal += lineTotal;
+        await tx.orderLine.create({
+          data: {
+            orderId: order.id,
+            productId: product.id,
+            qty: line.qty,
+            catalogPriceBdt: Number(product.priceBdt),
+            unitPriceBdt: unitPrice,
+            lineTotalBdt: lineTotal,
+          },
+        });
+      }
+      const delivery = Number(order.deliveryBdt);
+      const discount = Number(order.discountBdt);
+      await tx.salesOrder.update({
+        where: { id: order.id },
+        data: {
+          subtotalBdt: subtotal,
+          totalBdt: Math.max(0, subtotal + delivery - discount),
+        },
+      });
+    }
+
+    const freshLines = await tx.orderLine.findMany({
+      where: { orderId: order.id },
+      include: { product: true },
+    });
+
+    for (let i = 0; i < freshLines.length; i++) {
+      const line = freshLines[i]!;
+      const override = workLines[i];
       const batch = await pickBatchFefo(
         opts.tenantId,
         line.productId,
         Number(line.qty),
         tx,
+        override?.batchId,
       );
       await tx.productionBatch.update({
         where: { id: batch.id },
@@ -222,22 +294,33 @@ export async function acceptOnlineOrder(opts: {
       });
     }
 
+    const totalRow = await tx.salesOrder.findUniqueOrThrow({
+      where: { id: order.id },
+      select: {
+        totalBdt: true,
+        invoiceCode: true,
+        buyerId: true,
+        buyerName: true,
+        shopName: true,
+      },
+    });
+
     let saleId: string | null = null;
-    if (opts.creditWallet !== false && Number(order.totalBdt) > 0) {
+    if (opts.creditWallet !== false && Number(totalRow.totalBdt) > 0) {
       const { transaction } = await recordWalletTxn({
         tenantId: opts.tenantId,
         typeCode: "SALE",
-        amountBdt: Number(order.totalBdt),
-        note: `Online order ${order.invoiceCode}`,
+        amountBdt: Number(totalRow.totalBdt),
+        note: `Online order ${totalRow.invoiceCode}`,
         createdBy: opts.userId,
         tx,
       });
       const sale = await tx.sale.create({
         data: {
           tenantId: opts.tenantId,
-          buyerId: order.buyerId,
-          buyerName: order.buyerName ?? order.shopName,
-          amountBdt: Number(order.totalBdt),
+          buyerId: totalRow.buyerId,
+          buyerName: totalRow.buyerName ?? totalRow.shopName,
+          amountBdt: Number(totalRow.totalBdt),
           cashTransactionId: transaction.id,
           soldAt: new Date(),
           createdBy: opts.userId,
