@@ -109,11 +109,13 @@ export function OwnerBuyersPage({ locale }: Props) {
       {error ? <p className="error">{error}</p> : null}
 
       {canWrite ? (
-        <form className="owner-form compact" onSubmit={onCreate}>
+        <form className="owner-form compact" autoComplete="off" onSubmit={onCreate}>
           <label>
             {t.owner.fieldShopName}
             <input
               required
+              name="buyerShopName"
+              autoComplete="off"
               value={form.shopName}
               onChange={(e) => setForm({ ...form, shopName: e.target.value })}
             />
@@ -121,6 +123,8 @@ export function OwnerBuyersPage({ locale }: Props) {
           <label>
             {t.owner.fieldContactName}
             <input
+              name="buyerContactName"
+              autoComplete="off"
               value={form.contactName}
               onChange={(e) =>
                 setForm({ ...form, contactName: e.target.value })
@@ -131,6 +135,10 @@ export function OwnerBuyersPage({ locale }: Props) {
             {t.owner.fieldPhone}
             <input
               required
+              name="buyerPhone"
+              type="tel"
+              autoComplete="off"
+              inputMode="tel"
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
             />
