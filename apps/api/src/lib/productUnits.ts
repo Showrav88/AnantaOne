@@ -15,22 +15,21 @@ export function makeSerialCode(opts: {
 }
 
 /**
- * QR payload for a unit tag — short code only (not a URL).
- * Example: MW001000001
+ * Unit tag QR payload = validation URL with short serial in the path.
+ * Phone scan opens public unit page; in-app scan can parse the serial.
+ * Example: https://app/#/unit/acme/MW001000001
  */
-export function buildUnitQrPayload(opts: { serialCode: string }) {
-  return opts.serialCode;
-}
-
-/** @deprecated Use buildUnitQrPayload — tags encode short codes, not URLs. */
 export function buildUnitQrUrl(opts: {
-  publicBaseUrl?: string;
-  companySlug?: string;
+  publicBaseUrl: string;
+  companySlug: string;
   serialCode: string;
 }) {
-  void opts.publicBaseUrl;
-  void opts.companySlug;
-  return buildUnitQrPayload({ serialCode: opts.serialCode });
+  return `${opts.publicBaseUrl.replace(/\/$/, "")}/#/unit/${opts.companySlug}/${encodeURIComponent(opts.serialCode)}`;
+}
+
+/** Bare short code (also printed as human-readable text on the tag). */
+export function buildUnitQrPayload(opts: { serialCode: string }) {
+  return opts.serialCode;
 }
 
 export async function nextSerialStart(
@@ -90,6 +89,40 @@ export async function createBatchUnits(opts: {
   }
 
   return { serialStart, serialEnd };
+}
+
+/** Allocate one specific tagged unit (from QR scan) to an order line. */
+export async function allocateUnitBySerial(opts: {
+  tenantId: string;
+  serialCode: string;
+  orderLineId: string;
+  expectedBatchId?: string | null;
+  tx: TxClient;
+}) {
+  const unit = await opts.tx.productUnit.findFirst({
+    where: {
+      tenantId: opts.tenantId,
+      serialCode: opts.serialCode,
+    },
+  });
+  if (!unit) {
+    throw new Error(`Unit tag ${opts.serialCode} not found`);
+  }
+  if (unit.status !== "IN_STOCK") {
+    throw new Error(`Unit ${opts.serialCode} is not in stock (${unit.status})`);
+  }
+  if (opts.expectedBatchId && unit.batchId !== opts.expectedBatchId) {
+    throw new Error(`Unit ${opts.serialCode} is not in the selected batch`);
+  }
+  await opts.tx.productUnit.update({
+    where: { id: unit.id },
+    data: {
+      status: "SOLD",
+      orderLineId: opts.orderLineId,
+      soldAt: new Date(),
+    },
+  });
+  return unit;
 }
 
 /** Allocate N in-stock units from a batch to an order line (sale). */

@@ -1,6 +1,7 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import { QrScannerPanel } from "../../components/QrScannerPanel";
 import {
   api,
   type Product,
@@ -23,6 +24,7 @@ const empty = {
 export function OwnerBatchesPage({ locale }: Props) {
   const t = getMessages(locale);
   const user = getStoredUser();
+  const [searchParams] = useSearchParams();
   const canWrite =
     user?.role.code === "OWNER" || user?.role.code === "MANAGER";
   const [products, setProducts] = useState<Product[]>([]);
@@ -35,6 +37,11 @@ export function OwnerBatchesPage({ locale }: Props) {
   const [editMfg, setEditMfg] = useState("");
   const [editExp, setEditExp] = useState("");
   const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [highlightBatchId, setHighlightBatchId] = useState<string | null>(
+    searchParams.get("batchId"),
+  );
+  const [scanning, setScanning] = useState(false);
+  const [scanQuery, setScanQuery] = useState("");
 
   const [reverseBatch, setReverseBatch] = useState<ProductionBatch | null>(
     null,
@@ -62,6 +69,40 @@ export function OwnerBatchesPage({ locale }: Props) {
       );
     });
   }, []);
+
+  useEffect(() => {
+    const productId = searchParams.get("productId");
+    const batchId = searchParams.get("batchId");
+    if (productId) {
+      setForm((f) => ({ ...f, productId }));
+    }
+    if (batchId) setHighlightBatchId(batchId);
+  }, [searchParams]);
+
+  async function applyScan(raw: string) {
+    setError(null);
+    setOkMsg(null);
+    setScanning(false);
+    try {
+      const res = await api.owner.lookupUnitScan(raw);
+      if (!res.batch) {
+        setError(t.owner.scanNoBatch.replace("{sku}", res.product.sku));
+        setForm((f) => ({ ...f, productId: res.product.id }));
+        setHighlightBatchId(null);
+        return;
+      }
+      setForm((f) => ({ ...f, productId: res.product.id }));
+      setHighlightBatchId(res.batch.id);
+      setOkMsg(
+        t.owner.scanBatchFound
+          .replace("{batch}", res.batch.batchCode)
+          .replace("{sku}", res.product.sku),
+      );
+      setScanQuery("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Scan failed");
+    }
+  }
 
   function startEdit(b: ProductionBatch) {
     setEditId(b.id);
@@ -176,6 +217,53 @@ export function OwnerBatchesPage({ locale }: Props) {
 
       {error ? <p className="error-banner no-print">{error}</p> : null}
       {okMsg ? <p className="ok-banner no-print">{okMsg}</p> : null}
+
+      <section className="panel-card scan-panel no-print">
+        <h2>{t.owner.scanBatchTitle}</h2>
+        <p className="muted tiny">{t.owner.scanBatchHint}</p>
+        <div className="owner-form compact">
+          <label className="full">
+            {t.owner.scanUnitLabel}
+            <input
+              value={scanQuery}
+              placeholder={t.owner.scanUnitPlaceholder}
+              onChange={(e) => setScanQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (scanQuery.trim()) void applyScan(scanQuery.trim());
+                }
+              }}
+            />
+          </label>
+          <div className="form-actions">
+            <button
+              type="button"
+              className="btn primary"
+              disabled={!scanQuery.trim()}
+              onClick={() => void applyScan(scanQuery.trim())}
+            >
+              {t.owner.scanUnitLookup}
+            </button>
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => setScanning(true)}
+            >
+              {t.owner.scanUnitCamera}
+            </button>
+          </div>
+          <QrScannerPanel
+            readerId="batches-unit-qr-reader"
+            active={scanning}
+            onScan={(decoded) => void applyScan(decoded)}
+            onError={(message) => setError(message)}
+            stopLabel={t.common.cancel}
+            onStop={() => setScanning(false)}
+          />
+        </div>
+      </section>
+
       {canWrite ? (
         <form className="owner-form compact no-print" onSubmit={onCreate}>
           <h2 className="full">{t.owner.batchesGuideProduction}</h2>
@@ -286,7 +374,16 @@ export function OwnerBatchesPage({ locale }: Props) {
                 const canSoftDelete =
                   !softDeleted && b.qtyRemaining >= b.qtyProduced;
                 return (
-                  <tr key={b.id} className={softDeleted ? "dim" : ""}>
+                  <tr
+                    key={b.id}
+                    className={[
+                      softDeleted ? "dim" : "",
+                      highlightBatchId === b.id ? "row-highlight" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    id={highlightBatchId === b.id ? "scanned-batch" : undefined}
+                  >
                     <td data-label={t.owner.fieldBatchCode}>
                       <strong>{b.batchCode}</strong>
                     </td>

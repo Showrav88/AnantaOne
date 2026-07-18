@@ -252,12 +252,12 @@ export function OwnerTagsPage({ locale }: Props) {
     const unitSerialCode = selectedProduct
       ? makeShortSerialCode(selectedProduct.sku, sampleSerial)
       : null;
-    // Tag QR encodes short codes only — not website URLs.
+    // Tag QR = validation URL (short code stays in the path / printed text).
     const qrValue =
-      tpl.showQr && selectedBatch
+      tpl.showQr && company?.slug && selectedBatch
         ? printMode === "units" && unitSerialCode
-          ? unitSerialCode
-          : `${selectedProduct.sku}/${selectedBatch.batchCode}`
+          ? `${window.location.origin}${window.location.pathname}#/unit/${company.slug}/${encodeURIComponent(unitSerialCode)}`
+          : `${window.location.origin}${window.location.pathname}#/tag/${company.slug}/${encodeURIComponent(selectedProduct.sku)}/${encodeURIComponent(selectedBatch.batchCode)}`
         : null;
 
     return {

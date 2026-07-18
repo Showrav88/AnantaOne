@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import {
-  buildUnitQrPayload,
+  buildUnitQrUrl,
   createBatchUnits,
   serializeProductUnit,
   voidUnusedBatchUnits,
@@ -423,6 +423,11 @@ ownerSellRouter.get(
       }),
     ]);
 
+    const company = await prisma.company.findUniqueOrThrow({
+      where: { id: tid(req) },
+      select: { slug: true },
+    });
+    const base = publicBaseUrl(req);
     res.json({
       ok: true,
       batch: serializeBatch(batch),
@@ -437,9 +442,143 @@ ownerSellRouter.get(
       },
       units: units.map((u) => ({
         ...serializeProductUnit(u),
-        /** Short unit code in the QR (not a URL), e.g. MW001000001 */
-        qrUrl: buildUnitQrPayload({ serialCode: u.serialCode }),
+        /** Validation URL (serial in path) for phone + in-app scan */
+        qrUrl: buildUnitQrUrl({
+          publicBaseUrl: base,
+          companySlug: company.slug,
+          serialCode: u.serialCode,
+        }),
+        serialCode: u.serialCode,
       })),
+    });
+  },
+);
+
+/**
+ * Lookup a scanned unit or sample tag (URL or bare code) for Sell / Products / Batches.
+ * Query: ?q= full URL, MW001000001, or MW001/B01
+ */
+ownerSellRouter.get(
+  "/units/lookup",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const raw = String(req.query.q ?? "").trim();
+    if (!raw) {
+      res.status(400).json({ ok: false, message: "Scan value required" });
+      return;
+    }
+
+    const tenant = tid(req);
+    const unitMatch =
+      raw.match(/#\/unit\/[^/]+\/([^/?#]+)/i) ||
+      raw.match(/\/unit\/[^/]+\/([^/?#]+)/i);
+    const tagMatch =
+      raw.match(/#\/tag\/[^/]+\/([^/?#]+)\/([^/?#]+)/i) ||
+      raw.match(/\/tag\/[^/]+\/([^/?#]+)\/([^/?#]+)/i) ||
+      raw.match(/^([A-Za-z0-9]{2,12})\/([A-Za-z0-9]{2,16})$/);
+
+    if (tagMatch) {
+      const sku = decodeURIComponent(tagMatch[1]!).toUpperCase();
+      const batchCode = decodeURIComponent(tagMatch[2]!).toUpperCase();
+      const product = await prisma.product.findFirst({
+        where: { tenantId: tenant, sku },
+        include: { unit: true },
+      });
+      if (!product) {
+        res.status(404).json({ ok: false, message: "Product not found for SKU" });
+        return;
+      }
+      const batch = await prisma.productionBatch.findFirst({
+        where: { tenantId: tenant, batchCode, productId: product.id },
+        include: { product: true },
+      });
+      if (!batch) {
+        res.json({
+          ok: true,
+          kind: "tag",
+          code: "NO_BATCH",
+          product: {
+            id: product.id,
+            name: product.name,
+            nameBn: product.nameBn,
+            sku: product.sku,
+            priceBdt: Number(product.priceBdt),
+            isActive: product.isActive,
+            stockQty: Number(product.stockQty),
+          },
+          batch: null,
+          unit: null,
+          sellableBatchCount: 0,
+          canSell: false,
+        });
+        return;
+      }
+      res.json({
+        ok: true,
+        kind: "tag",
+        product: {
+          id: product.id,
+          name: product.name,
+          nameBn: product.nameBn,
+          sku: product.sku,
+          priceBdt: Number(product.priceBdt),
+          isActive: product.isActive,
+          stockQty: Number(product.stockQty),
+        },
+        batch: serializeBatch(batch),
+        unit: null,
+      });
+      return;
+    }
+
+    const serialCode = (
+      unitMatch ? decodeURIComponent(unitMatch[1]!) : raw
+    )
+      .trim()
+      .toUpperCase();
+
+    const unit = await prisma.productUnit.findFirst({
+      where: { tenantId: tenant, serialCode },
+      include: {
+        product: { include: { unit: true } },
+        batch: { include: { product: true } },
+      },
+    });
+    if (!unit) {
+      res.status(404).json({ ok: false, message: "Unit tag not found" });
+      return;
+    }
+
+    const sellableBatches = await prisma.productionBatch.count({
+      where: {
+        tenantId: tenant,
+        productId: unit.productId,
+        isActive: true,
+        qtyRemaining: { gt: 0 },
+      },
+    });
+
+    res.json({
+      ok: true,
+      kind: "unit",
+      product: {
+        id: unit.product.id,
+        name: unit.product.name,
+        nameBn: unit.product.nameBn,
+        sku: unit.product.sku,
+        priceBdt: Number(unit.product.priceBdt),
+        isActive: unit.product.isActive,
+        stockQty: Number(unit.product.stockQty),
+      },
+      batch: serializeBatch(unit.batch),
+      unit: serializeProductUnit(unit),
+      sellableBatchCount: sellableBatches,
+      canSell:
+        unit.status === "IN_STOCK" &&
+        unit.batch.isActive &&
+        !unit.batch.reversedAt &&
+        Number(unit.batch.qtyRemaining) > 0 &&
+        unit.product.isActive,
     });
   },
 );
@@ -655,6 +794,7 @@ const sellSchema = z.object({
         qty: z.coerce.number().positive(),
         unitPriceBdt: z.coerce.number().nonnegative().optional(),
         batchId: z.string().nullable().optional(),
+        unitSerialCode: z.string().max(32).nullable().optional(),
       }),
     )
     .min(1),

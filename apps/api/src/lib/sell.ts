@@ -1,6 +1,7 @@
 import type { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../db.js";
 import {
+  allocateUnitBySerial,
   allocateUnitsToLine,
   restoreUnitsForOrderLines,
 } from "./productUnits.js";
@@ -221,6 +222,8 @@ export type ConfirmLineInput = {
   qty: number;
   unitPriceBdt?: number;
   batchId?: string | null;
+  /** When set (from unit QR scan), that exact bottle is sold — qty must be 1. */
+  unitSerialCode?: string | null;
 };
 
 export type ConfirmSellInput = {
@@ -271,10 +274,16 @@ export async function confirmSell(input: ConfirmSellInput) {
       catalogPriceBdt: number;
       unitPriceBdt: number;
       lineTotalBdt: number;
+      unitSerialCode: string | null;
     }> = [];
 
     for (const line of input.lines) {
       if (!(line.qty > 0)) throw new Error("Line qty must be positive");
+      const serial = line.unitSerialCode?.trim().toUpperCase() || null;
+      if (serial && line.qty !== 1) {
+        throw new Error("Scanned unit lines must have qty 1");
+      }
+
       const product = await tx.product.findFirst({
         where: {
           id: line.productId,
@@ -284,12 +293,27 @@ export async function confirmSell(input: ConfirmSellInput) {
       });
       if (!product) throw new Error("Product not found");
 
+      let batchId = line.batchId ?? null;
+      if (serial) {
+        const unit = await tx.productUnit.findFirst({
+          where: { tenantId: input.tenantId, serialCode: serial },
+        });
+        if (!unit) throw new Error(`Unit tag ${serial} not found`);
+        if (unit.status !== "IN_STOCK") {
+          throw new Error(`Unit ${serial} is not in stock (${unit.status})`);
+        }
+        if (unit.productId !== product.id) {
+          throw new Error(`Unit ${serial} belongs to another product`);
+        }
+        batchId = unit.batchId;
+      }
+
       const batch = await pickBatchFefo(
         input.tenantId,
         product.id,
         line.qty,
         tx,
-        line.batchId,
+        batchId,
       );
 
       const catalogPrice = Number(product.priceBdt);
@@ -315,6 +339,7 @@ export async function confirmSell(input: ConfirmSellInput) {
         catalogPriceBdt: catalogPrice,
         unitPriceBdt: unitPrice,
         lineTotalBdt: unitPrice * line.qty,
+        unitSerialCode: serial,
       });
     }
 
@@ -369,15 +394,28 @@ export async function confirmSell(input: ConfirmSellInput) {
     });
 
     // Mark individual unit tags SOLD (returned to IN_STOCK on sale reverse).
-    for (const line of withCode.lines) {
+    // Prefer the exact scanned serial when present.
+    for (let i = 0; i < withCode.lines.length; i += 1) {
+      const line = withCode.lines[i]!;
       if (!line.batchId) continue;
-      await allocateUnitsToLine({
-        tenantId: input.tenantId,
-        batchId: line.batchId,
-        orderLineId: line.id,
-        qty: Number(line.qty),
-        tx,
-      });
+      const serial = prepared[i]?.unitSerialCode;
+      if (serial) {
+        await allocateUnitBySerial({
+          tenantId: input.tenantId,
+          serialCode: serial,
+          orderLineId: line.id,
+          expectedBatchId: line.batchId,
+          tx,
+        });
+      } else {
+        await allocateUnitsToLine({
+          tenantId: input.tenantId,
+          batchId: line.batchId,
+          orderLineId: line.id,
+          qty: Number(line.qty),
+          tx,
+        });
+      }
     }
 
     return withCode;
@@ -621,8 +659,8 @@ export function buildTagPayload(opts: {
   };
   publicBaseUrl: string;
 }) {
-  // Short tag payload (not a URL): SKU/BATCH e.g. MW001/B01
-  const qrValue = `${opts.product.sku}/${opts.batch.batchCode}`;
+  // Sample tag QR = validation URL (SKU + batch in path)
+  const qrValue = `${opts.publicBaseUrl.replace(/\/$/, "")}/#/tag/${opts.company.slug}/${encodeURIComponent(opts.product.sku)}/${encodeURIComponent(opts.batch.batchCode)}`;
   const description =
     opts.template.tagDescription?.trim() ||
     opts.product.description ||

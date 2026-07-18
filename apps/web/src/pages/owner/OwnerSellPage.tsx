@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import { QrScannerPanel } from "../../components/QrScannerPanel";
 import { SalesInvoiceView } from "../../components/SalesInvoiceView";
 import {
   api,
@@ -22,6 +23,8 @@ type CartLine = {
   catalogPriceBdt: number;
   unitPriceBdt: string;
   batchId: string;
+  unitSerialCode?: string | null;
+  batchCode?: string | null;
 };
 
 export function OwnerSellPage({ locale }: Props) {
@@ -59,6 +62,8 @@ export function OwnerSellPage({ locale }: Props) {
   const [cancelReason, setCancelReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanQuery, setScanQuery] = useState("");
   const [pending, startTransition] = useTransition();
 
   async function load() {
@@ -206,25 +211,38 @@ export function OwnerSellPage({ locale }: Props) {
     0,
   );
 
-  function addLine() {
+  function addLine(opts?: {
+    productId?: string;
+    batchId?: string;
+    qty?: number;
+    unitSerialCode?: string | null;
+    batchCode?: string | null;
+    priceBdt?: number;
+  }) {
     setError(null);
-    const product = products.find((p) => p.id === pickProductId);
+    const productId = opts?.productId ?? pickProductId;
+    const product = products.find((p) => p.id === productId);
     if (!product) {
       setError(t.owner.sellNeedProduct);
       return;
     }
-    const qty = Number(pickQty);
+    const qty = opts?.qty ?? Number(pickQty);
     if (!(qty > 0)) {
       setError(t.owner.sellNeedQty);
       return;
     }
-    const sellPrice = Number(pickPrice);
+    const sellPrice =
+      opts?.priceBdt != null ? opts.priceBdt : Number(pickPrice);
     if (!(sellPrice >= 0)) {
       setError(t.owner.sellNeedPrice);
       return;
     }
+    const batchesForProduct = batches.filter(
+      (b) => b.productId === product.id && b.qtyRemaining > 0,
+    );
     const batch =
-      productBatches.find((b) => b.id === pickBatchId) ?? productBatches[0];
+      batchesForProduct.find((b) => b.id === (opts?.batchId ?? pickBatchId)) ??
+      batchesForProduct[0];
     if (!batch) {
       setError(t.owner.sellNeedBatch);
       return;
@@ -233,10 +251,19 @@ export function OwnerSellPage({ locale }: Props) {
       setError(t.owner.sellBatchShort);
       return;
     }
+    const serial = opts?.unitSerialCode?.toUpperCase() || null;
+    if (serial && lines.some((l) => l.unitSerialCode === serial)) {
+      setError(t.owner.scanUnitAlreadyInCart.replace("{code}", serial));
+      return;
+    }
+    setPickProductId(product.id);
+    setPickBatchId(batch.id);
+    setPickPrice(String(sellPrice));
+    if (serial) setPickQty("1");
     setLines((prev) => [
       ...prev,
       {
-        key: `${product.id}-${batch.id}-${Date.now()}`,
+        key: `${product.id}-${batch.id}-${serial ?? Date.now()}`,
         productId: product.id,
         productLabel:
           locale === "bn" && product.nameBn ? product.nameBn : product.name,
@@ -245,8 +272,74 @@ export function OwnerSellPage({ locale }: Props) {
         catalogPriceBdt: product.priceBdt,
         unitPriceBdt: String(sellPrice),
         batchId: batch.id,
+        unitSerialCode: serial,
+        batchCode: opts?.batchCode ?? batch.batchCode,
       },
     ]);
+    setOkMsg(
+      serial
+        ? t.owner.scanUnitAdded
+            .replace("{code}", serial)
+            .replace("{batch}", batch.batchCode)
+        : null,
+    );
+  }
+
+  async function applyScan(raw: string) {
+    setError(null);
+    setOkMsg(null);
+    setScanning(false);
+    try {
+      const res = await api.owner.lookupUnitScan(raw);
+      if (!res.product?.isActive) {
+        setError(t.owner.scanProductInactive);
+        return;
+      }
+      if (!res.batch) {
+        setError(
+          t.owner.scanNoBatch.replace("{sku}", res.product.sku),
+        );
+        setPickProductId(res.product.id);
+        setPickBatchId("");
+        setPickPrice(String(res.product.priceBdt));
+        return;
+      }
+      if (res.kind === "unit" && res.canSell === false) {
+        setError(
+          t.owner.scanUnitNotSellable
+            .replace("{code}", res.unit?.serialCode ?? "—")
+            .replace("{status}", res.unit?.status ?? "—"),
+        );
+        setPickProductId(res.product.id);
+        setPickBatchId(res.batch.id);
+        setPickPrice(String(res.product.priceBdt));
+        return;
+      }
+      if (
+        res.kind === "tag" &&
+        (res.sellableBatchCount === 0 || res.batch.qtyRemaining <= 0)
+      ) {
+        setError(
+          t.owner.scanNoBatch.replace("{sku}", res.product.sku),
+        );
+        setPickProductId(res.product.id);
+        setPickBatchId(res.batch.id);
+        return;
+      }
+
+      addLine({
+        productId: res.product.id,
+        batchId: res.batch.id,
+        qty: 1,
+        unitSerialCode: res.unit?.serialCode ?? null,
+        batchCode: res.batch.batchCode,
+        priceBdt: res.product.priceBdt,
+      });
+      setScanQuery("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Scan failed";
+      setError(msg);
+    }
   }
 
   function removeLine(key: string) {
@@ -276,6 +369,7 @@ export function OwnerSellPage({ locale }: Props) {
             qty: Number(l.qty),
             unitPriceBdt: Number(l.unitPriceBdt),
             batchId: l.batchId || null,
+            unitSerialCode: l.unitSerialCode || null,
           })),
         });
         const orderId = String((res.order as { id: string }).id);
@@ -302,6 +396,7 @@ export function OwnerSellPage({ locale }: Props) {
           qty: Number(l.qty),
           unitPriceBdt: Number(l.unitPriceBdt),
           batchId: l.batchId || null,
+          unitSerialCode: l.unitSerialCode || null,
         })),
       });
       const inv = await api.owner.orderInvoice(res.order.id);
@@ -491,6 +586,48 @@ export function OwnerSellPage({ locale }: Props) {
           </div>
 
           <h2>{t.owner.sellAddLines}</h2>
+          <div className="scan-row owner-form compact">
+            <label className="full">
+              {t.owner.scanUnitLabel}
+              <input
+                value={scanQuery}
+                placeholder={t.owner.scanUnitPlaceholder}
+                onChange={(e) => setScanQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (scanQuery.trim()) void applyScan(scanQuery.trim());
+                  }
+                }}
+              />
+            </label>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="btn primary"
+                disabled={!scanQuery.trim()}
+                onClick={() => void applyScan(scanQuery.trim())}
+              >
+                {t.owner.scanUnitLookup}
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => setScanning(true)}
+              >
+                {t.owner.scanUnitCamera}
+              </button>
+            </div>
+            <p className="muted tiny full">{t.owner.scanUnitHint}</p>
+            <QrScannerPanel
+              readerId="sell-unit-qr-reader"
+              active={scanning}
+              onScan={(decoded) => void applyScan(decoded)}
+              onError={(message) => setError(message)}
+              stopLabel={t.common.cancel}
+              onStop={() => setScanning(false)}
+            />
+          </div>
           <div className="owner-form compact">
             <label>
               {t.owner.fieldProduct}
@@ -554,7 +691,7 @@ export function OwnerSellPage({ locale }: Props) {
             <button
               type="button"
               className="cta"
-              onClick={addLine}
+              onClick={() => addLine()}
               disabled={pending}
             >
               {t.owner.addLine}
@@ -596,10 +733,16 @@ export function OwnerSellPage({ locale }: Props) {
                         <td>
                           <strong>{l.productLabel}</strong>
                           <div className="muted tiny">{l.sku}</div>
+                          {l.unitSerialCode ? (
+                            <div className="muted tiny">
+                              QR {l.unitSerialCode}
+                            </div>
+                          ) : null}
                         </td>
                         <td>
                           <select
                             value={l.batchId}
+                            disabled={Boolean(l.unitSerialCode)}
                             onChange={(e) =>
                               setLines((prev) =>
                                 prev.map((x) =>
