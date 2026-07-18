@@ -59,16 +59,24 @@ export type OverviewResponse = {
   };
 };
 
+export type BuyerRow = {
+  id: string;
+  shopName: string;
+  contactName: string | null;
+  phone: string;
+  address: string | null;
+  wardId: string | null;
+  ward: { id: string; name: string; nameBn: string | null } | null;
+  locale: string;
+  isActive: boolean;
+  orderCount: number;
+  totalSpentBdt: number;
+};
+
 export type BuyersResponse = {
   ok: boolean;
   message?: string;
-  buyers: Array<{
-    id: string;
-    shopName: string;
-    phone: string;
-    address: string | null;
-    locale: string;
-  }>;
+  buyers: BuyerRow[];
 };
 
 export type Product = {
@@ -152,6 +160,48 @@ export type ShopBranding = {
   publicShopPath: string;
 };
 
+export type ShopWard = {
+  id: string;
+  name: string;
+  nameBn: string | null;
+  freeDelivery: boolean;
+  baseChargeBdt: number;
+};
+
+export type ShopProduct = {
+  id: string;
+  name: string;
+  nameBn: string | null;
+  sku: string;
+  category: string;
+  unit: string;
+  priceBdt: number;
+  stockQty?: number;
+  description: string | null;
+  imageUrl: string | null;
+};
+
+export type DeliveryQuote = {
+  subtotalBdt: number;
+  deliveryBdt: number;
+  discountBdt: number;
+  totalBdt: number;
+  freeDelivery: boolean;
+  ward: ShopWard | null;
+  coupon: {
+    id: string;
+    code: string;
+    discountType: string;
+    discountValue: number;
+  } | null;
+  breakdown: Array<{
+    category: string;
+    qty: number;
+    chargePerUnitBdt: number;
+    lineDeliveryBdt: number;
+  }>;
+};
+
 export type PublicShop = {
   name: string;
   slug: string;
@@ -170,17 +220,8 @@ export type PublicShop = {
   siteHeadline: string;
   siteSubhead: string | null;
   branches: Array<{ id: string; name: string; address: string | null }>;
-  products: Array<{
-    id: string;
-    name: string;
-    nameBn: string | null;
-    sku: string;
-    category: string;
-    unit: string;
-    priceBdt: number;
-    description: string | null;
-    imageUrl: string | null;
-  }>;
+  wards: ShopWard[];
+  products: ShopProduct[];
 };
 
 export type OwnerDashboard = {
@@ -553,6 +594,43 @@ export const api = {
     getJson<{ ok: boolean; shop: PublicShop }>(
       `/api/v1/shop/${encodeURIComponent(companySlug)}`,
     ),
+  publicShopProduct: (companySlug: string, productId: string) =>
+    getJson<{ ok: boolean; product: ShopProduct }>(
+      `/api/v1/shop/${encodeURIComponent(companySlug)}/products/${encodeURIComponent(productId)}`,
+    ),
+  shopQuote: (
+    companySlug: string,
+    body: {
+      wardId: string;
+      branchId?: string | null;
+      couponCode?: string | null;
+      lines: Array<{ productId: string; qty: number }>;
+    },
+  ) =>
+    getJson<{ ok: boolean; quote: DeliveryQuote }>(
+      `/api/v1/shop/${encodeURIComponent(companySlug)}/quote`,
+      1,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  shopCheckout: (
+    companySlug: string,
+    body: {
+      shopName: string;
+      clientName: string;
+      phone: string;
+      address: string;
+      wardId: string;
+      branchId?: string | null;
+      couponCode?: string | null;
+      note?: string | null;
+      lines: Array<{ productId: string; qty: number }>;
+    },
+  ) =>
+    getJson<{ ok: boolean; quote: DeliveryQuote; order: { invoiceCode: string; id: string; totalBdt: number } }>(
+      `/api/v1/shop/${encodeURIComponent(companySlug)}/checkout`,
+      1,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
   buyers: () => getJson<BuyersResponse>("/api/v1/buyers"),
   products: () =>
     getJson<{ ok: boolean; products: Product[] }>("/api/v1/products"),
@@ -740,6 +818,153 @@ export const api = {
       ),
     buyers: () =>
       getJson<BuyersResponse>("/api/v1/owner/buyers", 2, undefined, true),
+    createBuyer: (body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; buyer: BuyerRow }>(
+        "/api/v1/owner/buyers",
+        1,
+        { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
+    updateBuyer: (id: string, body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; buyer: BuyerRow }>(
+        `/api/v1/owner/buyers/${id}`,
+        1,
+        { method: "PATCH", body: JSON.stringify(body) },
+        true,
+      ),
+    buyerAnalytics: () =>
+      getJson<{
+        ok: boolean;
+        analytics: {
+          buyerCount: number;
+          totalRevenueBdt: number;
+          buyers: Array<{
+            id: string;
+            shopName: string;
+            contactName: string | null;
+            phone: string;
+            ward: { id: string; name: string; nameBn: string | null } | null;
+            orderCount: number;
+            totalSpentBdt: number;
+            onlineSpentBdt: number;
+            lastOrderAt: string | null;
+          }>;
+        };
+      }>("/api/v1/owner/buyers/analytics", 2, undefined, true),
+    deliveryWards: (branchId?: string) =>
+      getJson<{
+        ok: boolean;
+        wards: Array<{
+          id: string;
+          branchId: string | null;
+          name: string;
+          nameBn: string | null;
+          sortOrder: number;
+          freeDelivery: boolean;
+          baseChargeBdt: number;
+          isActive: boolean;
+        }>;
+      }>(
+        `/api/v1/owner/delivery/wards${branchId ? `?branchId=${encodeURIComponent(branchId)}` : ""}`,
+        2,
+        undefined,
+        true,
+      ),
+    createDeliveryWard: (body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; ward: Record<string, unknown> }>(
+        "/api/v1/owner/delivery/wards",
+        1,
+        { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
+    updateDeliveryWard: (id: string, body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; ward: Record<string, unknown> }>(
+        `/api/v1/owner/delivery/wards/${id}`,
+        1,
+        { method: "PATCH", body: JSON.stringify(body) },
+        true,
+      ),
+    seedLakshmipurWards: (branchId?: string | null) =>
+      getJson<{ ok: boolean; wards: unknown[] }>(
+        "/api/v1/owner/delivery/wards/seed-lakshmipur",
+        1,
+        {
+          method: "POST",
+          body: JSON.stringify({ branchId: branchId ?? null }),
+        },
+        true,
+      ),
+    deliveryRates: () =>
+      getJson<{
+        ok: boolean;
+        rates: Array<{
+          id: string;
+          category: string;
+          chargePerUnitBdt: number;
+          note: string | null;
+          isActive: boolean;
+        }>;
+      }>("/api/v1/owner/delivery/rates", 2, undefined, true),
+    upsertDeliveryRate: (body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; rate: Record<string, unknown> }>(
+        "/api/v1/owner/delivery/rates",
+        1,
+        { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
+    coupons: () =>
+      getJson<{
+        ok: boolean;
+        coupons: Array<{
+          id: string;
+          code: string;
+          discountType: string;
+          discountValue: number;
+          minOrderBdt: number | null;
+          maxDiscountBdt: number | null;
+          usageLimit: number | null;
+          usedCount: number;
+          isActive: boolean;
+        }>;
+      }>("/api/v1/owner/coupons", 2, undefined, true),
+    createCoupon: (body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; coupon: Record<string, unknown> }>(
+        "/api/v1/owner/coupons",
+        1,
+        { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
+    updateCoupon: (id: string, body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; coupon: Record<string, unknown> }>(
+        `/api/v1/owner/coupons/${id}`,
+        1,
+        { method: "PATCH", body: JSON.stringify(body) },
+        true,
+      ),
+    onlineOrders: (status?: string) =>
+      getJson<{ ok: boolean; orders: Array<Record<string, unknown>> }>(
+        `/api/v1/owner/online-orders${status ? `?status=${encodeURIComponent(status)}` : ""}`,
+        2,
+        undefined,
+        true,
+      ),
+    acceptOnlineOrder: (id: string) =>
+      getJson<{ ok: boolean; order: Record<string, unknown> }>(
+        `/api/v1/owner/online-orders/${id}/accept`,
+        1,
+        { method: "POST", body: JSON.stringify({}) },
+        true,
+      ),
+    setOnlineOrderStatus: (id: string, statusCode: string) =>
+      getJson<{ ok: boolean; order: Record<string, unknown> }>(
+        `/api/v1/owner/online-orders/${id}/status`,
+        1,
+        {
+          method: "POST",
+          body: JSON.stringify({ statusCode }),
+        },
+        true,
+      ),
     staff: () =>
       getJson<{ ok: boolean; staff: StaffMember[] }>(
         "/api/v1/owner/staff",

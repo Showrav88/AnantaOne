@@ -204,16 +204,16 @@ export function OwnerBatchesPage({ locale }: Props) {
             ) : (
               batches.map((b) => (
                 <tr key={b.id}>
-                  <td>
+                  <td data-label={t.owner.fieldBatchCode}>
                     <strong>{b.batchCode}</strong>
                   </td>
-                  <td>
+                  <td data-label={t.owner.fieldProduct}>
                     {locale === "bn" && b.product?.nameBn
                       ? b.product.nameBn
                       : (b.product?.name ?? "—")}
                     <div className="muted tiny">{b.product?.sku}</div>
                   </td>
-                  <td>
+                  <td data-label={t.owner.fieldMfgDate}>
                     {editId === b.id ? (
                       <input
                         type="date"
@@ -225,7 +225,7 @@ export function OwnerBatchesPage({ locale }: Props) {
                       new Date(b.manufacturedAt).toLocaleDateString()
                     )}
                   </td>
-                  <td>
+                  <td data-label={t.owner.fieldExpDate}>
                     {editId === b.id ? (
                       <input
                         type="date"
@@ -239,11 +239,11 @@ export function OwnerBatchesPage({ locale }: Props) {
                       "—"
                     )}
                   </td>
-                  <td>
+                  <td data-label={t.owner.fieldQtyLeft}>
                     {b.qtyRemaining} / {b.qtyProduced}
                   </td>
                   {canWrite ? (
-                    <td>
+                    <td className="cell-actions" data-label="">
                       {editId === b.id ? (
                         <button
                           type="button"

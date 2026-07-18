@@ -212,8 +212,10 @@ export function OwnerPaymentsPage({ locale }: Props) {
                   key={p.id}
                   className={p.isReversed ? "dim" : undefined}
                 >
-                  <td>{new Date(p.paidAt).toLocaleString()}</td>
-                  <td>
+                  <td data-label={t.owner.fieldDate}>
+                    {new Date(p.paidAt).toLocaleString()}
+                  </td>
+                  <td data-label={t.owner.fieldStaff}>
                     {p.staff.name}
                     <div className="muted tiny">{p.staff.role}</div>
                     {p.isReversed ? (
@@ -223,11 +225,15 @@ export function OwnerPaymentsPage({ locale }: Props) {
                       </div>
                     ) : null}
                   </td>
-                  <td>{p.periodLabel ?? "—"}</td>
-                  <td>৳{p.amountBdt.toLocaleString()}</td>
-                  <td>{p.note ?? "—"}</td>
+                  <td data-label={t.owner.fieldPeriod}>
+                    {p.periodLabel ?? "—"}
+                  </td>
+                  <td data-label={t.owner.fieldAmount}>
+                    ৳{p.amountBdt.toLocaleString()}
+                  </td>
+                  <td data-label={t.owner.fieldNote}>{p.note ?? "—"}</td>
                   {isOwner ? (
-                    <td>
+                    <td className="cell-actions" data-label="">
                       {!p.isReversed ? (
                         <button
                           type="button"

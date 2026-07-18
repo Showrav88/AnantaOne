@@ -108,25 +108,31 @@ export function SalesInvoiceView({ locale, invoice }: Props) {
           <tbody>
             {invoice.lines.map((line, idx) => (
               <tr key={line.id}>
-                <td className="col-num">{idx + 1}</td>
-                <td>
+                <td className="col-num" data-label="#">
+                  {idx + 1}
+                </td>
+                <td data-label={t.owner.fieldProduct}>
                   {locale === "bn" && line.product?.nameBn
                     ? line.product.nameBn
                     : (line.product?.name ?? "—")}
                   <div className="muted tiny">{line.product?.sku}</div>
                 </td>
-                <td>{line.batch?.batchCode ?? "—"}</td>
-                <td className="col-qty">{line.qty}</td>
-                <td className="col-money">
+                <td data-label={t.owner.fieldBatch}>
+                  {line.batch?.batchCode ?? "—"}
+                </td>
+                <td className="col-qty" data-label={t.owner.fieldQty}>
+                  {line.qty}
+                </td>
+                <td className="col-money" data-label={t.owner.catalogPrice}>
                   ৳{line.catalogPriceBdt.toLocaleString()}
                 </td>
-                <td className="col-money">
+                <td className="col-money" data-label={t.owner.soldPrice}>
                   ৳{line.unitPriceBdt.toLocaleString()}
                   {line.priceOverridden ? (
                     <span className="price-override"> *</span>
                   ) : null}
                 </td>
-                <td className="col-money">
+                <td className="col-money" data-label={t.owner.fieldLineTotal}>
                   ৳{line.lineTotalBdt.toLocaleString()}
                 </td>
               </tr>

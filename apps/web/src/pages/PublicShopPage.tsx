@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import { api, type PublicShop } from "../lib/api";
+import {
+  cartCount,
+  loadCart,
+  saveCart,
+  upsertCartLine,
+} from "../lib/shopCart";
 
 type Props = {
   locale: LocaleCode;
@@ -20,12 +26,16 @@ export function PublicShopPage({ locale, onLocale }: Props) {
   const t = getMessages(locale);
   const [shop, setShop] = useState<PublicShop | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [count, setCount] = useState(0);
 
   useEffect(() => {
     if (!companySlug) return;
     void api
       .publicShop(companySlug)
-      .then((res) => setShop(res.shop))
+      .then((res) => {
+        setShop(res.shop);
+        setCount(cartCount(loadCart(companySlug)));
+      })
       .catch((err) =>
         setError(err instanceof Error ? err.message : "Shop not found"),
       );
@@ -41,6 +51,21 @@ export function PublicShopPage({ locale, onLocale }: Props) {
         FONT_STACK[shop.brandFont] ?? FONT_STACK["source-sans"],
     } as CSSProperties;
   }, [shop]);
+
+  function add(p: PublicShop["products"][number]) {
+    const next = upsertCartLine(loadCart(companySlug), {
+      productId: p.id,
+      name: p.name,
+      nameBn: p.nameBn,
+      sku: p.sku,
+      category: p.category,
+      unit: p.unit,
+      priceBdt: p.priceBdt,
+      imageUrl: p.imageUrl,
+    });
+    saveCart(companySlug, next);
+    setCount(cartCount(next));
+  }
 
   if (error) {
     return (
@@ -72,6 +97,9 @@ export function PublicShopPage({ locale, onLocale }: Props) {
           <a className="lang" href="#catalog">
             {t.shop.catalog}
           </a>
+          <Link className="lang" to={`/shop/${companySlug}/checkout`}>
+            {t.shop.cart} ({count})
+          </Link>
           <button type="button" className="lang" onClick={onLocale}>
             {t.common.language}
           </button>
@@ -92,11 +120,7 @@ export function PublicShopPage({ locale, onLocale }: Props) {
             playsInline
           />
         ) : shop.heroImageUrl ? (
-          <img
-            className="shop-hero-media"
-            src={shop.heroImageUrl}
-            alt=""
-          />
+          <img className="shop-hero-media" src={shop.heroImageUrl} alt="" />
         ) : (
           <div className="shop-hero-fallback" aria-hidden="true" />
         )}
@@ -108,16 +132,19 @@ export function PublicShopPage({ locale, onLocale }: Props) {
             <p className="shop-brand-name">{shop.name}</p>
           )}
           <h1>{shop.siteHeadline}</h1>
-          {shop.siteSubhead ? <p className="shop-lede">{shop.siteSubhead}</p> : null}
+          {shop.siteSubhead ? (
+            <p className="shop-lede">{shop.siteSubhead}</p>
+          ) : null}
           <div className="shop-cta-row">
             <a className="btn primary shop-cta" href="#catalog">
               {t.shop.viewProducts}
             </a>
-            {shop.phone ? (
-              <a className="btn ghost shop-cta" href={`tel:${shop.phone}`}>
-                {shop.phone}
-              </a>
-            ) : null}
+            <Link
+              className="btn ghost shop-cta"
+              to={`/shop/${companySlug}/checkout`}
+            >
+              {t.shop.cart} ({count})
+            </Link>
           </div>
         </div>
       </section>
@@ -133,20 +160,39 @@ export function PublicShopPage({ locale, onLocale }: Props) {
           <ul className="shop-product-grid">
             {shop.products.map((p) => (
               <li key={p.id}>
-                <div className="shop-product-media">
+                <Link
+                  to={`/shop/${companySlug}/product/${p.id}`}
+                  className="shop-product-media"
+                >
                   {p.imageUrl ? (
                     <img src={p.imageUrl} alt={p.name} />
                   ) : (
-                    <div className="shop-product-placeholder" aria-hidden="true" />
+                    <div
+                      className="shop-product-placeholder"
+                      aria-hidden="true"
+                    />
                   )}
-                </div>
+                </Link>
                 <div className="shop-product-body">
-                  <h3>{locale === "bn" && p.nameBn ? p.nameBn : p.name}</h3>
-                  <p className="muted tiny">{p.sku}</p>
+                  <Link to={`/shop/${companySlug}/product/${p.id}`}>
+                    <h3>
+                      {locale === "bn" && p.nameBn ? p.nameBn : p.name}
+                    </h3>
+                  </Link>
+                  <p className="muted tiny">
+                    {p.sku} · {p.category}
+                  </p>
                   {p.description ? (
                     <p className="shop-product-desc">{p.description}</p>
                   ) : null}
                   <p className="shop-price">৳{p.priceBdt}</p>
+                  <button
+                    type="button"
+                    className="btn ghost compact"
+                    onClick={() => add(p)}
+                  >
+                    {t.shop.addToCart}
+                  </button>
                 </div>
               </li>
             ))}

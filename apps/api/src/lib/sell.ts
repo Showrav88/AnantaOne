@@ -71,7 +71,7 @@ export function serializeOrder(order: {
   lines?: Array<{
     id: string;
     productId: string;
-    batchId: string;
+    batchId: string | null;
     qty: { toString(): string } | number | string;
     catalogPriceBdt?: { toString(): string } | number | string;
     unitPriceBdt: { toString(): string } | number | string;
@@ -86,7 +86,7 @@ export function serializeOrder(order: {
       batchCode: string;
       manufacturedAt: Date;
       expiresAt: Date | null;
-    };
+    } | null;
   }>;
 }) {
   const invoiceNo =
@@ -444,8 +444,14 @@ export async function reverseSell(input: {
   if (order.status.code === "REVERSED") {
     throw new Error("Sale already reversed");
   }
-  if (order.status.code !== "CONFIRMED") {
-    throw new Error("Only confirmed sales can be reversed");
+  const reversible = new Set([
+    "CONFIRMED",
+    "ACCEPTED",
+    "OUT_FOR_DELIVERY",
+    "DELIVERED",
+  ]);
+  if (!reversible.has(order.status.code)) {
+    throw new Error("Only confirmed / accepted sales can be reversed");
   }
 
   const totalBdt = Number(order.totalBdt);
@@ -455,8 +461,12 @@ export async function reverseSell(input: {
   const result = await prisma.$transaction(async (tx) => {
     for (const line of order.lines) {
       const qty = Number(line.qty);
+      if (!line.batchId) {
+        throw new Error("Order line has no batch — cannot reverse stock");
+      }
+      const batchId = line.batchId;
       const batch = await tx.productionBatch.findUniqueOrThrow({
-        where: { id: line.batchId },
+        where: { id: batchId },
       });
       await tx.productionBatch.update({
         where: { id: batch.id },
@@ -474,7 +484,7 @@ export async function reverseSell(input: {
       });
       restocked.push({
         productId: line.productId,
-        batchId: line.batchId,
+        batchId,
         qty,
       });
     }

@@ -78,6 +78,9 @@ model Company {
   salesOrders        SalesOrder[]
   tagTemplates       TagTemplate[]
   mediaAssets        MediaAsset[]
+  deliveryWards      DeliveryWard[]
+  deliveryRates      DeliveryCategoryRate[]
+  coupons            Coupon[]
 }
 
 /// Tenant media library — images/videos in Cloudinary folder anantaone/{slug}/...
@@ -113,9 +116,81 @@ model Branch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  company Company @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  users   User[]
+  company       Company        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users         User[]
+  deliveryWards DeliveryWard[]
+  salesOrders   SalesOrder[]
 
+  @@index([tenantId])
+}
+
+/// Union / ward area for delivery pricing (e.g. Lakshmipur Ward 1–15).
+model DeliveryWard {
+  id              String   @id @default(cuid())
+  tenantId        String
+  /// Null = company-wide; set for per-branch free-delivery zones.
+  branchId        String?
+  name            String
+  nameBn          String?
+  sortOrder       Int      @default(0)
+  /// Nearest wards can offer free delivery.
+  freeDelivery    Boolean  @default(false)
+  /// Flat base charge when not free (BDT).
+  baseChargeBdt   Decimal  @default(0) @db.Decimal(12, 2)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company Company  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch  Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  buyers  Buyer[]
+  orders  SalesOrder[]
+
+  @@index([tenantId])
+  @@index([tenantId, branchId])
+  @@index([branchId])
+}
+
+/// Per-category delivery rate (e.g. drinking water charged by qty/weight).
+model DeliveryCategoryRate {
+  id               String   @id @default(cuid())
+  tenantId         String
+  /// DRINKING | DISTILLED | BATTERY | OTHER | * (fallback)
+  category         String
+  /// Charge added per unit qty when ward is not free.
+  chargePerUnitBdt Decimal  @default(0) @db.Decimal(12, 2)
+  note             String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  company Company @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, category])
+  @@index([tenantId])
+}
+
+model Coupon {
+  id             String    @id @default(cuid())
+  tenantId       String
+  code           String
+  /// PERCENT | FIXED — applied to merchandise subtotal.
+  discountType   String
+  discountValue  Decimal   @db.Decimal(12, 2)
+  minOrderBdt    Decimal?  @db.Decimal(12, 2)
+  maxDiscountBdt Decimal?  @db.Decimal(12, 2)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  usageLimit     Int?
+  usedCount      Int       @default(0)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  company Company      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders  SalesOrder[]
+
+  @@unique([tenantId, code])
   @@index([tenantId])
 }
 
@@ -166,21 +241,26 @@ model RefreshToken {
 }
 
 model Buyer {
-  id        String   @id @default(cuid())
-  tenantId  String
-  shopName  String
-  phone     String
-  address   String?
-  locale    String   @default("bn")
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  tenantId    String
+  shopName    String
+  /// Contact person name (client name).
+  contactName String?
+  phone       String
+  address     String?
+  wardId      String?
+  locale      String   @default("bn")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  company     Company      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company     Company       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ward        DeliveryWard? @relation(fields: [wardId], references: [id], onDelete: SetNull)
   salesOrders SalesOrder[]
 
   @@unique([tenantId, phone])
   @@index([tenantId])
+  @@index([wardId])
 }
 
 model Product {
@@ -266,14 +346,26 @@ model ProductionBatch {
   @@index([productId, expiresAt])
 }
 
-/// B2B / counter sales order — phone, online, or walk-in basket.
+/// B2B / counter / online sales order.
 model SalesOrder {
   id             String    @id @default(cuid())
   tenantId       String
+  branchId       String?
   /// Stable printable / QR-searchable invoice code (unique per company).
   invoiceCode    String
   buyerId        String?
   buyerName      String?
+  /// Online checkout contact fields.
+  clientName     String?
+  shopName       String?
+  phone          String?
+  address        String?
+  wardId         String?
+  couponId       String?
+  couponCode     String?
+  subtotalBdt    Decimal   @default(0) @db.Decimal(14, 2)
+  deliveryBdt    Decimal   @default(0) @db.Decimal(12, 2)
+  discountBdt    Decimal   @default(0) @db.Decimal(12, 2)
   sourceId       String
   statusId       String
   totalBdt       Decimal   @default(0) @db.Decimal(14, 2)
@@ -290,7 +382,10 @@ model SalesOrder {
   updatedBy      String?
 
   company Company           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch  Branch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
   buyer   Buyer?            @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  ward    DeliveryWard?     @relation(fields: [wardId], references: [id], onDelete: SetNull)
+  coupon  Coupon?           @relation(fields: [couponId], references: [id], onDelete: SetNull)
   source  OrderSourceLookup @relation(fields: [sourceId], references: [id])
   status  OrderStatusLookup @relation(fields: [statusId], references: [id])
   sale    Sale?             @relation(fields: [saleId], references: [id], onDelete: SetNull)
@@ -301,13 +396,16 @@ model SalesOrder {
   @@index([statusId])
   @@index([sourceId])
   @@index([invoiceCode])
+  @@index([wardId])
+  @@index([branchId])
 }
 
 model OrderLine {
   id             String  @id @default(cuid())
   orderId        String
   productId      String
-  batchId        String
+  /// Null while online order is pending (allocated on accept).
+  batchId        String?
   qty            Decimal @db.Decimal(12, 2)
   /// Catalog list price at the moment of sale (reference).
   catalogPriceBdt Decimal @db.Decimal(12, 2)
@@ -315,9 +413,9 @@ model OrderLine {
   unitPriceBdt   Decimal @db.Decimal(12, 2)
   lineTotalBdt   Decimal @db.Decimal(14, 2)
 
-  order   SalesOrder      @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product         @relation(fields: [productId], references: [id])
-  batch   ProductionBatch @relation(fields: [batchId], references: [id])
+  order   SalesOrder       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product          @relation(fields: [productId], references: [id])
+  batch   ProductionBatch? @relation(fields: [batchId], references: [id])
 
   @@index([orderId])
   @@index([productId])

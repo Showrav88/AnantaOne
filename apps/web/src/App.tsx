@@ -21,6 +21,10 @@ import { OwnerSitePage } from "./pages/owner/OwnerSitePage";
 import { PublicTagPage } from "./pages/PublicTagPage";
 import { PublicInvoicePage } from "./pages/PublicInvoicePage";
 import { PublicShopPage } from "./pages/PublicShopPage";
+import { PublicProductPage } from "./pages/PublicProductPage";
+import { PublicCheckoutPage } from "./pages/PublicCheckoutPage";
+import { OwnerOnlineOrdersPage } from "./pages/owner/OwnerOnlineOrdersPage";
+import { OwnerDeliveryPage } from "./pages/owner/OwnerDeliveryPage";
 import {
   AdminCompaniesPage,
   AdminDashboardPage,
@@ -63,6 +67,14 @@ export function App() {
           element={<PublicShopPage locale={locale} onLocale={toggleLocale} />}
         />
         <Route
+          path="/shop/:companySlug/product/:productId"
+          element={<PublicProductPage locale={locale} onLocale={toggleLocale} />}
+        />
+        <Route
+          path="/shop/:companySlug/checkout"
+          element={<PublicCheckoutPage locale={locale} onLocale={toggleLocale} />}
+        />
+        <Route
           path="/owner"
           element={
             <RequireAuth roles={["OWNER", "MANAGER", "EMPLOYEE"]}>
@@ -85,6 +97,14 @@ export function App() {
           <Route path="payments" element={<OwnerPaymentsPage locale={locale} />} />
           <Route path="products" element={<OwnerProductsPage locale={locale} />} />
           <Route path="buyers" element={<OwnerBuyersPage locale={locale} />} />
+          <Route
+            path="online-orders"
+            element={<OwnerOnlineOrdersPage locale={locale} />}
+          />
+          <Route
+            path="delivery"
+            element={<OwnerDeliveryPage locale={locale} />}
+          />
         </Route>
         <Route
           path="/admin"

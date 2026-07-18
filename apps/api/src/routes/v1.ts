@@ -1,5 +1,8 @@
 import { Router } from "express";
+import { z } from "zod";
 import { serializeOrder } from "../lib/sell.js";
+import { quoteOrderTotals, normalizeCategory } from "../lib/delivery.js";
+import { placeOnlineOrder, serializeOnlineOrder } from "../lib/onlineOrder.js";
 import { prisma } from "../db.js";
 
 export const v1Router = Router();
@@ -137,12 +140,29 @@ v1Router.get("/shop/:companySlug", async (req, res) => {
       return;
     }
 
-    const products = await prisma.product.findMany({
-      where: { tenantId: company.id, isActive: true },
-      include: { unit: true },
-      orderBy: { name: "asc" },
-      take: 48,
-    });
+    const branchId = req.query.branchId
+      ? String(req.query.branchId)
+      : undefined;
+
+    const [products, wards] = await Promise.all([
+      prisma.product.findMany({
+        where: { tenantId: company.id, isActive: true },
+        include: { unit: true },
+        orderBy: { name: "asc" },
+        take: 48,
+      }),
+      prisma.deliveryWard.findMany({
+        where: {
+          tenantId: company.id,
+          isActive: true,
+          OR: [
+            { branchId: null },
+            ...(branchId ? [{ branchId }] : []),
+          ],
+        },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      }),
+    ]);
 
     res.json({
       ok: true,
@@ -169,14 +189,22 @@ v1Router.get("/shop/:companySlug", async (req, res) => {
           name: b.name,
           address: b.address,
         })),
+        wards: wards.map((w) => ({
+          id: w.id,
+          name: w.name,
+          nameBn: w.nameBn,
+          freeDelivery: w.freeDelivery,
+          baseChargeBdt: Number(w.baseChargeBdt),
+        })),
         products: products.map((p) => ({
           id: p.id,
           name: p.name,
           nameBn: p.nameBn,
           sku: p.sku,
-          category: p.category,
+          category: normalizeCategory(p.category),
           unit: p.unit.code,
           priceBdt: Number(p.priceBdt),
+          stockQty: Number(p.stockQty),
           description: p.description,
           imageUrl: p.imageUrl,
         })),
@@ -185,6 +213,152 @@ v1Router.get("/shop/:companySlug", async (req, res) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     res.status(500).json({ ok: false, message });
+  }
+});
+
+v1Router.get("/shop/:companySlug/products/:productId", async (req, res) => {
+  try {
+    const company = await prisma.company.findUnique({
+      where: { slug: String(req.params.companySlug) },
+    });
+    if (!company?.isActive) {
+      res.status(404).json({ ok: false, message: "Shop not found" });
+      return;
+    }
+    const product = await prisma.product.findFirst({
+      where: {
+        id: String(req.params.productId),
+        tenantId: company.id,
+        isActive: true,
+      },
+      include: { unit: true },
+    });
+    if (!product) {
+      res.status(404).json({ ok: false, message: "Product not found" });
+      return;
+    }
+    res.json({
+      ok: true,
+      product: {
+        id: product.id,
+        name: product.name,
+        nameBn: product.nameBn,
+        sku: product.sku,
+        category: normalizeCategory(product.category),
+        unit: product.unit.code,
+        priceBdt: Number(product.priceBdt),
+        stockQty: Number(product.stockQty),
+        description: product.description,
+        imageUrl: product.imageUrl,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    res.status(500).json({ ok: false, message });
+  }
+});
+
+const quoteSchema = z.object({
+  wardId: z.string().cuid(),
+  branchId: z.string().cuid().nullable().optional(),
+  couponCode: z.string().max(40).nullable().optional(),
+  lines: z
+    .array(
+      z.object({
+        productId: z.string().cuid(),
+        qty: z.coerce.number().positive(),
+      }),
+    )
+    .min(1),
+});
+
+v1Router.post("/shop/:companySlug/quote", async (req, res) => {
+  try {
+    const company = await prisma.company.findUnique({
+      where: { slug: String(req.params.companySlug) },
+    });
+    if (!company?.isActive) {
+      res.status(404).json({ ok: false, message: "Shop not found" });
+      return;
+    }
+    const parsed = quoteSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: parsed.error.message });
+      return;
+    }
+    const products = await prisma.product.findMany({
+      where: {
+        tenantId: company.id,
+        id: { in: parsed.data.lines.map((l) => l.productId) },
+        isActive: true,
+      },
+    });
+    const map = new Map(products.map((p) => [p.id, p]));
+    const lines = parsed.data.lines.map((l) => {
+      const p = map.get(l.productId);
+      if (!p) throw new Error("Product not found");
+      return {
+        productId: p.id,
+        category: p.category,
+        qty: l.qty,
+        unitPriceBdt: Number(p.priceBdt),
+      };
+    });
+    const quote = await quoteOrderTotals(company.id, {
+      lines,
+      wardId: parsed.data.wardId,
+      branchId: parsed.data.branchId,
+      couponCode: parsed.data.couponCode,
+    });
+    res.json({ ok: true, quote });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Quote failed";
+    res.status(400).json({ ok: false, message });
+  }
+});
+
+const checkoutSchema = quoteSchema.extend({
+  shopName: z.string().min(2).max(160),
+  clientName: z.string().min(2).max(120),
+  phone: z.string().min(6).max(32),
+  address: z.string().min(4).max(240),
+  note: z.string().max(500).nullable().optional(),
+});
+
+v1Router.post("/shop/:companySlug/checkout", async (req, res) => {
+  try {
+    const company = await prisma.company.findUnique({
+      where: { slug: String(req.params.companySlug) },
+    });
+    if (!company?.isActive) {
+      res.status(404).json({ ok: false, message: "Shop not found" });
+      return;
+    }
+    const parsed = checkoutSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: parsed.error.message });
+      return;
+    }
+    const { order, quote } = await placeOnlineOrder({
+      tenantId: company.id,
+      branchId: parsed.data.branchId,
+      shopName: parsed.data.shopName,
+      clientName: parsed.data.clientName,
+      phone: parsed.data.phone,
+      address: parsed.data.address,
+      wardId: parsed.data.wardId,
+      couponCode: parsed.data.couponCode,
+      note: parsed.data.note,
+      lines: parsed.data.lines,
+    });
+    res.status(201).json({
+      ok: true,
+      quote,
+      order: serializeOnlineOrder(order),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Checkout failed";
+    res.status(400).json({ ok: false, message });
   }
 });
 

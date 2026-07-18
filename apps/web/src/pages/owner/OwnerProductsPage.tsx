@@ -10,13 +10,20 @@ const emptyForm = {
   name: "",
   nameBn: "",
   sku: "",
-  category: "water",
+  category: "DRINKING",
   unitCode: "BOTTLE",
   priceBdt: "0",
   stockQty: "0",
   minStock: "0",
   description: "",
 };
+
+const PRODUCT_CATEGORIES = [
+  "DRINKING",
+  "DISTILLED",
+  "BATTERY",
+  "OTHER",
+] as const;
 
 export function OwnerProductsPage({ locale }: Props) {
   const t = getMessages(locale);
@@ -183,6 +190,25 @@ export function OwnerProductsPage({ locale }: Props) {
             />
           </label>
           <label>
+            {t.owner.fieldCategory}
+            <select
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+            >
+              {PRODUCT_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c === "DRINKING"
+                    ? t.owner.catDrinking
+                    : c === "DISTILLED"
+                      ? t.owner.catDistilled
+                      : c === "BATTERY"
+                        ? t.owner.catBattery
+                        : t.owner.catOther}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             {t.owner.fieldUnit}
             <select
               value={form.unitCode}
@@ -284,6 +310,7 @@ export function OwnerProductsPage({ locale }: Props) {
               <th>{t.owner.uploadProductImage}</th>
               <th>{t.owner.fieldProductName}</th>
               <th>SKU</th>
+              <th>{t.owner.fieldCategory}</th>
               <th>{t.owner.fieldPrice}</th>
               <th>{t.owner.fieldStock}</th>
               <th>{t.owner.fieldStatus}</th>
@@ -293,7 +320,7 @@ export function OwnerProductsPage({ locale }: Props) {
           <tbody>
             {products.map((p) => (
               <tr key={p.id} className={p.isActive ? "" : "dim"}>
-                <td>
+                <td data-label={t.owner.uploadProductImage}>
                   <div className="product-thumb-cell">
                     {p.imageUrl ? (
                       <img className="product-thumb" src={p.imageUrl} alt="" />
@@ -322,14 +349,22 @@ export function OwnerProductsPage({ locale }: Props) {
                     ) : null}
                   </div>
                 </td>
-                <td>{locale === "bn" && p.nameBn ? p.nameBn : p.name}</td>
-                <td>{p.sku}</td>
-                <td>৳{p.priceBdt}</td>
-                <td className={p.stockQty <= p.minStock ? "warn" : ""}>
+                <td data-label={t.owner.fieldProductName}>
+                  {locale === "bn" && p.nameBn ? p.nameBn : p.name}
+                </td>
+                <td data-label="SKU">{p.sku}</td>
+                <td data-label={t.owner.fieldCategory}>{p.category}</td>
+                <td data-label={t.owner.fieldPrice}>৳{p.priceBdt}</td>
+                <td
+                  data-label={t.owner.fieldStock}
+                  className={p.stockQty <= p.minStock ? "warn" : ""}
+                >
                   {p.stockQty}
                 </td>
-                <td>{p.isActive ? t.common.online : t.common.offline}</td>
-                <td>
+                <td data-label={t.owner.fieldStatus}>
+                  {p.isActive ? t.common.online : t.common.offline}
+                </td>
+                <td className="cell-actions" data-label="">
                   {canWrite && p.isActive ? (
                     <button
                       type="button"
