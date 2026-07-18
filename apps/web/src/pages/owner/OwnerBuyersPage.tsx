@@ -1,4 +1,5 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import { api, type BuyerRow } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
@@ -81,6 +82,14 @@ export function OwnerBuyersPage({ locale }: Props) {
           <p className="eyebrow">{t.owner.navBuyers}</p>
           <h1>{t.owner.buyersTitle}</h1>
           <p className="muted">{t.owner.buyersHint}</p>
+        </div>
+        <div className="header-links">
+          <Link className="btn ghost" to="/owner/delivery">
+            {t.owner.navDelivery}
+          </Link>
+          <Link className="btn ghost" to="/owner/sell">
+            {t.owner.navSell}
+          </Link>
         </div>
       </header>
 

@@ -178,15 +178,21 @@ model Branch {
   tenantId  String
   name      String
   address   String?
+  phone     String?
+  isActive  Boolean  @default(true)
+  /// Designated branch manager (company staff user).
+  managerId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   company       Company        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  users         User[]
+  manager       User?          @relation("BranchManager", fields: [managerId], references: [id], onDelete: SetNull)
+  users         User[]         @relation("UserBranch")
   deliveryWards DeliveryWard[]
   salesOrders   SalesOrder[]
 
   @@index([tenantId])
+  @@index([managerId])
 }
 
 /// Tenant delivery pricing settings (outside area / zila charges).
@@ -307,11 +313,12 @@ model User {
   createdBy    String?
   updatedBy    String?
 
-  company        Company?         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  branch         Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  role           RoleLookup       @relation(fields: [roleId], references: [id])
-  refreshTokens  RefreshToken[]
-  salaryPayments SalaryPayment[]
+  company         Company?         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch          Branch?          @relation("UserBranch", fields: [branchId], references: [id], onDelete: SetNull)
+  managedBranches Branch[]         @relation("BranchManager")
+  role            RoleLookup       @relation(fields: [roleId], references: [id])
+  refreshTokens   RefreshToken[]
+  salaryPayments  SalaryPayment[]
 
   @@unique([tenantId, employeeCode])
   @@index([tenantId])

@@ -54,9 +54,16 @@ export type OverviewResponse = {
     name: string;
     slug: string;
     locale: string;
-    branches: Array<{ id: string; name: string; address: string | null }>;
-    counts: { users: number; buyers: number };
-  };
+  branches: Array<{
+    id: string;
+    name: string;
+    address: string | null;
+    phone?: string | null;
+    isActive?: boolean;
+    managerId?: string | null;
+  }>;
+  counts: { users: number; buyers: number };
+};
 };
 
 export type BuyerRow = {
@@ -130,8 +137,39 @@ export type CompanyDetails = {
   brandFont?: string | null;
   siteHeadline?: string | null;
   siteSubhead?: string | null;
-  branches: Array<{ id: string; name: string; address: string | null }>;
+  branches: Array<{
+    id: string;
+    name: string;
+    address: string | null;
+    phone?: string | null;
+    isActive?: boolean;
+    managerId?: string | null;
+  }>;
   counts: { users: number; buyers: number; products: number };
+};
+
+export type BranchStaffBrief = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  isActive: boolean;
+  role: { code: string; nameEn: string; nameBn: string };
+};
+
+export type BranchRow = {
+  id: string;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  isActive: boolean;
+  managerId: string | null;
+  manager: BranchStaffBrief | null;
+  staff: BranchStaffBrief[];
+  employees: BranchStaffBrief[];
+  managers: BranchStaffBrief[];
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type MediaAsset = {
@@ -278,6 +316,8 @@ export type StaffMember = {
   salaryBdt: number | null;
   isActive: boolean;
   createdAt: string;
+  branchId: string | null;
+  branch: { id: string; name: string } | null;
   role: { code: string; nameEn: string; nameBn: string };
 };
 
@@ -1084,6 +1124,34 @@ export const api = {
     deactivateStaff: (id: string) =>
       getJson<{ ok: boolean; staff: StaffMember }>(
         `/api/v1/owner/staff/${id}`,
+        1,
+        { method: "DELETE" },
+        true,
+      ),
+    branches: () =>
+      getJson<{ ok: boolean; branches: BranchRow[] }>(
+        "/api/v1/owner/branches",
+        2,
+        undefined,
+        true,
+      ),
+    createBranch: (body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; branch: BranchRow }>(
+        "/api/v1/owner/branches",
+        1,
+        { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
+    updateBranch: (id: string, body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; branch: BranchRow }>(
+        `/api/v1/owner/branches/${id}`,
+        1,
+        { method: "PATCH", body: JSON.stringify(body) },
+        true,
+      ),
+    deactivateBranch: (id: string) =>
+      getJson<{ ok: boolean; branch: BranchRow }>(
+        `/api/v1/owner/branches/${id}`,
         1,
         { method: "DELETE" },
         true,

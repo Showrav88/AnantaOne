@@ -24,7 +24,10 @@ ownerRouter.get("/dashboard", async (req, res) => {
       prisma.company.findUniqueOrThrow({
         where: { id: tid },
         include: {
-          branches: { orderBy: { createdAt: "asc" }, take: 5 },
+          branches: {
+            orderBy: [{ isActive: "desc" }, { createdAt: "asc" }],
+            take: 5,
+          },
           _count: { select: { users: true, buyers: true, products: true } },
         },
       }),
@@ -104,7 +107,14 @@ function serializeCompany(company: {
   brandFont: string | null;
   siteHeadline: string | null;
   siteSubhead: string | null;
-  branches: Array<{ id: string; name: string; address: string | null }>;
+  branches: Array<{
+    id: string;
+    name: string;
+    address: string | null;
+    phone?: string | null;
+    isActive?: boolean;
+    managerId?: string | null;
+  }>;
   _count: { users: number; buyers: number; products: number };
   division?: { id: string; code: string; name: string; nameBn: string | null } | null;
   district?: { id: string; code: string; name: string; nameBn: string | null } | null;
@@ -161,7 +171,17 @@ function serializeCompany(company: {
 }
 
 const companyInclude = {
-  branches: { orderBy: { createdAt: "asc" as const } },
+  branches: {
+    orderBy: [{ isActive: "desc" as const }, { createdAt: "asc" as const }],
+    select: {
+      id: true,
+      name: true,
+      address: true,
+      phone: true,
+      isActive: true,
+      managerId: true,
+    },
+  },
   division: true,
   district: true,
   upazila: true,

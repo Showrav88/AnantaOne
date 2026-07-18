@@ -10,6 +10,7 @@ import { OwnerDashboardPage } from "./pages/owner/OwnerDashboardPage";
 import { OwnerCompanyPage } from "./pages/owner/OwnerCompanyPage";
 import { OwnerProductsPage } from "./pages/owner/OwnerProductsPage";
 import { OwnerBuyersPage } from "./pages/owner/OwnerBuyersPage";
+import { OwnerBranchesPage } from "./pages/owner/OwnerBranchesPage";
 import { OwnerStaffPage } from "./pages/owner/OwnerStaffPage";
 import { OwnerWalletPage } from "./pages/owner/OwnerWalletPage";
 import { OwnerPaymentsPage } from "./pages/owner/OwnerPaymentsPage";
@@ -93,6 +94,10 @@ export function App() {
           <Route path="batches" element={<OwnerBatchesPage locale={locale} />} />
           <Route path="tags" element={<OwnerTagsPage locale={locale} />} />
           <Route path="staff" element={<OwnerStaffPage locale={locale} />} />
+          <Route
+            path="branches"
+            element={<OwnerBranchesPage locale={locale} />}
+          />
           <Route path="wallet" element={<OwnerWalletPage locale={locale} />} />
           <Route path="payments" element={<OwnerPaymentsPage locale={locale} />} />
           <Route path="products" element={<OwnerProductsPage locale={locale} />} />

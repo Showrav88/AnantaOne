@@ -9,6 +9,7 @@ import { ownerFinanceRouter } from "./routes/ownerFinance.js";
 import { ownerSellRouter } from "./routes/ownerSell.js";
 import { ownerMediaRouter } from "./routes/ownerMedia.js";
 import { ownerCommerceRouter } from "./routes/ownerCommerce.js";
+import { ownerBranchesRouter } from "./routes/ownerBranches.js";
 import { geoRouter } from "./routes/geo.js";
 import { authRouter } from "./routes/auth.js";
 import { adminRouter } from "./routes/admin.js";
@@ -86,6 +87,7 @@ app.use("/api/v1/owner", ownerFinanceRouter);
 app.use("/api/v1/owner", ownerSellRouter);
 app.use("/api/v1/owner", ownerMediaRouter);
 app.use("/api/v1/owner", ownerCommerceRouter);
+app.use("/api/v1/owner", ownerBranchesRouter);
 app.use("/api/v1/admin", adminRouter);
 
 app.listen(port, "0.0.0.0", () => {

@@ -33,6 +33,8 @@ function serializeStaff(user: {
   salaryBdt: { toString(): string } | number | string | null;
   isActive: boolean;
   createdAt: Date;
+  branchId?: string | null;
+  branch?: { id: string; name: string } | null;
   role: { code: string; nameEn: string; nameBn: string };
 }) {
   return {
@@ -46,6 +48,10 @@ function serializeStaff(user: {
     salaryBdt: user.salaryBdt == null ? null : Number(user.salaryBdt),
     isActive: user.isActive,
     createdAt: user.createdAt,
+    branchId: user.branchId ?? null,
+    branch: user.branch
+      ? { id: user.branch.id, name: user.branch.name }
+      : null,
     role: {
       code: user.role.code,
       nameEn: user.role.nameEn,
@@ -62,7 +68,7 @@ ownerFinanceRouter.get("/staff", requireOwnerOrManager, async (req, res) => {
       tenantId: tid(req),
       role: { code: { in: ["MANAGER", "EMPLOYEE", "OWNER"] } },
     },
-    include: { role: true },
+    include: { role: true, branch: { select: { id: true, name: true } } },
     orderBy: [{ isActive: "desc" }, { name: "asc" }],
   });
   res.json({ ok: true, staff: staff.map(serializeStaff) });
@@ -74,6 +80,7 @@ const staffCreateSchema = z.object({
   phone: z.string().max(32).nullable().optional(),
   password: z.string().min(8).max(100),
   roleCode: z.enum(["MANAGER", "EMPLOYEE"]),
+  branchId: z.string().cuid().nullable().optional(),
   employeeCode: z.string().max(32).nullable().optional(),
   designation: z.string().max(120).nullable().optional(),
   joiningDate: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).nullable().optional(),
@@ -103,10 +110,23 @@ ownerFinanceRouter.post("/staff", requireOwnerOnly, async (req, res) => {
     return;
   }
 
-  const branch = await prisma.branch.findFirst({
-    where: { tenantId: tid(req) },
-    orderBy: { createdAt: "asc" },
-  });
+  let branchId: string | null = null;
+  if (data.branchId) {
+    const branch = await prisma.branch.findFirst({
+      where: { id: data.branchId, tenantId: tid(req), isActive: true },
+    });
+    if (!branch) {
+      res.status(400).json({ ok: false, message: "Branch not found" });
+      return;
+    }
+    branchId = branch.id;
+  } else if (data.branchId === undefined) {
+    const branch = await prisma.branch.findFirst({
+      where: { tenantId: tid(req), isActive: true },
+      orderBy: { createdAt: "asc" },
+    });
+    branchId = branch?.id ?? null;
+  }
 
   let joiningDate: Date | null = null;
   if (data.joiningDate) {
@@ -121,7 +141,7 @@ ownerFinanceRouter.post("/staff", requireOwnerOnly, async (req, res) => {
     const user = await prisma.user.create({
       data: {
         tenantId: tid(req),
-        branchId: branch?.id ?? null,
+        branchId,
         email,
         name: data.name,
         phone: data.phone ?? null,
@@ -133,8 +153,21 @@ ownerFinanceRouter.post("/staff", requireOwnerOnly, async (req, res) => {
         salaryBdt: data.salaryBdt ?? null,
         createdBy: req.auth!.id,
       },
-      include: { role: true },
+      include: { role: true, branch: { select: { id: true, name: true } } },
     });
+
+    if (branchId && data.roleCode === "MANAGER") {
+      const branch = await prisma.branch.findFirst({
+        where: { id: branchId, tenantId: tid(req) },
+      });
+      if (branch && !branch.managerId) {
+        await prisma.branch.update({
+          where: { id: branchId },
+          data: { managerId: user.id },
+        });
+      }
+    }
+
     res.status(201).json({ ok: true, staff: serializeStaff(user) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "create failed";
@@ -146,6 +179,7 @@ const staffUpdateSchema = z.object({
   name: z.string().min(2).max(120).optional(),
   phone: z.string().max(32).nullable().optional(),
   roleCode: z.enum(["MANAGER", "EMPLOYEE"]).optional(),
+  branchId: z.string().cuid().nullable().optional(),
   employeeCode: z.string().max(32).nullable().optional(),
   designation: z.string().max(120).nullable().optional(),
   joiningDate: z
@@ -192,6 +226,20 @@ ownerFinanceRouter.patch("/staff/:id", requireOwnerOnly, async (req, res) => {
     roleId = role.id;
   }
 
+  let branchId: string | null | undefined = undefined;
+  if (parsed.data.branchId === null) {
+    branchId = null;
+  } else if (parsed.data.branchId) {
+    const branch = await prisma.branch.findFirst({
+      where: { id: parsed.data.branchId, tenantId: tid(req) },
+    });
+    if (!branch) {
+      res.status(400).json({ ok: false, message: "Branch not found" });
+      return;
+    }
+    branchId = branch.id;
+  }
+
   let joiningDate: Date | null | undefined = undefined;
   if (parsed.data.joiningDate === null) joiningDate = null;
   else if (parsed.data.joiningDate) {
@@ -206,18 +254,49 @@ ownerFinanceRouter.patch("/staff/:id", requireOwnerOnly, async (req, res) => {
     ? await hashPassword(parsed.data.password)
     : undefined;
 
-  const { roleCode: _r, password: _p, joiningDate: _j, ...rest } = parsed.data;
+  const {
+    roleCode: _r,
+    password: _p,
+    joiningDate: _j,
+    branchId: _b,
+    ...rest
+  } = parsed.data;
   const user = await prisma.user.update({
     where: { id: existing.id },
     data: {
       ...rest,
       ...(roleId ? { roleId } : {}),
+      ...(branchId !== undefined ? { branchId } : {}),
       ...(joiningDate !== undefined ? { joiningDate } : {}),
       ...(passwordHash ? { passwordHash } : {}),
       updatedBy: req.auth!.id,
     },
-    include: { role: true },
+    include: { role: true, branch: { select: { id: true, name: true } } },
   });
+
+  if (branchId && (parsed.data.roleCode === "MANAGER" || existing.role.code === "MANAGER")) {
+    const targetBranchId = branchId;
+    const branch = await prisma.branch.findFirst({
+      where: { id: targetBranchId, tenantId: tid(req) },
+    });
+    if (branch && !branch.managerId) {
+      await prisma.branch.update({
+        where: { id: targetBranchId },
+        data: { managerId: user.id },
+      });
+    }
+  }
+
+  if (branchId === null || (branchId && existing.branchId && existing.branchId !== branchId)) {
+    await prisma.branch.updateMany({
+      where: {
+        tenantId: tid(req),
+        managerId: existing.id,
+        ...(branchId ? { id: { not: branchId } } : {}),
+      },
+      data: { managerId: null },
+    });
+  }
 
   res.json({ ok: true, staff: serializeStaff(user) });
 });
@@ -237,10 +316,16 @@ ownerFinanceRouter.delete("/staff/:id", requireOwnerOnly, async (req, res) => {
     return;
   }
 
-  const user = await prisma.user.update({
-    where: { id: existing.id },
-    data: { isActive: false, updatedBy: req.auth!.id },
-    include: { role: true },
+  const user = await prisma.$transaction(async (tx) => {
+    await tx.branch.updateMany({
+      where: { tenantId: tid(req), managerId: existing.id },
+      data: { managerId: null },
+    });
+    return tx.user.update({
+      where: { id: existing.id },
+      data: { isActive: false, updatedBy: req.auth!.id },
+      include: { role: true, branch: { select: { id: true, name: true } } },
+    });
   });
   res.json({ ok: true, staff: serializeStaff(user) });
 });

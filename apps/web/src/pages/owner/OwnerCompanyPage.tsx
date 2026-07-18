@@ -305,11 +305,19 @@ export function OwnerCompanyPage({ locale }: Props) {
 
       <section className="owner-panels single">
         <div>
-          <h2>{t.home.branchesLabel}</h2>
+          <div className="panel-heading-row">
+            <h2>{t.home.branchesLabel}</h2>
+            <Link className="btn ghost" to="/owner/branches">
+              {t.owner.manageBranchesLink}
+            </Link>
+          </div>
           <ul className="plain-list">
             {company.branches.map((b) => (
               <li key={b.id}>
-                <span>{b.name}</span>
+                <span>
+                  {b.name}
+                  {b.isActive === false ? " · —" : ""}
+                </span>
                 <span>{b.address ?? "—"}</span>
               </li>
             ))}

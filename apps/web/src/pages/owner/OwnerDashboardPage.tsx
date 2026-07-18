@@ -42,7 +42,13 @@ export function OwnerDashboardPage({ locale }: Props) {
           <p className="muted">{data.company.tagline ?? t.app.pulse}</p>
         </div>
         <div className="header-links">
-          <Link className="btn primary" to="/owner/site">
+          <Link className="btn primary" to="/owner/buyers">
+            {t.owner.manageBuyers}
+          </Link>
+          <Link className="btn ghost" to="/owner/branches">
+            {t.owner.manageBranches}
+          </Link>
+          <Link className="btn ghost" to="/owner/site">
             {t.owner.navSite}
           </Link>
           <Link className="btn ghost" to="/owner/wallet">
@@ -60,6 +66,9 @@ export function OwnerDashboardPage({ locale }: Props) {
           </Link>
           <Link className="btn ghost" to="/owner/products">
             {t.owner.uploadProductImage}
+          </Link>
+          <Link className="btn ghost" to="/owner/buyers">
+            {t.owner.manageBuyers}
           </Link>
           {data.company.slug ? (
             <Link className="btn ghost" to={`/shop/${data.company.slug}`}>
@@ -81,8 +90,10 @@ export function OwnerDashboardPage({ locale }: Props) {
           <strong>{data.stats.products}</strong>
         </article>
         <article>
-          <p>{t.owner.statBuyers}</p>
-          <strong>{data.stats.buyers}</strong>
+          <Link to="/owner/buyers" className="stat-link">
+            <p>{t.owner.statBuyers}</p>
+            <strong>{data.stats.buyers}</strong>
+          </Link>
         </article>
         <article>
           <p>{t.owner.statLowStock}</p>

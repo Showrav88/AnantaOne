@@ -1,6 +1,7 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
-import { api, type StaffMember } from "../../lib/api";
+import { api, type BranchRow, type StaffMember } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
 
 type Props = { locale: LocaleCode };
@@ -11,6 +12,7 @@ const emptyForm = {
   phone: "",
   password: "",
   roleCode: "EMPLOYEE" as "MANAGER" | "EMPLOYEE",
+  branchId: "",
   employeeCode: "",
   designation: "",
   joiningDate: "",
@@ -24,13 +26,18 @@ export function OwnerStaffPage({ locale }: Props) {
   const canView =
     user?.role.code === "OWNER" || user?.role.code === "MANAGER";
   const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [branches, setBranches] = useState<BranchRow[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   async function load() {
-    const res = await api.owner.staff();
-    setStaff(res.staff);
+    const [s, b] = await Promise.all([
+      api.owner.staff(),
+      api.owner.branches(),
+    ]);
+    setStaff(s.staff);
+    setBranches(b.branches.filter((x) => x.isActive));
   }
 
   useEffect(() => {
@@ -52,6 +59,7 @@ export function OwnerStaffPage({ locale }: Props) {
         phone: form.phone || null,
         password: form.password,
         roleCode: form.roleCode,
+        branchId: form.branchId || null,
         employeeCode: form.employeeCode || null,
         designation: form.designation || null,
         joiningDate: form.joiningDate || null,
@@ -61,6 +69,18 @@ export function OwnerStaffPage({ locale }: Props) {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Create failed");
+    }
+  }
+
+  async function onBranchChange(staffId: string, branchId: string) {
+    setError(null);
+    try {
+      await api.owner.updateStaff(staffId, {
+        branchId: branchId || null,
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
     }
   }
 
@@ -89,6 +109,11 @@ export function OwnerStaffPage({ locale }: Props) {
           <p className="eyebrow">{t.owner.navStaff}</p>
           <h1>{t.owner.staffTitle}</h1>
           <p className="muted">{t.owner.staffHint}</p>
+        </div>
+        <div className="header-links">
+          <Link className="btn ghost" to="/owner/branches">
+            {t.owner.manageBranches}
+          </Link>
         </div>
       </header>
 
@@ -146,6 +171,20 @@ export function OwnerStaffPage({ locale }: Props) {
             </select>
           </label>
           <label>
+            {t.owner.fieldBranch}
+            <select
+              value={form.branchId}
+              onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+            >
+              <option value="">{t.owner.noBranch}</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             {t.owner.fieldEmployeeCode}
             <input
               value={form.employeeCode}
@@ -197,6 +236,7 @@ export function OwnerStaffPage({ locale }: Props) {
             <tr>
               <th>{t.owner.fieldStaffName}</th>
               <th>{t.owner.fieldRole}</th>
+              <th>{t.owner.fieldBranch}</th>
               <th>{t.owner.fieldJoiningDate}</th>
               <th>{t.owner.fieldSalary}</th>
               <th>{t.owner.fieldStatus}</th>
@@ -214,6 +254,25 @@ export function OwnerStaffPage({ locale }: Props) {
                   ) : null}
                 </td>
                 <td data-label={t.owner.fieldRole}>{s.role.code}</td>
+                <td data-label={t.owner.fieldBranch}>
+                  {isOwner && s.role.code !== "OWNER" && s.isActive ? (
+                    <select
+                      value={s.branchId ?? ""}
+                      onChange={(e) =>
+                        void onBranchChange(s.id, e.target.value)
+                      }
+                    >
+                      <option value="">{t.owner.noBranch}</option>
+                      {branches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    (s.branch?.name ?? "—")
+                  )}
+                </td>
                 <td data-label={t.owner.fieldJoiningDate}>
                   {s.joiningDate
                     ? new Date(s.joiningDate).toLocaleDateString()
