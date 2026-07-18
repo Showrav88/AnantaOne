@@ -3109,7 +3109,20 @@ html[data-theme="light"] .shop-price {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
   gap: 0.75rem;
-  align-items: center;
+  align-items: stretch;
+}
+
+.site-brand-slot {
+  display: grid;
+  gap: 0.45rem;
+  align-content: start;
+  min-width: 0;
+}
+
+.site-brand-slot-label {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 .site-brand-preview img,

@@ -122,6 +122,19 @@ export function OwnerCompanyPage({ locale }: Props) {
     }
   }
 
+  async function clearLogo() {
+    if (!canWrite || !company?.logoUrl) return;
+    setError(null);
+    try {
+      await api.owner.updateBranding({ clearLogo: true });
+      const res = await api.owner.company();
+      setCompany(res.company);
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
   function placeLabel(p: GeoPlace) {
     return locale === "bn" && p.nameBn ? p.nameBn : p.name;
   }
@@ -152,11 +165,22 @@ export function OwnerCompanyPage({ locale }: Props) {
         <h2>{t.owner.uploadLogo}</h2>
         <p className="muted tiny">{t.owner.uploadLogoHint}</p>
         <div className="site-brand-preview company-logo-preview">
-          {company.logoUrl ? (
-            <img src={company.logoUrl} alt={company.name} />
-          ) : (
-            <span className="muted">{t.owner.noLogoYet}</span>
-          )}
+          <div className="site-brand-slot">
+            {company.logoUrl ? (
+              <img src={company.logoUrl} alt={company.name} />
+            ) : (
+              <span className="muted">{t.owner.noLogoYet}</span>
+            )}
+            {canWrite && company.logoUrl ? (
+              <button
+                type="button"
+                className="btn ghost compact"
+                onClick={() => void clearLogo()}
+              >
+                {t.owner.clearLogo}
+              </button>
+            ) : null}
+          </div>
         </div>
         {canWrite ? (
           <label className="upload-field">

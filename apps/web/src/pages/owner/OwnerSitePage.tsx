@@ -148,11 +148,54 @@ export function OwnerSitePage({ locale }: Props) {
     }
   }
 
-  async function removeAsset(id: string) {
+  async function clearSlot(slot: "logo" | "heroImage" | "heroVideo") {
     if (!canWrite) return;
     setError(null);
+    setOkMsg(null);
     try {
-      await api.owner.deleteMedia(id);
+      const body =
+        slot === "logo"
+          ? { clearLogo: true }
+          : slot === "heroImage"
+            ? { clearHeroImage: true }
+            : { clearHeroVideo: true };
+      const res = await api.owner.updateBranding(body);
+      setBranding(res.branding);
+      setOkMsg(t.owner.saved);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
+  function assetUsage(asset: MediaAsset) {
+    const slots: string[] = [];
+    if (asset.publicId && asset.publicId === branding?.logoPublicId) {
+      slots.push(t.owner.slotLogo);
+    }
+    if (asset.publicId && asset.publicId === branding?.heroImagePublicId) {
+      slots.push(t.owner.slotHeroImage);
+    }
+    if (asset.publicId && asset.publicId === branding?.heroVideoPublicId) {
+      slots.push(t.owner.slotHeroVideo);
+    }
+    return slots;
+  }
+
+  async function removeAsset(asset: MediaAsset) {
+    if (!canWrite) return;
+    const slots = assetUsage(asset);
+    const confirmed =
+      slots.length > 1
+        ? window.confirm(t.owner.deleteMediaConfirmShared)
+        : slots.length === 1
+          ? window.confirm(
+              t.owner.deleteMediaConfirmInUse.replace("{slot}", slots[0]!),
+            )
+          : window.confirm(t.owner.deleteMediaConfirm);
+    if (!confirmed) return;
+    setError(null);
+    try {
+      await api.owner.deleteMedia(asset.id);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed");
@@ -257,18 +300,59 @@ export function OwnerSitePage({ locale }: Props) {
 
       <section className="panel-card site-preview-strip">
         <h2>{t.owner.sitePreview}</h2>
+        <p className="muted tiny">{t.owner.sharedBrandingHint}</p>
         <div className="site-brand-preview">
-          {branding.logoUrl ? (
-            <img src={branding.logoUrl} alt={branding.name} />
-          ) : (
-            <span className="muted">{t.owner.noLogoYet}</span>
-          )}
-          {branding.heroImageUrl ? (
-            <img src={branding.heroImageUrl} alt="" />
-          ) : null}
-          {branding.heroVideoUrl ? (
-            <video src={branding.heroVideoUrl} muted controls playsInline />
-          ) : null}
+          <div className="site-brand-slot">
+            <p className="site-brand-slot-label">{t.owner.slotLogo}</p>
+            {branding.logoUrl ? (
+              <img src={branding.logoUrl} alt={branding.name} />
+            ) : (
+              <span className="muted">{t.owner.noLogoYet}</span>
+            )}
+            {canWrite && branding.logoUrl ? (
+              <button
+                type="button"
+                className="btn ghost compact"
+                onClick={() => void clearSlot("logo")}
+              >
+                {t.owner.clearLogo}
+              </button>
+            ) : null}
+          </div>
+          <div className="site-brand-slot">
+            <p className="site-brand-slot-label">{t.owner.slotHeroImage}</p>
+            {branding.heroImageUrl ? (
+              <img src={branding.heroImageUrl} alt="" />
+            ) : (
+              <span className="muted">{t.owner.noHeroImageYet}</span>
+            )}
+            {canWrite && branding.heroImageUrl ? (
+              <button
+                type="button"
+                className="btn ghost compact"
+                onClick={() => void clearSlot("heroImage")}
+              >
+                {t.owner.clearHeroImage}
+              </button>
+            ) : null}
+          </div>
+          <div className="site-brand-slot">
+            <p className="site-brand-slot-label">{t.owner.slotHeroVideo}</p>
+            {branding.heroVideoUrl ? (
+              <video src={branding.heroVideoUrl} muted controls playsInline />
+            ) : (
+              <span className="muted">{t.owner.noHeroVideoYet}</span>
+            )}
+            {canWrite && branding.heroVideoUrl ? (
+              <button
+                type="button"
+                className="btn ghost compact"
+                onClick={() => void clearSlot("heroVideo")}
+              >
+                {t.owner.clearHeroVideo}
+              </button>
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -359,7 +443,9 @@ export function OwnerSitePage({ locale }: Props) {
           <p className="muted">{t.owner.mediaEmpty}</p>
         ) : (
           <ul className="media-grid">
-            {assets.map((asset) => (
+            {assets.map((asset) => {
+              const usage = assetUsage(asset);
+              return (
               <li key={asset.id}>
                 {asset.kind === "VIDEO" ? (
                   <video src={asset.url} muted controls playsInline />
@@ -372,25 +458,61 @@ export function OwnerSitePage({ locale }: Props) {
                 <p className="muted tiny">
                   {asset.folder.replace(/^anantaone\//, "")}
                 </p>
+                {usage.length > 0 ? (
+                  <p className="muted tiny">
+                    {t.owner.mediaInUseAs.replace(
+                      "{slots}",
+                      usage.join(", "),
+                    )}
+                  </p>
+                ) : null}
                 {canWrite ? (
                   <div className="media-actions">
                     {asset.kind === "IMAGE" ? (
                       <>
-                        <button
-                          type="button"
-                          className="btn ghost compact"
-                          onClick={() => void assign(asset, "logo")}
-                        >
-                          {t.owner.useAsLogo}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn ghost compact"
-                          onClick={() => void assign(asset, "heroImage")}
-                        >
-                          {t.owner.useAsHero}
-                        </button>
+                        {asset.publicId === branding.logoPublicId ? (
+                          <button
+                            type="button"
+                            className="btn ghost compact"
+                            onClick={() => void clearSlot("logo")}
+                          >
+                            {t.owner.clearLogo}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn ghost compact"
+                            onClick={() => void assign(asset, "logo")}
+                          >
+                            {t.owner.useAsLogo}
+                          </button>
+                        )}
+                        {asset.publicId === branding.heroImagePublicId ? (
+                          <button
+                            type="button"
+                            className="btn ghost compact"
+                            onClick={() => void clearSlot("heroImage")}
+                          >
+                            {t.owner.clearHeroImage}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn ghost compact"
+                            onClick={() => void assign(asset, "heroImage")}
+                          >
+                            {t.owner.useAsHero}
+                          </button>
+                        )}
                       </>
+                    ) : asset.publicId === branding.heroVideoPublicId ? (
+                      <button
+                        type="button"
+                        className="btn ghost compact"
+                        onClick={() => void clearSlot("heroVideo")}
+                      >
+                        {t.owner.clearHeroVideo}
+                      </button>
                     ) : (
                       <button
                         type="button"
@@ -403,14 +525,15 @@ export function OwnerSitePage({ locale }: Props) {
                     <button
                       type="button"
                       className="btn ghost compact dark"
-                      onClick={() => void removeAsset(asset.id)}
+                      onClick={() => void removeAsset(asset)}
                     >
                       {t.common.delete}
                     </button>
                   </div>
                 ) : null}
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </section>
