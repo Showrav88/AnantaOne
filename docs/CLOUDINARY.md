@@ -23,7 +23,7 @@ Replace `<api_key>` and `<api_secret>` with the values from the Cloudinary conso
 Example shape (placeholders only):
 
 ```text
-CLOUDINARY_URL=cloudinary://228836755936258:<YOUR_SECRET>@dtd4hpmjb
+CLOUDINARY_URL=cloudinary://<api_key>:<api_secret>@dtd4hpmjb
 ```
 
 Then **Save** → **Manual Deploy** the API service so the env is loaded.
