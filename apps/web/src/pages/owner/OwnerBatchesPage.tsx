@@ -1,10 +1,10 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import {
   api,
   type Product,
   type ProductionBatch,
-  type ProductUnitTag,
 } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
 
@@ -19,20 +19,6 @@ const empty = {
   note: "",
   generateUnitTags: true,
 };
-
-function qrImageUrl(data: string) {
-  return `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(data)}`;
-}
-
-function formatUnitTagSize(locale: LocaleCode, product: ProductUnitTag["product"]) {
-  if (!product) return "";
-  const unitLabel =
-    locale === "bn"
-      ? (product.unitLabel?.bn ?? product.unit ?? "")
-      : (product.unitLabel?.en ?? product.unit ?? "");
-  if (product.size == null) return unitLabel;
-  return unitLabel ? `${product.size} ${unitLabel}` : String(product.size);
-}
 
 export function OwnerBatchesPage({ locale }: Props) {
   const t = getMessages(locale);
@@ -55,10 +41,6 @@ export function OwnerBatchesPage({ locale }: Props) {
   );
   const [reverseReason, setReverseReason] = useState("");
   const [reversing, setReversing] = useState(false);
-
-  const [printUnits, setPrintUnits] = useState<ProductUnitTag[] | null>(null);
-  const [printBatch, setPrintBatch] = useState<ProductionBatch | null>(null);
-  const [loadingTags, setLoadingTags] = useState(false);
 
   async function load() {
     const [prod, batchRes] = await Promise.all([
@@ -150,20 +132,6 @@ export function OwnerBatchesPage({ locale }: Props) {
     }
   }
 
-  async function openUnitTags(b: ProductionBatch) {
-    setError(null);
-    setLoadingTags(true);
-    try {
-      const res = await api.owner.batchUnits(b.id);
-      setPrintBatch(res.batch);
-      setPrintUnits(res.units);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
-    } finally {
-      setLoadingTags(false);
-    }
-  }
-
   function serialRangeLabel(b: ProductionBatch) {
     if (b.serialStart == null || b.serialEnd == null) return "—";
     return `${b.serialStart}–${b.serialEnd}`;
@@ -208,10 +176,6 @@ export function OwnerBatchesPage({ locale }: Props) {
 
       {error ? <p className="error-banner no-print">{error}</p> : null}
       {okMsg ? <p className="ok-banner no-print">{okMsg}</p> : null}
-      {loadingTags ? (
-        <p className="muted no-print">{t.common.loading}</p>
-      ) : null}
-
       {canWrite ? (
         <form className="owner-form compact no-print" onSubmit={onCreate}>
           <h2 className="full">{t.owner.batchesGuideProduction}</h2>
@@ -403,15 +367,14 @@ export function OwnerBatchesPage({ locale }: Props) {
                                   {t.owner.editBatchDates}
                                 </button>
                               ) : null}
-                              {b.serialStart != null ? (
-                                <button
-                                  type="button"
-                                  className="btn ghost compact"
-                                  onClick={() => void openUnitTags(b)}
-                                >
-                                  {t.owner.viewUnitTags}
-                                </button>
-                              ) : null}
+                            {b.serialStart != null ? (
+                              <Link
+                                className="btn ghost compact"
+                                to={`/owner/tags?batchId=${encodeURIComponent(b.id)}&mode=units`}
+                              >
+                                {t.owner.viewUnitTags}
+                              </Link>
+                            ) : null}
                             </div>
                             {canSoftDelete ? (
                               <button
@@ -440,74 +403,6 @@ export function OwnerBatchesPage({ locale }: Props) {
           </tbody>
         </table>
       </div>
-
-      {printUnits && printBatch ? (
-        <section className="unit-tags-sheet">
-          <div className="form-actions no-print">
-            <button
-              type="button"
-              className="btn primary"
-              onClick={() => window.print()}
-            >
-              {t.owner.printUnitTags}
-            </button>
-            <button
-              type="button"
-              className="btn ghost"
-              onClick={() => {
-                setPrintUnits(null);
-                setPrintBatch(null);
-              }}
-            >
-              {t.common.close}
-            </button>
-          </div>
-          <div className="unit-tags-print-area">
-            {printUnits.length === 0 ? (
-              <p className="muted">{t.owner.unitTagsEmpty}</p>
-            ) : (
-              <div className="unit-tag-grid">
-                {printUnits.map((u) => {
-                  const productName =
-                    locale === "bn" && u.product?.nameBn
-                      ? u.product.nameBn
-                      : (u.product?.name ?? "—");
-                  const sizeUnit = formatUnitTagSize(locale, u.product);
-                  const mfg = u.batch?.manufacturedAt
-                    ? new Date(u.batch.manufacturedAt).toLocaleDateString()
-                    : "—";
-                  const exp = u.batch?.expiresAt
-                    ? new Date(u.batch.expiresAt).toLocaleDateString()
-                    : "—";
-                  return (
-                    <article key={u.id} className="unit-tag-card">
-                      <h3>{productName}</h3>
-                      {sizeUnit ? (
-                        <p className="muted tiny">{sizeUnit}</p>
-                      ) : null}
-                      <p>
-                        <strong>{u.batch?.batchCode ?? printBatch.batchCode}</strong>
-                      </p>
-                      <p className="tiny">
-                        #{u.serialNo} · {u.serialCode}
-                      </p>
-                      <img
-                        className="unit-tag-qr"
-                        src={qrImageUrl(u.qrUrl)}
-                        alt={u.serialCode}
-                      />
-                      <p className="tiny muted">{u.qrUrl}</p>
-                      <p className="tiny">
-                        MFG {mfg} · EXP {exp}
-                      </p>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </section>
-      ) : null}
 
       {reverseBatch ? (
         <div
