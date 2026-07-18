@@ -1542,6 +1542,51 @@ html[data-theme="night"] .owner-nav a.active {
   min-width: 0;
 }
 
+.buyers-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.buyers-layout .table-wrap {
+  margin-top: 0;
+}
+
+.buyer-detail h2,
+.buyer-detail h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.buyer-detail h3 {
+  margin-top: 1rem;
+}
+
+.buyer-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.data-table tr.selected-row td {
+  background: color-mix(in srgb, var(--accent, #0f766e) 12%, transparent);
+}
+
+.stat-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+@media (max-width: 960px) {
+  .buyers-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .data-table,
 .owner-table {
   width: 100%;

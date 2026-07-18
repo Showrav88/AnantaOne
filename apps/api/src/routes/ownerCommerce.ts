@@ -4,7 +4,6 @@ import { prisma } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
   requireCompanyStaff,
-  requireOwnerOnly,
   requireOwnerOrManager,
 } from "../middleware/companyAccess.js";
 import { normalizeCategory } from "../lib/delivery.js";
@@ -101,14 +100,21 @@ ownerCommerceRouter.get("/buyers", async (req, res) => {
   });
 });
 
-ownerCommerceRouter.get("/buyers/analytics", requireOwnerOnly, async (req, res) => {
+const buyerCountedStatuses = [
+  "ACCEPTED",
+  "CONFIRMED",
+  "OUT_FOR_DELIVERY",
+  "DELIVERED",
+] as const;
+
+ownerCommerceRouter.get("/buyers/analytics", async (req, res) => {
   const buyers = await prisma.buyer.findMany({
     where: { tenantId: tid(req), isActive: true },
     include: {
       ward: true,
       salesOrders: {
         where: {
-          status: { code: { in: ["ACCEPTED", "CONFIRMED", "OUT_FOR_DELIVERY", "DELIVERED"] } },
+          status: { code: { in: [...buyerCountedStatuses] } },
         },
         select: {
           totalBdt: true,
@@ -155,6 +161,132 @@ ownerCommerceRouter.get("/buyers/analytics", requireOwnerOnly, async (req, res) 
       buyerCount: rows.length,
       totalRevenueBdt: rows.reduce((s, r) => s + r.totalSpentBdt, 0),
       buyers: rows,
+    },
+  });
+});
+
+ownerCommerceRouter.get("/buyers/:id/analytics", async (req, res) => {
+  const buyer = await prisma.buyer.findFirst({
+    where: { id: String(req.params.id), tenantId: tid(req) },
+    include: {
+      ward: true,
+      salesOrders: {
+        where: {
+          status: { code: { in: [...buyerCountedStatuses] } },
+        },
+        include: {
+          source: true,
+          status: true,
+          lines: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  nameBn: true,
+                  sku: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { orderedAt: "desc" },
+      },
+    },
+  });
+  if (!buyer) {
+    res.status(404).json({ ok: false, message: "Buyer not found" });
+    return;
+  }
+
+  const productMap = new Map<
+    string,
+    {
+      productId: string;
+      name: string;
+      nameBn: string | null;
+      sku: string;
+      qty: number;
+      lineTotalBdt: number;
+      orderCount: number;
+    }
+  >();
+
+  let totalSpentBdt = 0;
+  let onlineSpentBdt = 0;
+  let counterSpentBdt = 0;
+
+  for (const order of buyer.salesOrders) {
+    const orderTotal = Number(order.totalBdt);
+    totalSpentBdt += orderTotal;
+    if (order.source.code === "ONLINE") onlineSpentBdt += orderTotal;
+    else counterSpentBdt += orderTotal;
+
+    const seenInOrder = new Set<string>();
+    for (const line of order.lines) {
+      const productId = line.productId;
+      const prev = productMap.get(productId) ?? {
+        productId,
+        name: line.product?.name ?? productId,
+        nameBn: line.product?.nameBn ?? null,
+        sku: line.product?.sku ?? "",
+        qty: 0,
+        lineTotalBdt: 0,
+        orderCount: 0,
+      };
+      prev.qty += Number(line.qty);
+      prev.lineTotalBdt += Number(line.lineTotalBdt);
+      if (!seenInOrder.has(productId)) {
+        prev.orderCount += 1;
+        seenInOrder.add(productId);
+      }
+      productMap.set(productId, prev);
+    }
+  }
+
+  const products = [...productMap.values()].sort(
+    (a, b) => b.lineTotalBdt - a.lineTotalBdt,
+  );
+
+  const recentOrders = buyer.salesOrders.slice(0, 30).map((o) => ({
+    id: o.id,
+    invoiceCode: o.invoiceCode,
+    orderedAt: o.orderedAt,
+    totalBdt: Number(o.totalBdt),
+    subtotalBdt: Number(o.subtotalBdt),
+    source: o.source
+      ? { code: o.source.code, nameEn: o.source.nameEn, nameBn: o.source.nameBn }
+      : null,
+    status: o.status
+      ? { code: o.status.code, nameEn: o.status.nameEn, nameBn: o.status.nameBn }
+      : null,
+    lines: o.lines.map((l) => ({
+      productId: l.productId,
+      qty: Number(l.qty),
+      unitPriceBdt: Number(l.unitPriceBdt),
+      lineTotalBdt: Number(l.lineTotalBdt),
+      product: l.product
+        ? {
+            id: l.product.id,
+            name: l.product.name,
+            nameBn: l.product.nameBn,
+            sku: l.product.sku,
+          }
+        : null,
+    })),
+  }));
+
+  res.json({
+    ok: true,
+    buyer: serializeBuyer(buyer),
+    analytics: {
+      orderCount: buyer.salesOrders.length,
+      totalSpentBdt,
+      onlineSpentBdt,
+      counterSpentBdt,
+      lastOrderAt: buyer.salesOrders[0]?.orderedAt ?? null,
+      products,
+      recentOrders,
     },
   });
 });
