@@ -14,6 +14,10 @@ type Props = {
   onLocale: () => void;
 };
 
+function isDesktopWidth() {
+  return typeof window !== "undefined" && window.innerWidth > 900;
+}
+
 export function OwnerLayout({ locale, onLocale }: Props) {
   const t = getMessages(locale);
   const navigate = useNavigate();
@@ -21,7 +25,9 @@ export function OwnerLayout({ locale, onLocale }: Props) {
   const user = getStoredUser();
   const isOwner = user?.role.code === "OWNER";
   const isManager = user?.role.code === "MANAGER";
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [desktop, setDesktop] = useState(isDesktopWidth);
+  /** Desktop: sidebar pinned open by default. Mobile: closed until hamburger. */
+  const [menuOpen, setMenuOpen] = useState(isDesktopWidth);
   const [branches, setBranches] = useState<BranchRow[]>([]);
   const [activeBranch, setActiveBranch] = useState(getActiveBranchId());
   const roleLabel =
@@ -38,18 +44,24 @@ export function OwnerLayout({ locale, onLocale }: Props) {
 
   useEffect(() => {
     function onResize() {
-      if (window.innerWidth > 900) setMenuOpen(false);
+      const desk = isDesktopWidth();
+      setDesktop((wasDesktop) => {
+        if (wasDesktop !== desk) {
+          // Only force open/closed when crossing the breakpoint.
+          setMenuOpen(desk);
+        }
+        return desk;
+      });
     }
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // Close drawer after navigation (mobile).
+  // Close drawer after navigation on mobile only (desktop stays pinned).
   useEffect(() => {
-    setMenuOpen(false);
+    if (!isDesktopWidth()) setMenuOpen(false);
   }, [location.pathname]);
 
-  // Escape closes open menu.
   useEffect(() => {
     if (!menuOpen) return;
     function onKey(e: KeyboardEvent) {
@@ -59,15 +71,15 @@ export function OwnerLayout({ locale, onLocale }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
-  // Lock page scroll while drawer is open.
+  // Lock page scroll while mobile drawer is open.
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen || desktop) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
     };
-  }, [menuOpen]);
+  }, [menuOpen, desktop]);
 
   useEffect(() => {
     void api.owner
@@ -103,8 +115,16 @@ export function OwnerLayout({ locale, onLocale }: Props) {
     branches.find((b) => b.id === user?.branchId)?.name ??
     t.owner.noBranch;
 
+  const showBackdrop = menuOpen && !desktop;
+
   return (
-    <div className={`owner-shell ${menuOpen ? "nav-open" : ""}`}>
+    <div
+      className={[
+        "owner-shell",
+        menuOpen ? "nav-open" : "nav-closed",
+        desktop ? "is-desktop" : "is-mobile",
+      ].join(" ")}
+    >
       <header className="owner-topbar">
         <button
           type="button"
@@ -147,13 +167,18 @@ export function OwnerLayout({ locale, onLocale }: Props) {
         </button>
       </header>
 
-      {menuOpen ? (
+      {showBackdrop ? (
         <button
           type="button"
           className="nav-backdrop"
           aria-label={t.owner.closeMenu}
           onClick={closeMenu}
         />
+      ) : null}
+
+      {/* Desktop: hover left edge to peek the menu when collapsed */}
+      {!menuOpen && desktop ? (
+        <div className="nav-hotedge" aria-hidden="true" />
       ) : null}
 
       <aside className="owner-nav">
@@ -178,7 +203,7 @@ export function OwnerLayout({ locale, onLocale }: Props) {
             <p className="branch-locked">{lockedBranchName}</p>
           )}
         </div>
-        <nav onClick={closeMenu}>
+        <nav onClick={() => { if (!desktop) closeMenu(); }}>
           <NavLink to="/owner" end>
             {t.owner.navDashboard}
           </NavLink>
@@ -219,7 +244,12 @@ export function OwnerLayout({ locale, onLocale }: Props) {
         </nav>
         <div className="owner-nav-foot">
           {isOwner ? (
-            <NavLink to="/pulse" onClick={closeMenu}>
+            <NavLink
+              to="/pulse"
+              onClick={() => {
+                if (!desktop) closeMenu();
+              }}
+            >
               {t.owner.navPublic}
             </NavLink>
           ) : null}

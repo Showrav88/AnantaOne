@@ -583,9 +583,66 @@ button {
   display: grid;
   grid-template-columns: 15rem minmax(0, 1fr);
   grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "topbar topbar"
+    "nav main";
   background: var(--shell-bg);
   color: var(--ink);
   overflow-x: clip;
+}
+
+/* PC: hamburger pins/unpins sidebar; left-edge hover peeks when closed */
+@media (min-width: 901px) {
+  .owner-shell.is-desktop .owner-topbar {
+    z-index: 60;
+  }
+
+  .owner-shell.is-desktop.nav-closed {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "topbar"
+      "main";
+    /* Let the fixed peek drawer paint outside the shell */
+    overflow: visible;
+  }
+
+  .owner-shell.is-desktop.nav-closed .owner-nav {
+    grid-area: unset;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 15rem;
+    z-index: 50;
+    transform: translateX(-105%);
+    transition: transform 200ms ease;
+    max-height: 100vh;
+    min-height: 100vh;
+    padding-top: calc(3.4rem + env(safe-area-inset-top, 0px));
+    box-shadow: none;
+  }
+
+  .owner-shell.is-desktop.nav-closed .owner-main {
+    grid-area: main;
+  }
+
+  /* Hover left edge (or the sliding nav) to peek menu when closed */
+  .owner-shell.is-desktop.nav-closed .nav-hotedge {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 16px;
+    z-index: 55;
+    cursor: e-resize;
+  }
+
+  .owner-shell.is-desktop.nav-closed .nav-hotedge:hover + .owner-nav,
+  .owner-shell.is-desktop.nav-closed .owner-nav:hover {
+    transform: translateX(0);
+    box-shadow: 8px 0 28px rgba(0, 0, 0, 0.35);
+  }
 }
 
 .sr-only {
@@ -647,7 +704,7 @@ button {
 }
 
 .owner-topbar {
-  grid-column: 1 / -1;
+  grid-area: topbar;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -694,7 +751,57 @@ button {
   border: 1px solid color-mix(in srgb, var(--topbar-fg) 40%, transparent);
 }
 
+/* Hamburger — always visible (PC + mobile) */
 .nav-toggle {
+  display: grid;
+  gap: 5px;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-content: center;
+  background: color-mix(in srgb, var(--topbar-fg) 12%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--topbar-fg) 65%, transparent);
+  border-radius: 0.35rem;
+  color: var(--topbar-fg);
+  cursor: pointer;
+  padding: 0.4rem;
+  flex: 0 0 auto;
+}
+
+.nav-toggle:hover,
+.nav-toggle:focus-visible {
+  background: color-mix(in srgb, var(--topbar-fg) 20%, transparent);
+  border-color: var(--topbar-fg);
+  outline: none;
+}
+
+.nav-toggle span {
+  display: block;
+  width: 1.2rem;
+  height: 2.5px;
+  border-radius: 999px;
+  background: var(--topbar-fg);
+  transition: transform 160ms ease, opacity 160ms ease;
+  transform-origin: center;
+}
+
+.owner-shell.nav-open .nav-toggle {
+  background: color-mix(in srgb, var(--topbar-fg) 22%, transparent);
+  border-color: var(--topbar-fg);
+}
+
+.owner-shell.nav-open .nav-toggle span:nth-child(1) {
+  transform: translateY(7.5px) rotate(45deg);
+}
+
+.owner-shell.nav-open .nav-toggle span:nth-child(2) {
+  opacity: 0;
+}
+
+.owner-shell.nav-open .nav-toggle span:nth-child(3) {
+  transform: translateY(-7.5px) rotate(-45deg);
+}
+
+.nav-hotedge {
   display: none;
 }
 
@@ -748,7 +855,7 @@ button {
   --nav-fg: #f3faf6;
   --nav-muted: rgba(243, 250, 246, 0.78);
   --nav-line: rgba(243, 250, 246, 0.28);
-  grid-row: 2;
+  grid-area: nav;
   background: #004833;
   color: var(--nav-fg);
   padding: 1.25rem 1rem;
@@ -854,7 +961,7 @@ html[data-theme="night"] .owner-nav a.active {
 }
 
 .owner-main {
-  grid-row: 2;
+  grid-area: main;
   padding: 1.5rem clamp(0.85rem, 3vw, 1.5rem) 3rem;
   min-width: 0;
   color: var(--ink);
@@ -988,6 +1095,13 @@ html[data-theme="night"] .owner-nav a.active {
 @media (max-width: 900px) {
   .owner-shell {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "topbar"
+      "main";
+  }
+
+  .owner-shell .owner-nav {
+    grid-area: unset;
   }
 
   .lang.compact {
@@ -1021,59 +1135,6 @@ html[data-theme="night"] .owner-nav a.active {
   .owner-topbar .display-controls,
   .owner-topbar .lang.compact {
     flex: 0 0 auto;
-  }
-
-  .nav-toggle {
-    display: grid;
-    gap: 5px;
-    width: 2.5rem;
-    height: 2.5rem;
-    place-content: center;
-    background: color-mix(in srgb, var(--topbar-fg) 12%, transparent);
-    border: 1.5px solid color-mix(in srgb, var(--topbar-fg) 65%, transparent);
-    border-radius: 0.35rem;
-    color: var(--topbar-fg);
-    cursor: pointer;
-    padding: 0.4rem;
-    flex: 0 0 auto;
-  }
-
-  .nav-toggle:hover,
-  .nav-toggle:focus-visible {
-    background: color-mix(in srgb, var(--topbar-fg) 20%, transparent);
-    border-color: var(--topbar-fg);
-    outline: none;
-  }
-
-  .nav-toggle span {
-    display: block;
-    width: 1.2rem;
-    height: 2.5px;
-    border-radius: 999px;
-    background: var(--topbar-fg);
-  }
-
-  .owner-shell.nav-open .nav-toggle {
-    background: color-mix(in srgb, var(--topbar-fg) 22%, transparent);
-    border-color: var(--topbar-fg);
-  }
-
-  /* Open state: clear X so the control stays readable */
-  .owner-shell.nav-open .nav-toggle span:nth-child(1) {
-    transform: translateY(7.5px) rotate(45deg);
-  }
-
-  .owner-shell.nav-open .nav-toggle span:nth-child(2) {
-    opacity: 0;
-  }
-
-  .owner-shell.nav-open .nav-toggle span:nth-child(3) {
-    transform: translateY(-7.5px) rotate(-45deg);
-  }
-
-  .nav-toggle span {
-    transition: transform 160ms ease, opacity 160ms ease;
-    transform-origin: center;
   }
 
   .nav-backdrop {
