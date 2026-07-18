@@ -43,6 +43,10 @@ export function OwnerStaffPage({ locale }: Props) {
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [detailMember, setDetailMember] = useState<StaffMember | null>(null);
+  const [deactivateMember, setDeactivateMember] =
+    useState<StaffMember | null>(null);
+  const [deactivating, setDeactivating] = useState(false);
 
   async function load() {
     const [s, b] = await Promise.all([
@@ -215,15 +219,29 @@ export function OwnerStaffPage({ locale }: Props) {
     }
   }
 
-  async function deactivate(id: string) {
+  async function confirmDeactivate() {
+    if (!deactivateMember) return;
     setError(null);
+    setDeactivating(true);
     try {
-      await api.owner.deactivateStaff(id);
-      if (editingId === id) resetForm();
+      await api.owner.deactivateStaff(deactivateMember.id);
+      if (editingId === deactivateMember.id) resetForm();
+      if (detailMember?.id === deactivateMember.id) setDetailMember(null);
+      setDeactivateMember(null);
+      setOkMsg(t.owner.staffDeactivated);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setDeactivating(false);
     }
+  }
+
+  function roleLabel(member: StaffMember) {
+    if (member.role.code === "OWNER") return t.owner.staffRoleOwner;
+    if (member.role.code === "MANAGER") return t.owner.staffRoleManager;
+    if (member.role.code === "EMPLOYEE") return t.owner.staffRoleEmployee;
+    return locale === "bn" ? member.role.nameBn : member.role.nameEn;
   }
 
   const previewUrl =
@@ -338,8 +356,8 @@ export function OwnerStaffPage({ locale }: Props) {
                 })
               }
             >
-              <option value="MANAGER">{t.owner.roleManager}</option>
-              <option value="EMPLOYEE">{t.owner.roleEmployee}</option>
+              <option value="MANAGER">{t.owner.staffRoleManager}</option>
+              <option value="EMPLOYEE">{t.owner.staffRoleEmployee}</option>
             </select>
           </label>
           <label>
@@ -414,17 +432,20 @@ export function OwnerStaffPage({ locale }: Props) {
           <thead>
             <tr>
               <th>{t.owner.fieldStaffName}</th>
+              <th>{t.owner.fieldEmployeeCode}</th>
               <th>{t.owner.fieldRole}</th>
+              <th>{t.owner.fieldDesignation}</th>
+              <th>{t.auth.phone}</th>
               <th>{t.owner.fieldBranch}</th>
               <th>{t.owner.fieldJoiningDate}</th>
               <th>{t.owner.fieldSalary}</th>
               <th>{t.owner.fieldStatus}</th>
-              {isOwner ? <th /> : null}
+              <th />
             </tr>
           </thead>
           <tbody>
             {staff.map((s) => (
-              <tr key={s.id}>
+              <tr key={s.id} className={s.isActive ? undefined : "row-inactive"}>
                 <td data-label={t.owner.fieldStaffName}>
                   <div className="staff-name-cell">
                     {s.imageUrl ? (
@@ -435,12 +456,6 @@ export function OwnerStaffPage({ locale }: Props) {
                     <div className="staff-name-meta">
                       <strong>{s.name}</strong>
                       <div className="muted tiny">{s.email}</div>
-                      {s.phone ? (
-                        <div className="muted tiny">{s.phone}</div>
-                      ) : null}
-                      {s.designation ? (
-                        <div className="muted tiny">{s.designation}</div>
-                      ) : null}
                       {isOwner && s.role.code !== "OWNER" && s.isActive ? (
                         <label className="upload-field compact">
                           <span className="muted tiny">
@@ -464,7 +479,14 @@ export function OwnerStaffPage({ locale }: Props) {
                     </div>
                   </div>
                 </td>
-                <td data-label={t.owner.fieldRole}>{s.role.code}</td>
+                <td data-label={t.owner.fieldEmployeeCode}>
+                  {s.employeeCode || "—"}
+                </td>
+                <td data-label={t.owner.fieldRole}>{roleLabel(s)}</td>
+                <td data-label={t.owner.fieldDesignation}>
+                  {s.designation || "—"}
+                </td>
+                <td data-label={t.auth.phone}>{s.phone || "—"}</td>
                 <td data-label={t.owner.fieldBranch}>
                   {isOwner && s.role.code !== "OWNER" && s.isActive ? (
                     <select
@@ -495,33 +517,220 @@ export function OwnerStaffPage({ locale }: Props) {
                     : "—"}
                 </td>
                 <td data-label={t.owner.fieldStatus}>
-                  {s.isActive ? "✓" : "—"}
+                  {s.isActive ? t.owner.statusActive : t.owner.statusInactive}
                 </td>
-                {isOwner && s.role.code !== "OWNER" && s.isActive ? (
-                  <td className="cell-actions" data-label="">
-                    <button
-                      type="button"
-                      className="linkish"
-                      onClick={() => startEdit(s)}
-                    >
-                      {t.common.edit}
-                    </button>
-                    <button
-                      type="button"
-                      className="linkish"
-                      onClick={() => void deactivate(s.id)}
-                    >
-                      {t.owner.deactivate}
-                    </button>
-                  </td>
-                ) : isOwner ? (
-                  <td className="cell-actions" data-label="" />
-                ) : null}
+                <td className="cell-actions" data-label="">
+                  <button
+                    type="button"
+                    className="linkish"
+                    onClick={() => setDetailMember(s)}
+                  >
+                    {t.owner.staffDetails}
+                  </button>
+                  {isOwner && s.role.code !== "OWNER" ? (
+                    <>
+                      <button
+                        type="button"
+                        className="linkish"
+                        onClick={() => startEdit(s)}
+                      >
+                        {t.common.edit}
+                      </button>
+                      {s.isActive ? (
+                        <button
+                          type="button"
+                          className="linkish"
+                          onClick={() => setDeactivateMember(s)}
+                        >
+                          {t.owner.deactivate}
+                        </button>
+                      ) : null}
+                    </>
+                  ) : null}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {detailMember ? (
+        <div
+          className="owner-dialog-backdrop"
+          role="presentation"
+          onClick={() => setDetailMember(null)}
+        >
+          <div
+            className="owner-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="staff-detail-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="owner-dialog-head">
+              <div className="staff-name-cell">
+                {detailMember.imageUrl ? (
+                  <img
+                    className="staff-thumb lg"
+                    src={detailMember.imageUrl}
+                    alt=""
+                  />
+                ) : (
+                  <span className="staff-thumb lg placeholder" aria-hidden />
+                )}
+                <div>
+                  <h2 id="staff-detail-title">{detailMember.name}</h2>
+                  <p className="muted tiny">{roleLabel(detailMember)}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn ghost compact"
+                onClick={() => setDetailMember(null)}
+              >
+                {t.common.close}
+              </button>
+            </header>
+            <dl className="staff-detail-grid">
+              <div>
+                <dt>{t.owner.fieldEmployeeCode}</dt>
+                <dd>{detailMember.employeeCode || "—"}</dd>
+              </div>
+              <div>
+                <dt>{t.owner.fieldDesignation}</dt>
+                <dd>{detailMember.designation || "—"}</dd>
+              </div>
+              <div>
+                <dt>{t.auth.email}</dt>
+                <dd>{detailMember.email}</dd>
+              </div>
+              <div>
+                <dt>{t.auth.phone}</dt>
+                <dd>{detailMember.phone || "—"}</dd>
+              </div>
+              <div>
+                <dt>{t.owner.fieldBranch}</dt>
+                <dd>{detailMember.branch?.name || t.owner.noBranch}</dd>
+              </div>
+              <div>
+                <dt>{t.owner.fieldJoiningDate}</dt>
+                <dd>
+                  {detailMember.joiningDate
+                    ? new Date(detailMember.joiningDate).toLocaleDateString()
+                    : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt>{t.owner.fieldSalary}</dt>
+                <dd>
+                  {detailMember.salaryBdt != null
+                    ? `৳${detailMember.salaryBdt.toLocaleString()}`
+                    : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt>{t.owner.fieldStatus}</dt>
+                <dd>
+                  {detailMember.isActive
+                    ? t.owner.statusActive
+                    : t.owner.statusInactive}
+                </dd>
+              </div>
+            </dl>
+            <div className="form-actions">
+              {isOwner && detailMember.role.code !== "OWNER" ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn primary"
+                    onClick={() => {
+                      startEdit(detailMember);
+                      setDetailMember(null);
+                    }}
+                  >
+                    {t.common.edit}
+                  </button>
+                  {detailMember.isActive ? (
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      onClick={() => {
+                        setDeactivateMember(detailMember);
+                        setDetailMember(null);
+                      }}
+                    >
+                      {t.owner.deactivate}
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => setDetailMember(null)}
+              >
+                {t.common.close}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deactivateMember ? (
+        <div
+          className="owner-dialog-backdrop"
+          role="presentation"
+          onClick={() => (!deactivating ? setDeactivateMember(null) : null)}
+        >
+          <div
+            className="owner-dialog confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="staff-deactivate-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="staff-deactivate-title">{t.owner.deactivateStaffTitle}</h2>
+            <p>
+              {t.owner.deactivateStaffHint.replace(
+                "{name}",
+                deactivateMember.name,
+              )}
+            </p>
+            <ul className="staff-deactivate-summary">
+              <li>
+                <span className="muted">{t.owner.fieldEmployeeCode}</span>{" "}
+                {deactivateMember.employeeCode || "—"}
+              </li>
+              <li>
+                <span className="muted">{t.owner.fieldRole}</span>{" "}
+                {roleLabel(deactivateMember)}
+              </li>
+              <li>
+                <span className="muted">{t.auth.email}</span>{" "}
+                {deactivateMember.email}
+              </li>
+            </ul>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="cta danger"
+                disabled={deactivating}
+                onClick={() => void confirmDeactivate()}
+              >
+                {t.owner.confirmDeactivateStaff}
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                disabled={deactivating}
+                onClick={() => setDeactivateMember(null)}
+              >
+                {t.common.cancel}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
