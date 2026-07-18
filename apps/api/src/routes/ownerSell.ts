@@ -267,7 +267,7 @@ ownerSellRouter.patch(
   },
 );
 
-/** Full reverse of unused production — stock + unit tags return / void. */
+/** Soft-delete unused production — remove stock, void tags, keep history. */
 ownerSellRouter.post(
   "/batches/:id/reverse",
   requireOwnerOrManager,
@@ -278,7 +278,7 @@ ownerSellRouter.post(
     if (!parsed.success) {
       res.status(400).json({
         ok: false,
-        message: "Clear reverse reason required (min 5 characters)",
+        message: "Clear soft-delete reason required (min 5 characters)",
       });
       return;
     }
@@ -292,7 +292,7 @@ ownerSellRouter.post(
       return;
     }
     if (existing.reversedAt || !existing.isActive) {
-      res.status(400).json({ ok: false, message: "Batch already reversed" });
+      res.status(400).json({ ok: false, message: "Batch already soft deleted" });
       return;
     }
 
@@ -301,7 +301,7 @@ ownerSellRouter.post(
     if (remaining < produced) {
       res.status(400).json({
         ok: false,
-        message: `Cannot reverse — ${produced - remaining} unit(s) already sold. Reverse those sales first.`,
+        message: `Cannot soft delete — ${produced - remaining} unit(s) already sold. Reverse those sales first.`,
       });
       return;
     }
