@@ -1128,11 +1128,29 @@ export const api = {
         undefined,
         true,
       ),
-    acceptOnlineOrder: (id: string) =>
+    onlineOrder: (id: string) =>
+      getJson<{ ok: boolean; order: Record<string, unknown> }>(
+        `/api/v1/owner/online-orders/${encodeURIComponent(id)}`,
+        1,
+        undefined,
+        true,
+      ),
+    acceptOnlineOrder: (
+      id: string,
+      body?: {
+        creditWallet?: boolean;
+        lines?: Array<{
+          productId: string;
+          qty: number;
+          unitPriceBdt?: number;
+          batchId?: string | null;
+        }>;
+      },
+    ) =>
       getJson<{ ok: boolean; order: Record<string, unknown> }>(
         `/api/v1/owner/online-orders/${id}/accept`,
         1,
-        { method: "POST", body: JSON.stringify({}) },
+        { method: "POST", body: JSON.stringify(body ?? {}) },
         true,
       ),
     setOnlineOrderStatus: (id: string, statusCode: string) =>

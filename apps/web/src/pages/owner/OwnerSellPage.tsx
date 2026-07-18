@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import { SalesInvoiceView } from "../../components/SalesInvoiceView";
 import {
@@ -27,6 +27,8 @@ type CartLine = {
 export function OwnerSellPage({ locale }: Props) {
   const t = getMessages(locale);
   const user = getStoredUser();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const onlineOrderId = searchParams.get("onlineOrderId");
   const canSell =
     user?.role.code === "OWNER" || user?.role.code === "MANAGER";
 
@@ -41,6 +43,13 @@ export function OwnerSellPage({ locale }: Props) {
   >("COUNTER");
   const [buyerId, setBuyerId] = useState("");
   const [note, setNote] = useState("");
+  const [onlineMeta, setOnlineMeta] = useState<{
+    id: string;
+    invoiceCode: string;
+    phone: string | null;
+    shopName: string | null;
+    clientName: string | null;
+  } | null>(null);
   const [pickProductId, setPickProductId] = useState("");
   const [pickQty, setPickQty] = useState("1");
   const [pickPrice, setPickPrice] = useState("");
@@ -67,15 +76,105 @@ export function OwnerSellPage({ locale }: Props) {
       setPickProductId(prod.products[0].id);
       setPickPrice(String(prod.products[0].priceBdt));
     }
+    return {
+      products: prod.products.filter((p) => p.isActive),
+      batches: batchRes.batches,
+    };
   }
 
   useEffect(() => {
     startTransition(() => {
-      void load().catch((err) =>
-        setError(err instanceof Error ? err.message : "Failed"),
-      );
+      void (async () => {
+        try {
+          const catalog = await load();
+          if (!onlineOrderId) return;
+          const res = await api.owner.onlineOrder(onlineOrderId);
+          const o = res.order as {
+            id: string;
+            invoiceCode: string;
+            phone: string | null;
+            shopName: string | null;
+            clientName: string | null;
+            buyerId: string | null;
+            note: string | null;
+            status: { code: string } | null;
+            lines: Array<{
+              productId: string;
+              qty: number;
+              unitPriceBdt: number;
+              catalogPriceBdt: number;
+              product: {
+                name: string;
+                nameBn: string | null;
+                sku: string;
+              } | null;
+            }>;
+          };
+          if (o.status?.code !== "PENDING") {
+            setError(t.owner.onlineSellNotPending);
+            return;
+          }
+          setOnlineMeta({
+            id: o.id,
+            invoiceCode: o.invoiceCode,
+            phone: o.phone,
+            shopName: o.shopName,
+            clientName: o.clientName,
+          });
+          setSourceCode("ONLINE");
+          setBuyerId(o.buyerId ?? "");
+          setNote(
+            [
+              o.note,
+              `${o.shopName ?? ""} / ${o.clientName ?? ""}`.trim(),
+              o.phone ? `☎ ${o.phone}` : "",
+              `Online ${o.invoiceCode}`,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          );
+          setLines(
+            o.lines.map((l, i) => {
+              const fefo = catalog.batches
+                .filter(
+                  (b) =>
+                    b.productId === l.productId && b.qtyRemaining >= l.qty,
+                )
+                .sort((a, b) => {
+                  const ae = a.expiresAt
+                    ? new Date(a.expiresAt).getTime()
+                    : Number.POSITIVE_INFINITY;
+                  const be = b.expiresAt
+                    ? new Date(b.expiresAt).getTime()
+                    : Number.POSITIVE_INFINITY;
+                  if (ae !== be) return ae - be;
+                  return (
+                    new Date(a.manufacturedAt).getTime() -
+                    new Date(b.manufacturedAt).getTime()
+                  );
+                })[0];
+              return {
+                key: `online-${l.productId}-${i}`,
+                productId: l.productId,
+                productLabel:
+                  locale === "bn" && l.product?.nameBn
+                    ? l.product.nameBn
+                    : (l.product?.name ?? l.productId),
+                sku: l.product?.sku ?? "",
+                qty: String(l.qty),
+                catalogPriceBdt: l.catalogPriceBdt,
+                unitPriceBdt: String(l.unitPriceBdt),
+                batchId: fefo?.id ?? "",
+              };
+            }),
+          );
+          setOkMsg(t.owner.onlineSellLoaded);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed");
+        }
+      })();
     });
-  }, []);
+  }, [onlineOrderId]);
 
   const selectedProduct = products.find((p) => p.id === pickProductId);
 
@@ -158,7 +257,38 @@ export function OwnerSellPage({ locale }: Props) {
       setError(t.owner.sellNeedLines);
       return;
     }
+    for (const l of lines) {
+      if (!l.batchId) {
+        setError(t.owner.sellNeedBatch);
+        return;
+      }
+    }
     try {
+      if (onlineMeta) {
+        const res = await api.owner.acceptOnlineOrder(onlineMeta.id, {
+          creditWallet: true,
+          lines: lines.map((l) => ({
+            productId: l.productId,
+            qty: Number(l.qty),
+            unitPriceBdt: Number(l.unitPriceBdt),
+            batchId: l.batchId || null,
+          })),
+        });
+        const orderId = String((res.order as { id: string }).id);
+        const inv = await api.owner.orderInvoice(orderId);
+        setInvoice(inv.invoice);
+        setCancelReason("");
+        setOkMsg(
+          `${t.owner.onlineSellConfirmed} ৳${Number((res.order as { totalBdt: number }).totalBdt).toLocaleString()}`,
+        );
+        setLines([]);
+        setNote("");
+        setOnlineMeta(null);
+        setSearchParams({});
+        await load();
+        return;
+      }
+
       const res = await api.owner.confirmSell({
         sourceCode,
         buyerId: buyerId || null,
@@ -230,6 +360,36 @@ export function OwnerSellPage({ locale }: Props) {
 
       {error ? <p className="error-banner no-print">{error}</p> : null}
       {okMsg ? <p className="ok-banner no-print">{okMsg}</p> : null}
+
+      {onlineMeta && !invoice ? (
+        <div className="ok-banner no-print online-sell-banner">
+          <strong>{t.owner.onlineSellLoaded}</strong>
+          <div className="muted tiny">
+            {onlineMeta.invoiceCode}
+            {onlineMeta.shopName ? ` · ${onlineMeta.shopName}` : ""}
+            {onlineMeta.clientName ? ` · ${onlineMeta.clientName}` : ""}
+          </div>
+          {onlineMeta.phone ? (
+            <p className="tiny">
+              <a className="cta secondary" href={`tel:${onlineMeta.phone}`}>
+                {t.owner.onlineCallCustomer}: {onlineMeta.phone}
+              </a>
+            </p>
+          ) : null}
+          <p className="muted tiny">{t.owner.onlineSellConfirmHint}</p>
+          <button
+            type="button"
+            className="linkish"
+            onClick={() => {
+              setOnlineMeta(null);
+              setLines([]);
+              setSearchParams({});
+            }}
+          >
+            {t.owner.onlineSellClear}
+          </button>
+        </div>
+      ) : null}
 
       {invoice ? (
         <div className="post-sell-invoice">
@@ -402,6 +562,7 @@ export function OwnerSellPage({ locale }: Props) {
               <thead>
                 <tr>
                   <th>{t.owner.fieldProduct}</th>
+                  <th>{t.owner.fieldBatch}</th>
                   <th className="sell-col-qty">{t.owner.fieldQty}</th>
                   <th className="sell-col-money">{t.owner.catalogPrice}</th>
                   <th className="sell-col-qty">{t.owner.soldPrice}</th>
@@ -412,7 +573,7 @@ export function OwnerSellPage({ locale }: Props) {
               <tbody>
                 {lines.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="muted">
+                    <td colSpan={7} className="muted">
                       {t.owner.cartEmpty}
                     </td>
                   </tr>
@@ -421,11 +582,40 @@ export function OwnerSellPage({ locale }: Props) {
                     const sold = Number(l.unitPriceBdt || 0);
                     const overridden =
                       Math.abs(sold - l.catalogPriceBdt) > 0.0001;
+                    const lineBatches = batches.filter(
+                      (b) =>
+                        b.productId === l.productId &&
+                        (b.qtyRemaining > 0 || b.id === l.batchId),
+                    );
                     return (
                       <tr key={l.key}>
                         <td>
                           <strong>{l.productLabel}</strong>
                           <div className="muted tiny">{l.sku}</div>
+                        </td>
+                        <td>
+                          <select
+                            value={l.batchId}
+                            onChange={(e) =>
+                              setLines((prev) =>
+                                prev.map((x) =>
+                                  x.key === l.key
+                                    ? { ...x, batchId: e.target.value }
+                                    : x,
+                                ),
+                              )
+                            }
+                          >
+                            {lineBatches.length === 0 ? (
+                              <option value="">{t.owner.noBatch}</option>
+                            ) : (
+                              lineBatches.map((b) => (
+                                <option key={b.id} value={b.id}>
+                                  {b.batchCode} · {b.qtyRemaining}
+                                </option>
+                              ))
+                            )}
+                          </select>
                         </td>
                         <td className="sell-col-qty">
                           <input
@@ -515,6 +705,40 @@ export function OwnerSellPage({ locale }: Props) {
                       </button>
                     </div>
                     <div className="sell-line-fields">
+                      <label className="full">
+                        {t.owner.fieldBatch}
+                        <select
+                          value={l.batchId}
+                          onChange={(e) =>
+                            setLines((prev) =>
+                              prev.map((x) =>
+                                x.key === l.key
+                                  ? { ...x, batchId: e.target.value }
+                                  : x,
+                              ),
+                            )
+                          }
+                        >
+                          {batches
+                            .filter(
+                              (b) =>
+                                b.productId === l.productId &&
+                                (b.qtyRemaining > 0 || b.id === l.batchId),
+                            )
+                            .map((b) => (
+                              <option key={b.id} value={b.id}>
+                                {b.batchCode} · {b.qtyRemaining}
+                              </option>
+                            ))}
+                          {!batches.some(
+                            (b) =>
+                              b.productId === l.productId &&
+                              (b.qtyRemaining > 0 || b.id === l.batchId),
+                          ) ? (
+                            <option value="">{t.owner.noBatch}</option>
+                          ) : null}
+                        </select>
+                      </label>
                       <label>
                         {t.owner.fieldQty}
                         <input
@@ -573,7 +797,9 @@ export function OwnerSellPage({ locale }: Props) {
               className="cta"
               disabled={pending || !lines.length}
             >
-              {t.owner.confirmSell}
+              {onlineMeta
+                ? t.owner.onlineConfirmSellAction
+                : t.owner.confirmSell}
             </button>
           </div>
         </section>
