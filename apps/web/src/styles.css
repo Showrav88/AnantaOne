@@ -2771,22 +2771,6 @@ input[type="color"] {
   font: inherit;
 }
 
-.plain-list {
-  list-style: none;
-  margin: 0.75rem 0 0;
-  padding: 0;
-  display: grid;
-  gap: 0.45rem;
-}
-
-.plain-list li {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.45rem 0;
-  border-bottom: 1px solid var(--line);
-}
-
 @media (max-width: 800px) {
   .shop-product-detail,
   .shop-checkout-grid {
