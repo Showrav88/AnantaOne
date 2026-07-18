@@ -46,17 +46,22 @@ export function OwnerSalesHistoryPage({ locale }: Props) {
   }
 
   useEffect(() => {
-    startTransition(() => {
-      void (async () => {
-        try {
-          const list = await loadList();
-          const openId = focusId ?? list[0]?.id;
-          if (openId) await openById(openId);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Failed");
-        }
-      })();
-    });
+    function refresh() {
+      startTransition(() => {
+        void (async () => {
+          try {
+            const list = await loadList();
+            const openId = focusId ?? list[0]?.id;
+            if (openId) await openById(openId);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed");
+          }
+        })();
+      });
+    }
+    refresh();
+    window.addEventListener("anantaone:branch-change", refresh);
+    return () => window.removeEventListener("anantaone:branch-change", refresh);
   }, [focusId]);
 
   useEffect(() => {

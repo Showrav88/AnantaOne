@@ -1,6 +1,7 @@
 import {
   clearSession,
   getAccessToken,
+  getActiveBranchId,
   getRefreshToken,
   getStoredUser,
   saveSession,
@@ -296,10 +297,11 @@ export type OwnerDashboard = {
   company: CompanyDetails;
   stats: {
     products: number;
-    buyers: number;
-    lowStock: number;
+    buyers?: number;
+    lowStock?: number;
     users: number;
     cashBalanceBdt?: number;
+    branchOrders?: number;
   };
   lowStock: Product[];
   recentProducts: Product[];
@@ -589,6 +591,10 @@ async function getJson<T>(
       if (auth) {
         const token = getAccessToken();
         if (token) headers.Authorization = `Bearer ${token}`;
+        if (path.startsWith("/api/v1/owner")) {
+          const branchId = getActiveBranchId();
+          if (branchId) headers["X-Branch-Id"] = branchId;
+        }
       }
 
       let res = await rawFetch(path, {
@@ -631,6 +637,10 @@ async function postForm<T>(path: string, form: FormData): Promise<T> {
   const headers: Record<string, string> = {};
   const token = getAccessToken();
   if (token) headers.Authorization = `Bearer ${token}`;
+  if (path.startsWith("/api/v1/owner")) {
+    const branchId = getActiveBranchId();
+    if (branchId) headers["X-Branch-Id"] = branchId;
+  }
 
   let res = await rawFetch(path, { method: "POST", headers, body: form });
   if (res.status === 401) {

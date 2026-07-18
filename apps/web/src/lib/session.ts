@@ -1,6 +1,7 @@
 const ACCESS_KEY = "anantaone.accessToken";
 const REFRESH_KEY = "anantaone.refreshToken";
 const USER_KEY = "anantaone.user";
+const ACTIVE_BRANCH_KEY = "anantaone.activeBranchId";
 
 export type AuthUser = {
   id: string;
@@ -8,6 +9,8 @@ export type AuthUser = {
   name: string;
   phone: string | null;
   tenantId: string | null;
+  branchId?: string | null;
+  branch?: { id: string; name: string } | null;
   role: {
     code: string;
     nameEn: string;
@@ -55,6 +58,21 @@ export function clearSession() {
   localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(ACTIVE_BRANCH_KEY);
+}
+
+/** Owner active branch: `"all"` or a branch id. Staff ignore this (API uses assigned branch). */
+export function getActiveBranchId(): string {
+  const user = getStoredUser();
+  if (user?.role.code !== "OWNER") {
+    return user?.branchId ?? "";
+  }
+  return localStorage.getItem(ACTIVE_BRANCH_KEY) ?? "all";
+}
+
+export function setActiveBranchId(branchId: string) {
+  localStorage.setItem(ACTIVE_BRANCH_KEY, branchId || "all");
+  window.dispatchEvent(new Event("anantaone:branch-change"));
 }
 
 export function homePathForRole(roleCode: string) {

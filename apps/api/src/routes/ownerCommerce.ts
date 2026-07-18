@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
   requireCompanyStaff,
+  requireOwnerOnly,
   requireOwnerOrManager,
 } from "../middleware/companyAccess.js";
 import { normalizeCategory } from "../lib/delivery.js";
@@ -17,6 +18,11 @@ import {
   serializeOnlineOrder,
   setOnlineOrderStatus,
 } from "../lib/onlineOrder.js";
+import {
+  branchFilter,
+  canAccessBranch,
+  resolveBranchScope,
+} from "../lib/branchScope.js";
 
 export const ownerCommerceRouter = Router();
 ownerCommerceRouter.use(requireAuth, requireCompanyStaff);
@@ -95,7 +101,7 @@ ownerCommerceRouter.get("/buyers", async (req, res) => {
   });
 });
 
-ownerCommerceRouter.get("/buyers/analytics", async (req, res) => {
+ownerCommerceRouter.get("/buyers/analytics", requireOwnerOnly, async (req, res) => {
   const buyers = await prisma.buyer.findMany({
     where: { tenantId: tid(req), isActive: true },
     include: {
@@ -212,7 +218,12 @@ ownerCommerceRouter.patch(
 
 /* —— Delivery wards —— */
 ownerCommerceRouter.get("/delivery/wards", async (req, res) => {
-  const branchId = req.query.branchId ? String(req.query.branchId) : undefined;
+  const scope = resolveBranchScope(req);
+  const requested = req.query.branchId ? String(req.query.branchId) : undefined;
+  const branchId =
+    req.auth!.roleCode === "OWNER"
+      ? requested ?? (scope.mode === "one" ? scope.branchId ?? undefined : undefined)
+      : scope.branchId ?? undefined;
   const wards = await prisma.deliveryWard.findMany({
     where: {
       tenantId: tid(req),
@@ -647,10 +658,12 @@ ownerCommerceRouter.patch(
 /* —— Online orders —— */
 ownerCommerceRouter.get("/online-orders", async (req, res) => {
   const status = req.query.status ? String(req.query.status) : undefined;
+  const scope = resolveBranchScope(req);
   const orders = await prisma.salesOrder.findMany({
     where: {
       tenantId: tid(req),
       source: { code: "ONLINE" },
+      ...branchFilter(scope),
       ...(status ? { status: { code: status } } : {}),
     },
     include: {
@@ -675,6 +688,19 @@ ownerCommerceRouter.post(
   requireOwnerOrManager,
   async (req, res) => {
     try {
+      const scope = resolveBranchScope(req);
+      const existing = await prisma.salesOrder.findFirst({
+        where: { id: String(req.params.id), tenantId: tid(req) },
+        select: { branchId: true },
+      });
+      if (!existing) {
+        res.status(404).json({ ok: false, message: "Order not found" });
+        return;
+      }
+      if (!canAccessBranch(scope, existing.branchId)) {
+        res.status(403).json({ ok: false, message: "Order belongs to another branch" });
+        return;
+      }
       const order = await acceptOnlineOrder({
         tenantId: tid(req),
         orderId: String(req.params.id),
@@ -703,6 +729,19 @@ ownerCommerceRouter.post(
       return;
     }
     try {
+      const scope = resolveBranchScope(req);
+      const existing = await prisma.salesOrder.findFirst({
+        where: { id: String(req.params.id), tenantId: tid(req) },
+        select: { branchId: true },
+      });
+      if (!existing) {
+        res.status(404).json({ ok: false, message: "Order not found" });
+        return;
+      }
+      if (!canAccessBranch(scope, existing.branchId)) {
+        res.status(403).json({ ok: false, message: "Order belongs to another branch" });
+        return;
+      }
       const order = await setOnlineOrderStatus({
         tenantId: tid(req),
         orderId: String(req.params.id),

@@ -214,6 +214,7 @@ export type ConfirmSellInput = {
   buyerId?: string | null;
   buyerName?: string | null;
   note?: string | null;
+  branchId?: string | null;
   lines: ConfirmLineInput[];
   creditWallet?: boolean;
 };
@@ -309,6 +310,7 @@ export async function confirmSell(input: ConfirmSellInput) {
     const created = await tx.salesOrder.create({
       data: {
         tenantId: input.tenantId,
+        branchId: input.branchId ?? null,
         invoiceCode: makeInvoiceCode(orderedAt, provisionalId),
         buyerId: input.buyerId ?? null,
         buyerName,

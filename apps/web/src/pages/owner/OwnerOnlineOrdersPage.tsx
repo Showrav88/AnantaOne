@@ -42,11 +42,16 @@ export function OwnerOnlineOrdersPage({ locale }: Props) {
   }
 
   useEffect(() => {
-    startTransition(() => {
-      void load(filter).catch((err) =>
-        setError(err instanceof Error ? err.message : "Failed"),
-      );
-    });
+    function refresh() {
+      startTransition(() => {
+        void load(filter).catch((err) =>
+          setError(err instanceof Error ? err.message : "Failed"),
+        );
+      });
+    }
+    refresh();
+    window.addEventListener("anantaone:branch-change", refresh);
+    return () => window.removeEventListener("anantaone:branch-change", refresh);
   }, [filter]);
 
   async function accept(id: string) {

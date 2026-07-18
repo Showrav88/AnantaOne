@@ -6,6 +6,8 @@ export type AuthUser = AccessClaims & {
   id: string;
   name: string;
   roleId: string;
+  /** Assigned home branch for company staff (null for SUPER_ADMIN / unassigned). */
+  branchId: string | null;
 };
 
 declare global {
@@ -61,6 +63,7 @@ export async function requireAuth(
       roleCode: user.role.code,
       roleScope: user.role.scope,
       tenantId: user.tenantId,
+      branchId: user.branchId ?? null,
     };
     next();
   } catch {

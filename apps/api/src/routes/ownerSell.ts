@@ -14,6 +14,11 @@ import {
   requireCompanyStaff,
   requireOwnerOrManager,
 } from "../middleware/companyAccess.js";
+import {
+  branchFilter,
+  canAccessBranch,
+  resolveBranchScope,
+} from "../lib/branchScope.js";
 
 export const ownerSellRouter = Router();
 
@@ -217,9 +222,11 @@ ownerSellRouter.patch(
 
 ownerSellRouter.get("/orders", async (req, res) => {
   const status = req.query.status ? String(req.query.status) : undefined;
+  const scope = resolveBranchScope(req);
   const orders = await prisma.salesOrder.findMany({
     where: {
       tenantId: tid(req),
+      ...branchFilter(scope),
       ...(status ? { status: { code: status } } : {}),
     },
     include: {
@@ -235,8 +242,13 @@ ownerSellRouter.get("/orders", async (req, res) => {
 });
 
 ownerSellRouter.get("/orders/:id", async (req, res) => {
+  const scope = resolveBranchScope(req);
   const order = await prisma.salesOrder.findFirst({
-    where: { id: String(req.params.id), tenantId: tid(req) },
+    where: {
+      id: String(req.params.id),
+      tenantId: tid(req),
+      ...branchFilter(scope),
+    },
     include: {
       source: true,
       status: true,
@@ -252,8 +264,13 @@ ownerSellRouter.get("/orders/:id", async (req, res) => {
 });
 
 ownerSellRouter.get("/orders/:id/invoice", async (req, res) => {
+  const scope = resolveBranchScope(req);
   const order = await prisma.salesOrder.findFirst({
-    where: { id: String(req.params.id), tenantId: tid(req) },
+    where: {
+      id: String(req.params.id),
+      tenantId: tid(req),
+      ...branchFilter(scope),
+    },
     include: {
       source: true,
       status: true,
@@ -308,9 +325,11 @@ ownerSellRouter.get("/invoices/lookup", async (req, res) => {
   else if (pathMatch?.[1]) code = decodeURIComponent(pathMatch[1]);
   code = code.trim().toUpperCase();
 
+  const scope = resolveBranchScope(req);
   const order = await prisma.salesOrder.findFirst({
     where: {
       tenantId: tid(req),
+      ...branchFilter(scope),
       OR: [
         { invoiceCode: { equals: code, mode: "insensitive" } },
         { id: raw },
@@ -369,6 +388,18 @@ ownerSellRouter.post(
       return;
     }
     try {
+      const scope = resolveBranchScope(req);
+      const existing = await prisma.salesOrder.findFirst({
+        where: { id: String(req.params.id), tenantId: tid(req) },
+        select: { branchId: true },
+      });
+      if (!existing || !canAccessBranch(scope, existing.branchId)) {
+        res.status(403).json({
+          ok: false,
+          message: "Order not found or belongs to another branch",
+        });
+        return;
+      }
       const result = await reverseSell({
         tenantId: tid(req),
         userId: req.auth!.id,
@@ -412,6 +443,18 @@ ownerSellRouter.post(
       res.status(400).json({ ok: false, message: parsed.error.message });
       return;
     }
+    const scope = resolveBranchScope(req);
+    let branchId = scope.branchId;
+    if (req.auth!.roleCode === "OWNER") {
+      // Owner counter sales stamp the selected branch when one is active.
+      branchId = scope.mode === "one" ? scope.branchId : req.auth!.branchId;
+    } else if (!branchId) {
+      res.status(400).json({
+        ok: false,
+        message: "Staff must be assigned to a branch before selling",
+      });
+      return;
+    }
     try {
       const result = await confirmSell({
         tenantId: tid(req),
@@ -420,6 +463,7 @@ ownerSellRouter.post(
         buyerId: parsed.data.buyerId,
         buyerName: parsed.data.buyerName,
         note: parsed.data.note,
+        branchId,
         lines: parsed.data.lines,
         creditWallet: parsed.data.creditWallet,
       });

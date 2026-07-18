@@ -93,7 +93,10 @@ authRouter.post("/register", async (req, res) => {
         roleId: ownerRole.id,
         joiningDate: new Date(),
       },
-      include: { role: true },
+      include: {
+        role: true,
+        branch: { select: { id: true, name: true } },
+      },
     });
 
     return { company, user };
@@ -128,7 +131,11 @@ authRouter.post("/login", async (req, res) => {
   const email = parsed.data.email.toLowerCase().trim();
   const user = await prisma.user.findUnique({
     where: { email },
-    include: { role: true, company: true },
+    include: {
+      role: true,
+      company: true,
+      branch: { select: { id: true, name: true } },
+    },
   });
 
   if (!user || !user.isActive) {
@@ -176,7 +183,15 @@ authRouter.post("/refresh", async (req, res) => {
     const tokenHash = hashToken(refreshToken.data);
     const stored = await prisma.refreshToken.findUnique({
       where: { tokenHash },
-      include: { user: { include: { role: true, company: true } } },
+      include: {
+        user: {
+          include: {
+            role: true,
+            company: true,
+            branch: { select: { id: true, name: true } },
+          },
+        },
+      },
     });
 
     if (
@@ -247,7 +262,11 @@ authRouter.post("/logout", requireAuth, async (req, res) => {
 authRouter.get("/me", requireAuth, async (req, res) => {
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: req.auth!.id },
-    include: { role: true, company: true },
+    include: {
+      role: true,
+      company: true,
+      branch: { select: { id: true, name: true } },
+    },
   });
 
   res.json({
@@ -286,6 +305,8 @@ function publicUser(user: {
   name: string;
   phone: string | null;
   tenantId: string | null;
+  branchId?: string | null;
+  branch?: { id: string; name: string } | null;
   role: { code: string; nameEn: string; nameBn: string; scope: string };
 }) {
   return {
@@ -294,6 +315,10 @@ function publicUser(user: {
     name: user.name,
     phone: user.phone,
     tenantId: user.tenantId,
+    branchId: user.branchId ?? null,
+    branch: user.branch
+      ? { id: user.branch.id, name: user.branch.name }
+      : null,
     role: {
       code: user.role.code,
       nameEn: user.role.nameEn,

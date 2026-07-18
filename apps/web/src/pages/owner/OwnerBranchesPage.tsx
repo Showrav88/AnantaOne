@@ -83,11 +83,19 @@ export function OwnerBranchesPage({ locale }: Props) {
     e.preventDefault();
     if (!isOwner) return;
     setError(null);
+    if (!form.managerId) {
+      setError(t.owner.managerRequired);
+      return;
+    }
+    if (!editingId && form.employeeIds.length === 0) {
+      setError(t.owner.employeeRequired);
+      return;
+    }
     const body = {
       name: form.name.trim(),
       address: form.address.trim() || null,
       phone: form.phone.trim() || null,
-      managerId: form.managerId || null,
+      managerId: form.managerId,
       employeeIds: form.employeeIds,
     };
     try {
@@ -166,13 +174,15 @@ export function OwnerBranchesPage({ locale }: Props) {
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
             />
           </label>
+          <p className="muted tiny full">{t.owner.branchAssignHint}</p>
           <label>
             {t.owner.fieldBranchManager}
             <select
+              required
               value={form.managerId}
               onChange={(e) => setForm({ ...form, managerId: e.target.value })}
             >
-              <option value="">{t.owner.noManager}</option>
+              <option value="">{t.owner.selectManager}</option>
               {assignable.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name} ({s.role.code})
@@ -182,11 +192,14 @@ export function OwnerBranchesPage({ locale }: Props) {
           </label>
           <fieldset className="full branch-employees">
             <legend>{t.owner.fieldBranchEmployees}</legend>
+            <p className="muted tiny">{t.owner.branchEmployeesHint}</p>
             {assignable.length === 0 ? (
               <p className="muted tiny">{t.owner.noStaffToAssign}</p>
             ) : (
               <ul className="check-list">
-                {assignable.map((s) => (
+                {assignable
+                  .filter((s) => s.id !== form.managerId)
+                  .map((s) => (
                   <li key={s.id}>
                     <label className="check">
                       <input

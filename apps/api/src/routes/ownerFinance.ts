@@ -13,6 +13,7 @@ import {
   requireOwnerOnly,
   requireOwnerOrManager,
 } from "../middleware/companyAccess.js";
+import { resolveBranchScope } from "../lib/branchScope.js";
 
 export const ownerFinanceRouter = Router();
 
@@ -63,10 +64,21 @@ function serializeStaff(user: {
 /* ───────── Staff (manager / employee) ───────── */
 
 ownerFinanceRouter.get("/staff", requireOwnerOrManager, async (req, res) => {
+  const scope = resolveBranchScope(req);
+  const isOwner = req.auth!.roleCode === "OWNER";
   const staff = await prisma.user.findMany({
     where: {
       tenantId: tid(req),
-      role: { code: { in: ["MANAGER", "EMPLOYEE", "OWNER"] } },
+      role: {
+        code: isOwner
+          ? { in: ["MANAGER", "EMPLOYEE", "OWNER"] }
+          : { in: ["MANAGER", "EMPLOYEE"] },
+      },
+      ...(isOwner
+        ? {}
+        : scope.branchId
+          ? { branchId: scope.branchId }
+          : { id: "__no_branch__" }),
     },
     include: { role: true, branch: { select: { id: true, name: true } } },
     orderBy: [{ isActive: "desc" }, { name: "asc" }],
@@ -823,7 +835,7 @@ ownerFinanceRouter.post(
   },
 );
 
-ownerFinanceRouter.get("/wallet/analytics", async (req, res) => {
+ownerFinanceRouter.get("/wallet/analytics", requireOwnerOnly, async (req, res) => {
   const tenantId = tid(req);
   const days = Math.min(Math.max(Number(req.query.days) || 90, 7), 365);
   const since = new Date();

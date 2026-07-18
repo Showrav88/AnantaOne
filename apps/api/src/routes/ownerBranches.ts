@@ -7,6 +7,7 @@ import {
   requireOwnerOnly,
   requireOwnerOrManager,
 } from "../middleware/companyAccess.js";
+import { resolveBranchScope } from "../lib/branchScope.js";
 
 export const ownerBranchesRouter = Router();
 
@@ -90,21 +91,39 @@ const branchInclude = {
   },
 };
 
-ownerBranchesRouter.get("/branches", requireOwnerOrManager, async (req, res) => {
+ownerBranchesRouter.get("/branches", requireCompanyStaff, async (req, res) => {
+  const scope = resolveBranchScope(req);
   const branches = await prisma.branch.findMany({
-    where: { tenantId: tid(req) },
+    where: {
+      tenantId: tid(req),
+      ...(req.auth!.roleCode === "OWNER"
+        ? {}
+        : scope.branchId
+          ? { id: scope.branchId }
+          : { id: "__no_branch__" }),
+    },
     include: branchInclude,
     orderBy: [{ isActive: "desc" }, { createdAt: "asc" }],
   });
-  res.json({ ok: true, branches: branches.map(serializeBranch) });
+  res.json({
+    ok: true,
+    branchScope: {
+      mode: scope.mode,
+      branchId: scope.branchId,
+      assignedBranchId: scope.assignedBranchId,
+    },
+    branches: branches.map(serializeBranch),
+  });
 });
 
 const branchCreateSchema = z.object({
   name: z.string().min(2).max(120),
   address: z.string().max(500).nullable().optional(),
   phone: z.string().max(32).nullable().optional(),
-  managerId: z.string().cuid().nullable().optional(),
-  employeeIds: z.array(z.string().cuid()).optional(),
+  managerId: z.string().cuid({ message: "Branch manager is required" }),
+  employeeIds: z
+    .array(z.string().cuid())
+    .min(1, { message: "Assign at least one employee to the branch" }),
 });
 
 ownerBranchesRouter.post("/branches", requireOwnerOnly, async (req, res) => {
@@ -117,52 +136,45 @@ ownerBranchesRouter.post("/branches", requireOwnerOnly, async (req, res) => {
   const tenantId = tid(req);
   const { name, address, phone, managerId, employeeIds } = parsed.data;
 
-  if (managerId) {
-    const manager = await prisma.user.findFirst({
-      where: {
-        id: managerId,
-        tenantId,
-        isActive: true,
-        role: { code: { in: ["MANAGER", "EMPLOYEE"] } },
-      },
-      include: { role: true },
-    });
-    if (!manager) {
-      res.status(400).json({ ok: false, message: "Manager not found in company" });
-      return;
-    }
+  const manager = await prisma.user.findFirst({
+    where: {
+      id: managerId,
+      tenantId,
+      isActive: true,
+      role: { code: { in: ["MANAGER", "EMPLOYEE"] } },
+    },
+    include: { role: true },
+  });
+  if (!manager) {
+    res.status(400).json({ ok: false, message: "Manager not found in company" });
+    return;
   }
 
-  if (employeeIds?.length) {
-    const count = await prisma.user.count({
-      where: {
-        id: { in: employeeIds },
-        tenantId,
-        role: { code: { in: ["MANAGER", "EMPLOYEE"] } },
-      },
-    });
-    if (count !== employeeIds.length) {
-      res.status(400).json({ ok: false, message: "One or more employees not found" });
-      return;
-    }
+  const count = await prisma.user.count({
+    where: {
+      id: { in: employeeIds },
+      tenantId,
+      role: { code: { in: ["MANAGER", "EMPLOYEE"] } },
+    },
+  });
+  if (count !== employeeIds.length) {
+    res.status(400).json({ ok: false, message: "One or more employees not found" });
+    return;
   }
 
   try {
     const branch = await prisma.$transaction(async (tx) => {
-      let resolvedManagerId = managerId ?? null;
-      if (resolvedManagerId) {
-        const managerRole = await tx.roleLookup.findUnique({
-          where: { code: "MANAGER" },
+      const managerRole = await tx.roleLookup.findUnique({
+        where: { code: "MANAGER" },
+      });
+      if (managerRole) {
+        await tx.user.update({
+          where: { id: managerId },
+          data: {
+            roleId: managerRole.id,
+            updatedBy: req.auth!.id,
+          },
         });
-        if (managerRole) {
-          await tx.user.update({
-            where: { id: resolvedManagerId },
-            data: {
-              roleId: managerRole.id,
-              updatedBy: req.auth!.id,
-            },
-          });
-        }
       }
 
       const created = await tx.branch.create({
@@ -171,13 +183,11 @@ ownerBranchesRouter.post("/branches", requireOwnerOnly, async (req, res) => {
           name: name.trim(),
           address: address ?? null,
           phone: phone ?? null,
-          managerId: resolvedManagerId,
+          managerId,
         },
       });
 
-      const assignIds = new Set<string>();
-      if (resolvedManagerId) assignIds.add(resolvedManagerId);
-      for (const id of employeeIds ?? []) assignIds.add(id);
+      const assignIds = new Set<string>([managerId, ...employeeIds]);
 
       if (assignIds.size > 0) {
         await tx.user.updateMany({

@@ -542,6 +542,53 @@ body {
   color: var(--ink);
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.branch-switcher select {
+  max-width: 12rem;
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line);
+  background: var(--input-bg, #fff);
+  color: var(--ink);
+}
+
+.branch-switcher.nav-branch {
+  margin: 0.65rem 0 0.85rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  background: var(--ok-bg, transparent);
+}
+
+.branch-switcher.nav-branch select {
+  width: 100%;
+  max-width: none;
+  margin-top: 0.25rem;
+}
+
+.branch-locked {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.topbar-branch {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .owner-topbar {
   grid-column: 1 / -1;
   display: flex;

@@ -28,7 +28,7 @@ const PRODUCT_CATEGORIES = [
 export function OwnerProductsPage({ locale }: Props) {
   const t = getMessages(locale);
   const user = getStoredUser();
-  const canWrite = user?.role.code === "OWNER" || user?.role.code === "MANAGER";
+  const canWrite = user?.role.code === "OWNER";
   const [products, setProducts] = useState<Product[]>([]);
   const [units, setUnits] = useState<
     Array<{ code: string; nameEn: string; nameBn: string }>
@@ -163,6 +163,10 @@ export function OwnerProductsPage({ locale }: Props) {
       {okMsg ? <p className="ok">{okMsg}</p> : null}
       {error ? <p className="error">{error}</p> : null}
       {uploading ? <p className="muted">{t.owner.uploading}</p> : null}
+
+      {!canWrite ? (
+        <p className="muted">{t.owner.productsOwnerOnly}</p>
+      ) : null}
 
       {canWrite ? (
         <form className="owner-form compact" onSubmit={onCreate}>

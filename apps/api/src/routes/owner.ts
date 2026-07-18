@@ -7,6 +7,7 @@ import {
   requireOwnerOnly,
   requireOwnerOrManager,
 } from "../middleware/companyAccess.js";
+import { branchFilter, resolveBranchScope } from "../lib/branchScope.js";
 
 export const ownerRouter = Router();
 
@@ -18,15 +19,22 @@ function tenantId(req: { auth?: { tenantId: string | null } }) {
 
 ownerRouter.get("/dashboard", async (req, res) => {
   const tid = tenantId(req);
+  const scope = resolveBranchScope(req);
+  const orderBranch = branchFilter(scope);
+  const isOwner = req.auth!.roleCode === "OWNER";
 
-  const [company, productCount, buyerCount, lowStock, recentProducts, wallet] =
+  const [company, productCount, buyerCount, lowStock, recentProducts, wallet, branchOrderCount] =
     await Promise.all([
       prisma.company.findUniqueOrThrow({
         where: { id: tid },
         include: {
           branches: {
+            where:
+              isOwner || !scope.branchId
+                ? undefined
+                : { id: scope.branchId },
             orderBy: [{ isActive: "desc" }, { createdAt: "asc" }],
-            take: 5,
+            take: isOwner ? 5 : 1,
           },
           _count: { select: { users: true, buyers: true, products: true } },
         },
@@ -45,7 +53,16 @@ ownerRouter.get("/dashboard", async (req, res) => {
         orderBy: { updatedAt: "desc" },
         take: 5,
       }),
-      prisma.cashWallet.findUnique({ where: { tenantId: tid } }),
+      isOwner
+        ? prisma.cashWallet.findUnique({ where: { tenantId: tid } })
+        : Promise.resolve(null),
+      prisma.salesOrder.count({
+        where: {
+          tenantId: tid,
+          ...orderBranch,
+          status: { code: { notIn: ["CANCELLED", "REVERSED"] } },
+        },
+      }),
     ]);
 
   const lowStockItems = lowStock
@@ -53,9 +70,24 @@ ownerRouter.get("/dashboard", async (req, res) => {
     .slice(0, 8)
     .map(serializeProduct);
 
+  const staffCount = isOwner
+    ? company._count.users
+    : await prisma.user.count({
+        where: {
+          tenantId: tid,
+          ...(scope.branchId ? { branchId: scope.branchId } : { id: "__none__" }),
+          role: { code: { in: ["MANAGER", "EMPLOYEE"] } },
+        },
+      });
+
   res.json({
     ok: true,
     role: req.auth!.roleCode,
+    branchScope: {
+      mode: scope.mode,
+      branchId: scope.branchId,
+      assignedBranchId: scope.assignedBranchId,
+    },
     dashboard: {
       company: {
         id: company.id,
@@ -75,13 +107,16 @@ ownerRouter.get("/dashboard", async (req, res) => {
       },
       stats: {
         products: productCount,
-        buyers: buyerCount,
-        lowStock: lowStockItems.length,
-        users: company._count.users,
-        cashBalanceBdt: wallet ? Number(wallet.balanceBdt) : 0,
+        buyers: isOwner ? buyerCount : undefined,
+        lowStock: isOwner ? lowStockItems.length : undefined,
+        users: staffCount,
+        cashBalanceBdt: wallet ? Number(wallet.balanceBdt) : undefined,
+        branchOrders: branchOrderCount,
       },
-      lowStock: lowStockItems,
-      recentProducts: recentProducts.map(serializeProduct),
+      lowStock: isOwner ? lowStockItems : [],
+      recentProducts: isOwner
+        ? recentProducts.map(serializeProduct)
+        : recentProducts.slice(0, 3).map(serializeProduct),
     },
   });
 });
@@ -317,7 +352,7 @@ const productCreateSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-ownerRouter.post("/products", requireOwnerOrManager, async (req, res) => {
+ownerRouter.post("/products", requireOwnerOnly, async (req, res) => {
   const parsed = productCreateSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, message: parsed.error.message });
@@ -361,7 +396,7 @@ ownerRouter.post("/products", requireOwnerOrManager, async (req, res) => {
 
 const productUpdateSchema = productCreateSchema.partial();
 
-ownerRouter.patch("/products/:id", requireOwnerOrManager, async (req, res) => {
+ownerRouter.patch("/products/:id", requireOwnerOnly, async (req, res) => {
   const parsed = productUpdateSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, message: parsed.error.message });
@@ -403,7 +438,7 @@ ownerRouter.patch("/products/:id", requireOwnerOrManager, async (req, res) => {
   res.json({ ok: true, product: serializeProduct(product) });
 });
 
-ownerRouter.delete("/products/:id", requireOwnerOrManager, async (req, res) => {
+ownerRouter.delete("/products/:id", requireOwnerOnly, async (req, res) => {
   const id = String(req.params.id);
   const existing = await prisma.product.findFirst({
     where: { id, tenantId: tenantId(req) },
