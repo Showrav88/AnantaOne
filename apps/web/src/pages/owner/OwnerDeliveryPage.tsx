@@ -231,13 +231,15 @@ export function OwnerDeliveryPage({ locale }: Props) {
       <section className="panel-card">
         <h2>{t.owner.deliveryZoneCharges}</h2>
         <p className="muted tiny">{t.owner.deliveryZoneHint}</p>
+        <p className="muted tiny">{t.owner.deliveryZoneSteps}</p>
         <p className="muted tiny">
           {t.owner.fieldUpazila}: {locationLabel}
         </p>
         {canWrite ? (
           <form className="owner-form compact" onSubmit={saveSettings}>
-            <label>
+            <label className="full">
               {t.owner.outsideAreaCharge}
+              <span className="muted tiny">{t.owner.outsideAreaChargeHint}</span>
               <input
                 type="number"
                 min={0}
@@ -250,8 +252,9 @@ export function OwnerDeliveryPage({ locale }: Props) {
                 }
               />
             </label>
-            <label>
+            <label className="full">
               {t.owner.sameDistrictCharge}
+              <span className="muted tiny">{t.owner.sameDistrictChargeHint}</span>
               <input
                 type="number"
                 min={0}
@@ -264,8 +267,9 @@ export function OwnerDeliveryPage({ locale }: Props) {
                 }
               />
             </label>
-            <label>
+            <label className="full">
               {t.owner.otherDistrictCharge}
+              <span className="muted tiny">{t.owner.otherDistrictChargeHint}</span>
               <input
                 type="number"
                 min={0}
