@@ -857,6 +857,7 @@ html[data-theme="night"] .owner-nav a.active {
   grid-row: 2;
   padding: 1.5rem clamp(0.85rem, 3vw, 1.5rem) 3rem;
   min-width: 0;
+  color: var(--ink);
 }
 
 .owner-page {
