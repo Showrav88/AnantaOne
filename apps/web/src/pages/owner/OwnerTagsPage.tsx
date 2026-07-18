@@ -560,6 +560,29 @@ export function OwnerTagsPage({ locale }: Props) {
             ) : null}
             {printMode === "units" ? (
               <>
+                <label className="full">
+                  {t.owner.unitReprintOne}
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder={t.owner.unitReprintOneHint}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      const n = Number((e.target as HTMLInputElement).value);
+                      if (!(n > 0)) return;
+                      setSerialFrom(String(n));
+                      setSerialTo(String(n));
+                    }}
+                    onBlur={(e) => {
+                      const n = Number(e.target.value);
+                      if (!(n > 0)) return;
+                      setSerialFrom(String(n));
+                      setSerialTo(String(n));
+                    }}
+                  />
+                  <span className="muted tiny">{t.owner.unitReprintOneHelp}</span>
+                </label>
                 <label>
                   {t.owner.unitPrintFrom}
                   <input
@@ -580,11 +603,26 @@ export function OwnerTagsPage({ locale }: Props) {
                 </label>
                 <p className="muted tiny full">
                   {t.owner.unitPrintCount}: {serialCount || 0}
+                  {serialCount === 1
+                    ? ` · ${t.owner.unitReprintOneReady}`
+                    : ""}
                   {serialCount > 300
                     ? ` · ${t.owner.unitPrintLargeHint}`
                     : ""}
                 </p>
                 <div className="media-actions full">
+                  <button
+                    type="button"
+                    className="btn ghost compact"
+                    disabled={!(Number(serialFrom) > 0)}
+                    onClick={() => {
+                      const n = Number(serialFrom);
+                      if (!(n > 0)) return;
+                      setSerialTo(String(n));
+                    }}
+                  >
+                    {t.owner.unitReprintOneBtn}
+                  </button>
                   {(
                     [
                       [50, t.owner.unitPrintPreset50],
