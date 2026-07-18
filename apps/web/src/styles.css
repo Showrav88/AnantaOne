@@ -3780,7 +3780,7 @@ input[type="color"] {
   }
 }
 
-/* Narrow phones (OnePlus / Chrome) — keep every control inside the viewport */
+/* Narrow phones — keep every control inside the viewport */
 @media (max-width: 480px) {
   .page,
   .owner-shell,
@@ -3788,7 +3788,7 @@ input[type="color"] {
   .auth-page,
   .owner-main,
   .owner-page {
-    max-width: 100vw;
+    max-width: 100%;
     overflow-x: clip;
   }
 
