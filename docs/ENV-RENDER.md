@@ -21,7 +21,8 @@ After changing this → **Manual Deploy + Clear build cache**.
 | `DIRECT_DATABASE_URL` | **same as** `DATABASE_URL` |
 | `NODE_VERSION` | `26` |
 | `NODE_ENV` | `production` |
-| `CLOUDINARY_URL` | `cloudinary://<api_key>:<api_secret>@dtd4hpmjb` (see `docs/CLOUDINARY.md`) |
+| `CLOUDINARY_URL` | `cloudinary://<api_key>:<api_secret>@dtd4hpmjb` on **API** service only — no quotes (see `docs/CLOUDINARY.md`) |
+| *(or)* `CLOUDINARY_CLOUD_NAME` + `CLOUDINARY_API_KEY` + `CLOUDINARY_API_SECRET` | Alternative to `CLOUDINARY_URL` |
 
 ### Postgres examples
 

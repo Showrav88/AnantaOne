@@ -651,6 +651,15 @@ export const api = {
         cloudinaryReady: boolean;
         assets: MediaAsset[];
       }>("/api/v1/owner/media", 2, undefined, true),
+    mediaStatus: () =>
+      getJson<{
+        ok: boolean;
+        cloudinaryReady: boolean;
+        cloudName?: string;
+        apiKeyHint?: string;
+        source?: string;
+        message?: string;
+      }>("/api/v1/owner/media/status", 1, undefined, true),
     uploadMedia: (file: File, purpose = "assets", label?: string) => {
       const form = new FormData();
       form.append("file", file);

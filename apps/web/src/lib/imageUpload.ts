@@ -81,16 +81,18 @@ export async function uploadToCloudinaryDirect(
 }> {
   const form = new FormData();
   form.append("file", file);
-  form.append("api_key", sign.apiKey);
+  // api_key must be a string — numeric JSON can drop precision / confuse Cloudinary
+  form.append("api_key", String(sign.apiKey));
   form.append("timestamp", String(sign.timestamp));
-  form.append("signature", sign.signature);
-  form.append("folder", sign.folder);
+  form.append("signature", String(sign.signature));
+  form.append("folder", String(sign.folder));
   if (sign.publicId) {
-    form.append("public_id", sign.publicId);
+    form.append("public_id", String(sign.publicId));
     form.append("overwrite", "true");
   }
 
-  const endpoint = `https://api.cloudinary.com/v1_1/${encodeURIComponent(sign.cloudName)}/${resourceType}/upload`;
+  const cloud = String(sign.cloudName).trim();
+  const endpoint = `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloud)}/${resourceType}/upload`;
   const res = await fetch(endpoint, { method: "POST", body: form });
   const data = (await res.json().catch(() => null)) as {
     error?: { message?: string };
@@ -105,9 +107,13 @@ export async function uploadToCloudinaryDirect(
   } | null;
 
   if (!res.ok || !data?.secure_url || !data.public_id) {
-    throw new Error(
-      data?.error?.message ?? `Cloudinary upload failed (HTTP ${res.status})`,
-    );
+    const raw = data?.error?.message ?? `Cloudinary upload failed (HTTP ${res.status})`;
+    if (/invalid api key/i.test(raw)) {
+      throw new Error(
+        `${raw}. Cloud "${cloud}" + key must match the same Cloudinary account. On Render API env set CLOUDINARY_URL=cloudinary://API_KEY:API_SECRET@${cloud} with no quotes, then redeploy the API.`,
+      );
+    }
+    throw new Error(raw);
   }
 
   const kind: "IMAGE" | "VIDEO" =

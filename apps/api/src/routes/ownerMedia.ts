@@ -10,6 +10,7 @@ import {
 import {
   destroyCloudinaryAsset,
   isCloudinaryConfigured,
+  pingCloudinary,
   signCloudinaryUpload,
   tenantFolder,
   uploadBufferToCloudinary,
@@ -252,13 +253,46 @@ const signSchema = z.object({
   publicId: z.string().max(120).optional(),
 });
 
+/** Diagnose Cloudinary credentials (no secret returned). */
+ownerMediaRouter.get("/media/status", async (_req, res) => {
+  if (!isCloudinaryConfigured()) {
+    res.json({
+      ok: true,
+      cloudinaryReady: false,
+      message:
+        "Missing Cloudinary env on API. Set CLOUDINARY_URL=cloudinary://API_KEY:API_SECRET@dtd4hpmjb (Web Service env, then redeploy).",
+    });
+    return;
+  }
+  try {
+    const ping = await pingCloudinary();
+    res.json({
+      ok: true,
+      cloudinaryReady: true,
+      cloudName: ping.cloudName,
+      apiKeyHint: ping.apiKeyHint,
+      source: ping.source,
+      message: "Cloudinary credentials accepted.",
+    });
+  } catch (err) {
+    res.status(502).json({
+      ok: false,
+      cloudinaryReady: false,
+      message:
+        err instanceof Error
+          ? `Cloudinary rejected credentials: ${err.message}. Check API key/secret on the API Web Service (not Static Site), no quotes around the value, then redeploy.`
+          : "Cloudinary ping failed",
+    });
+  }
+});
+
 /** Browser uploads directly to Cloudinary — avoids Render HTTP 413 on large files. */
 ownerMediaRouter.post("/media/sign", requireOwnerOrManager, async (req, res) => {
   if (!isCloudinaryConfigured()) {
     res.status(503).json({
       ok: false,
       message:
-        "Cloudinary is not configured. Set CLOUDINARY_URL on the API service.",
+        "Cloudinary is not configured. Set CLOUDINARY_URL on the API Web Service (Render), not the Static Site.",
     });
     return;
   }
@@ -275,11 +309,19 @@ ownerMediaRouter.post("/media/sign", requireOwnerOrManager, async (req, res) => 
   });
 
   try {
+    // Verify creds before signing so owners see a clear error
+    await pingCloudinary();
     const sign = signCloudinaryUpload({
       folder: tenantFolder(company.slug, purposeSubfolder(parsed.data.purpose)),
       publicId: parsed.data.publicId,
     });
-    res.json({ ok: true, sign });
+    res.json({
+      ok: true,
+      sign: {
+        ...sign,
+        apiKey: String(sign.apiKey),
+      },
+    });
   } catch (err) {
     res.status(500).json({
       ok: false,

@@ -1,41 +1,103 @@
 import { v2 as cloudinary, type UploadApiResponse } from "cloudinary";
 
-let configured = false;
+type CloudinaryCreds = {
+  cloudName: string;
+  apiKey: string;
+  apiSecret: string;
+  source: "CLOUDINARY_URL" | "discrete";
+};
+
+let cached: CloudinaryCreds | null = null;
+
+function stripQuotes(value: string) {
+  return value.trim().replace(/^['"]|['"]$/g, "").trim();
+}
+
+/** Parse cloudinary://API_KEY:API_SECRET@CLOUD_NAME (secret may be URL-encoded). */
+export function parseCloudinaryUrl(raw: string): Omit<CloudinaryCreds, "source"> {
+  const cleaned = stripQuotes(raw);
+  const match = cleaned.match(/^cloudinary:\/\/([^:]+):([^@]+)@([^/\s]+)/i);
+  if (!match?.[1] || !match[2] || !match[3]) {
+    throw new Error(
+      'Invalid CLOUDINARY_URL. Expected: cloudinary://<api_key>:<api_secret>@dtd4hpmjb (no spaces/quotes)',
+    );
+  }
+  return {
+    apiKey: decodeURIComponent(match[1]),
+    apiSecret: decodeURIComponent(match[2]),
+    cloudName: decodeURIComponent(match[3]).replace(/\/+$/, ""),
+  };
+}
+
+export function resolveCloudinaryCreds(): CloudinaryCreds | null {
+  const url = process.env.CLOUDINARY_URL
+    ? stripQuotes(process.env.CLOUDINARY_URL)
+    : "";
+  if (url) {
+    const parsed = parseCloudinaryUrl(url);
+    return { ...parsed, source: "CLOUDINARY_URL" };
+  }
+
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME
+    ? stripQuotes(process.env.CLOUDINARY_CLOUD_NAME)
+    : "";
+  const apiKey = process.env.CLOUDINARY_API_KEY
+    ? stripQuotes(process.env.CLOUDINARY_API_KEY)
+    : "";
+  const apiSecret = process.env.CLOUDINARY_API_SECRET
+    ? stripQuotes(process.env.CLOUDINARY_API_SECRET)
+    : "";
+
+  if (cloudName && apiKey && apiSecret) {
+    return { cloudName, apiKey, apiSecret, source: "discrete" };
+  }
+  return null;
+}
 
 export function isCloudinaryConfigured() {
-  return Boolean(process.env.CLOUDINARY_URL?.trim());
+  try {
+    return Boolean(resolveCloudinaryCreds());
+  } catch {
+    return false;
+  }
 }
 
 export function ensureCloudinary() {
-  if (!isCloudinaryConfigured()) {
+  const creds = resolveCloudinaryCreds();
+  if (!creds) {
     throw new Error(
-      "CLOUDINARY_URL is not set. Add it on the API service (Render Environment).",
+      "Cloudinary is not set. On the API service add CLOUDINARY_URL=cloudinary://<api_key>:<api_secret>@dtd4hpmjb (or CLOUDINARY_CLOUD_NAME + CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET).",
     );
   }
-  if (!configured) {
-    // SDK reads CLOUDINARY_URL=cloudinary://KEY:SECRET@CLOUD_NAME
-    cloudinary.config(true);
-    configured = true;
-  }
+
+  // Always re-apply config so env fixes take effect without restart races
+  cloudinary.config({
+    cloud_name: creds.cloudName,
+    api_key: String(creds.apiKey),
+    api_secret: String(creds.apiSecret),
+    secure: true,
+  });
+  cached = creds;
   return cloudinary;
+}
+
+export function cloudinaryPublicConfig() {
+  ensureCloudinary();
+  const creds = cached ?? resolveCloudinaryCreds();
+  if (!creds) {
+    throw new Error("Cloudinary config incomplete");
+  }
+  return {
+    cloudName: creds.cloudName,
+    apiKey: String(creds.apiKey),
+    apiSecret: String(creds.apiSecret),
+    source: creds.source,
+  };
 }
 
 export function tenantFolder(slug: string, sub?: string) {
   const base = `anantaone/tenants/${slug}`;
   return sub ? `${base}/${sub}` : base;
-}
-
-export function cloudinaryPublicConfig() {
-  const cld = ensureCloudinary();
-  const cfg = cld.config();
-  if (!cfg.cloud_name || !cfg.api_key || !cfg.api_secret) {
-    throw new Error("Cloudinary config incomplete");
-  }
-  return {
-    cloudName: cfg.cloud_name,
-    apiKey: cfg.api_key,
-    apiSecret: cfg.api_secret,
-  };
 }
 
 /** Signed params so the browser can upload directly to Cloudinary (avoids Render 413). */
@@ -45,6 +107,7 @@ export function signCloudinaryUpload(opts: {
 }) {
   const { cloudName, apiKey, apiSecret } = cloudinaryPublicConfig();
   const timestamp = Math.round(Date.now() / 1000);
+  // Only sign params we will send (except file / api_key / cloud_name / resource_type)
   const paramsToSign: Record<string, string | number> = {
     timestamp,
     folder: opts.folder,
@@ -53,17 +116,26 @@ export function signCloudinaryUpload(opts: {
     paramsToSign.public_id = opts.publicId;
     paramsToSign.overwrite = "true";
   }
-  const signature = ensureCloudinary().utils.api_sign_request(
-    paramsToSign,
-    apiSecret,
-  );
+  const signature = cloudinary.utils.api_sign_request(paramsToSign, apiSecret);
   return {
     cloudName,
-    apiKey,
+    apiKey: String(apiKey),
     timestamp,
     signature,
     folder: opts.folder,
     publicId: opts.publicId,
+  };
+}
+
+export async function pingCloudinary() {
+  const cld = ensureCloudinary();
+  const creds = cloudinaryPublicConfig();
+  await cld.api.ping();
+  return {
+    ok: true as const,
+    cloudName: creds.cloudName,
+    apiKeyHint: `${creds.apiKey.slice(0, 4)}…${creds.apiKey.slice(-4)}`,
+    source: creds.source,
   };
 }
 

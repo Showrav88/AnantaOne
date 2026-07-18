@@ -9,58 +9,59 @@ anantaone/tenants/{company-slug}/products
 anantaone/tenants/{company-slug}/assets
 ```
 
-## Render (API Web Service)
+## Render (API Web Service only)
 
-Dashboard → **AnantaOneApi** (or your API service) → **Environment** → add:
+Dashboard → **API Web Service** (e.g. `anantaoneapi`) → **Environment**.
+
+**Not** the Static Site. Uploads use the API credentials.
+
+### Option A — single URL (preferred)
 
 | Key | Value |
 |---|---|
 | `CLOUDINARY_URL` | `cloudinary://<api_key>:<api_secret>@dtd4hpmjb` |
 
-Replace `<api_key>` and `<api_secret>` with the values from the Cloudinary console.  
-**Never commit the secret** to git.
+Rules:
+- No spaces
+- No wrapping quotes (`"` or `'`)
+- Cloud name at the end must be `dtd4hpmjb`
+- API **Key** is the long number; API **Secret** is the random string
+- After save → **Manual Deploy** the API
 
-Example shape (placeholders only):
+### Option B — three separate keys
 
-```text
-CLOUDINARY_URL=cloudinary://<api_key>:<api_secret>@dtd4hpmjb
-```
+| Key | Value |
+|---|---|
+| `CLOUDINARY_CLOUD_NAME` | `dtd4hpmjb` |
+| `CLOUDINARY_API_KEY` | from Cloudinary console |
+| `CLOUDINARY_API_SECRET` | from Cloudinary console |
 
-Then **Save** → **Manual Deploy** the API service so the env is loaded.
+If both A and B are set, **A (`CLOUDINARY_URL`) wins**.
+
+## “Invalid API key” checklist
+
+1. Env is on the **API** service, not Static Site  
+2. Value has **no quotes**  
+3. Format is `cloudinary://KEY:SECRET@dtd4hpmjb` (key before secret)  
+4. Key/secret are from the **same** Cloudinary cloud (`dtd4hpmjb`)  
+5. API was **redeployed** after changing env  
+6. Open Owner → **Public shop** — status line should say credentials accepted and show cloud + key hint  
 
 ## Local `.env`
 
-In `apps/api/.env` (or repo root `.env` loaded by the API):
-
 ```text
 CLOUDINARY_URL=cloudinary://<api_key>:<api_secret>@dtd4hpmjb
 ```
 
-## Redeploy both services from `cloud-dev`
-
-Uploads only appear after the **Static Site** is rebuilt from `cloud-dev`.  
-Uploads only succeed after the **API** has `CLOUDINARY_URL` and is redeployed.
-
 ## Owner usage
 
-1. Log in as **owner** (or manager) — employees are read-only
-2. Sidebar → **Public shop** (`/#/owner/site`) — file pickers at the top
-3. Or **Company** → logo file picker
-4. Or **Products** → choose image while creating a product, or on each row later
-5. Open **Open public shop** → `#/shop/{your-slug}`
+1. Log in as **owner** (or manager)
+2. **Public shop** (`/#/owner/site`) — upload logo / hero / library  
+3. **Company** — logo  
+4. **Products** — image on create or per row  
+5. Public shop → `/#/shop/{slug}`
 
 ## Uploads & HTTP 413
 
-Images are **compressed in the browser** and uploaded **directly to Cloudinary**
-(signed by the API). That avoids Render “413 Payload Too Large” when the file
-never passes through the API body.
-
-## Public URLs
-
-| Page | Path |
-|---|---|
-| Tenant shop | `/#/shop/{slug}` |
-| Product tag QR | `/#/tag/{slug}/{sku}/{batch}` |
-| Invoice QR | `/#/invoice/{slug}/{invoiceCode}` |
-
-Each active company can look different via its own branding fields.
+Images are compressed in the browser and uploaded **directly to Cloudinary**
+(signed by the API) so large files do not hit Render’s body limit.

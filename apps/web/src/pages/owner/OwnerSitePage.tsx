@@ -54,14 +54,29 @@ export function OwnerSitePage({ locale }: Props) {
   const [pending, startTransition] = useTransition();
   const [uploading, setUploading] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [mediaStatus, setMediaStatus] = useState<string | null>(null);
 
   async function load() {
-    const [b, m] = await Promise.all([
+    const [b, m, status] = await Promise.all([
       api.owner.branding(),
       api.owner.media(),
+      api.owner.mediaStatus().catch(() => null),
     ]);
     setBranding(b.branding);
     setAssets(m.assets);
+    if (status) {
+      const hint = status.apiKeyHint
+        ? ` · key ${status.apiKeyHint}`
+        : "";
+      const cloud = status.cloudName ? ` · cloud ${status.cloudName}` : "";
+      setMediaStatus(
+        `${status.message ?? ""}${cloud}${hint}`.trim() || null,
+      );
+      setBranding({
+        ...b.branding,
+        cloudinaryReady: status.cloudinaryReady,
+      });
+    }
   }
 
   useEffect(() => {
@@ -167,6 +182,11 @@ export function OwnerSitePage({ locale }: Props) {
 
       {!branding.cloudinaryReady ? (
         <p className="error panel-card">{t.owner.cloudinaryMissing}</p>
+      ) : null}
+      {mediaStatus ? (
+        <p className={branding.cloudinaryReady ? "ok panel-card" : "error panel-card"}>
+          {mediaStatus}
+        </p>
       ) : null}
 
       {okMsg ? <p className="ok">{okMsg}</p> : null}
