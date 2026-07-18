@@ -117,9 +117,9 @@ export function OwnerWalletPage({ locale }: Props) {
     unitCode: "LITER",
     qty: "1",
     goodsAmountBdt: "",
-    transportBdt: "0",
-    driverBdt: "0",
-    travelBdt: "0",
+    transportBdt: "",
+    driverBdt: "",
+    travelBdt: "",
     supplierName: "",
     supplierPhone: "",
     note: "",
@@ -228,9 +228,9 @@ export function OwnerWalletPage({ locale }: Props) {
         unitCode: material.unitCode,
         qty: "1",
         goodsAmountBdt: "",
-        transportBdt: "0",
-        driverBdt: "0",
-        travelBdt: "0",
+        transportBdt: "",
+        driverBdt: "",
+        travelBdt: "",
         supplierName: "",
         supplierPhone: "",
         note: "",
@@ -541,7 +541,10 @@ export function OwnerWalletPage({ locale }: Props) {
                           type="number"
                           min={0}
                           step="0.01"
+                          inputMode="decimal"
+                          autoComplete="off"
                           value={material.transportBdt}
+                          placeholder={t.owner.numberZeroIfEmptyHint}
                           onChange={(e) =>
                             setMaterial({
                               ...material,
@@ -556,7 +559,10 @@ export function OwnerWalletPage({ locale }: Props) {
                           type="number"
                           min={0}
                           step="0.01"
+                          inputMode="decimal"
+                          autoComplete="off"
                           value={material.driverBdt}
+                          placeholder={t.owner.numberZeroIfEmptyHint}
                           onChange={(e) =>
                             setMaterial({
                               ...material,
@@ -571,7 +577,10 @@ export function OwnerWalletPage({ locale }: Props) {
                           type="number"
                           min={0}
                           step="0.01"
+                          inputMode="decimal"
+                          autoComplete="off"
                           value={material.travelBdt}
+                          placeholder={t.owner.numberZeroIfEmptyHint}
                           onChange={(e) =>
                             setMaterial({
                               ...material,
