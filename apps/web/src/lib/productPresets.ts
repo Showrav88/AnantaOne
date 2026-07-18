@@ -1,8 +1,9 @@
-/** Quick-pick catalog rows — selecting one fills EN/BN name, SKU, size, unit, category. */
+/** Quick-pick catalog rows — selecting one fills EN/BN name, size, unit, category. */
 export type ProductPreset = {
   id: string;
   name: string;
   nameBn: string;
+  /** Hint only — live create uses auto SKU (MW/DW/BW + seq). */
   sku: string;
   category: "DRINKING" | "DISTILLED" | "BATTERY" | "OTHER";
   size: number;
@@ -11,48 +12,57 @@ export type ProductPreset = {
 
 export const PRODUCT_PRESETS: ProductPreset[] = [
   {
-    id: "di-5l",
+    id: "dw-5l",
     name: "5L Distilled Water",
     nameBn: "ডিস্টিলড ওয়াটার ৫ লিটার",
-    sku: "DI-5L",
+    sku: "DW001",
     category: "DISTILLED",
     size: 5,
     unitCode: "LITER",
   },
   {
-    id: "dw-1l",
-    name: "1L Drinking Water",
-    nameBn: "পানীয় জল ১ লিটার",
-    sku: "DW-1L",
+    id: "mw-1l",
+    name: "1L Mineral Water",
+    nameBn: "মিনারেল ওয়াটার ১ লিটার",
+    sku: "MW001",
     category: "DRINKING",
     size: 1,
     unitCode: "LITER",
   },
   {
-    id: "dw-20l",
-    name: "20L Drinking Water",
-    nameBn: "পানীয় জল ২০ লিটার",
-    sku: "DW-20L",
+    id: "mw-20l",
+    name: "20L Mineral Water",
+    nameBn: "মিনারেল ওয়াটার ২০ লিটার",
+    sku: "MW002",
     category: "DRINKING",
     size: 20,
     unitCode: "LITER",
   },
   {
+    id: "mw-500",
+    name: "500ml Mineral Water",
+    nameBn: "মিনারেল ওয়াটার ৫০০ মি.লি.",
+    sku: "MW003",
+    category: "DRINKING",
+    size: 500,
+    unitCode: "MILLILITER",
+  },
+  {
     id: "bw-1l",
     name: "1L Battery Water",
     nameBn: "ব্যাটারি ওয়াটার ১ লিটার",
-    sku: "BW-1L",
+    sku: "BW001",
     category: "BATTERY",
     size: 1,
     unitCode: "LITER",
   },
   {
-    id: "dw-500",
-    name: "500ml Drinking Water",
-    nameBn: "পানীয় জল ৫০০ মি.লি.",
-    sku: "DW-500",
-    category: "DRINKING",
-    size: 500,
-    unitCode: "MILLILITER",
+    id: "bw-5l",
+    name: "5L Battery Water",
+    nameBn: "ব্যাটারি ওয়াটার ৫ লিটার",
+    sku: "BW002",
+    category: "BATTERY",
+    size: 5,
+    unitCode: "LITER",
   },
 ];
