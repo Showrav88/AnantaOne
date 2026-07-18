@@ -644,11 +644,12 @@ model CashTransaction {
   company           Company              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   wallet            CashWallet           @relation(fields: [walletId], references: [id], onDelete: Cascade)
   type              WalletTxnTypeLookup  @relation(fields: [typeId], references: [id])
-  salaryPayment     SalaryPayment?       @relation("SalaryPayTxn")
-  salaryReverseOf   SalaryPayment?       @relation("SalaryReverseTxn")
-  sale              Sale?
-  materialPurchase  MaterialPurchase?
-  cashExpense       CashExpense?
+  salaryPayment      SalaryPayment?       @relation("SalaryPayTxn")
+  salaryReverseOf    SalaryPayment?       @relation("SalaryReverseTxn")
+  sale               Sale?
+  materialPurchase   MaterialPurchase?    @relation("MaterialBuyTxn")
+  materialReverseOf  MaterialPurchase?    @relation("MaterialReverseTxn")
+  cashExpense        CashExpense?
 
   @@index([tenantId, occurredAt])
   @@index([walletId])
@@ -704,34 +705,40 @@ model Sale {
 
 /// Material / supply purchase — debits the company wallet (goods + trip costs).
 model MaterialPurchase {
-  id                String   @id @default(cuid())
-  tenantId          String
-  supplierName      String?
-  supplierPhone     String?
-  materialName      String
-  kindId            String
-  unitId            String
+  id                       String    @id @default(cuid())
+  tenantId                 String
+  supplierName             String?
+  supplierPhone            String?
+  materialName             String
+  kindId                   String
+  unitId                   String
   /// How many units bought (L, pcs, kg…).
-  qty               Decimal  @db.Decimal(14, 3)
+  qty                      Decimal   @db.Decimal(14, 3)
   /// Supplier invoice for the goods only.
-  goodsAmountBdt    Decimal  @db.Decimal(14, 2)
+  goodsAmountBdt           Decimal   @db.Decimal(14, 2)
   /// Trip extras — used for landed cost / consumer pricing.
-  transportBdt      Decimal  @default(0) @db.Decimal(14, 2)
-  driverBdt         Decimal  @default(0) @db.Decimal(14, 2)
-  travelBdt         Decimal  @default(0) @db.Decimal(14, 2)
+  transportBdt             Decimal   @default(0) @db.Decimal(14, 2)
+  driverBdt                Decimal   @default(0) @db.Decimal(14, 2)
+  travelBdt                Decimal   @default(0) @db.Decimal(14, 2)
   /// Total cash debit = goods + transport + driver + travel.
-  amountBdt         Decimal  @db.Decimal(14, 2)
-  note              String?
-  purchasedAt       DateTime @default(now())
-  cashTransactionId String   @unique
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  createdBy         String?
+  amountBdt                Decimal   @db.Decimal(14, 2)
+  note                     String?
+  purchasedAt              DateTime  @default(now())
+  cashTransactionId        String    @unique
+  reverseReason            String?
+  reversedAt               DateTime?
+  reversedBy               String?
+  reverseCashTransactionId String?   @unique
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  createdBy                String?
+  updatedBy                String?
 
-  company         Company         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  kind            SupplyKindLookup @relation(fields: [kindId], references: [id])
-  unit            UnitLookup       @relation(fields: [unitId], references: [id])
-  cashTransaction CashTransaction @relation(fields: [cashTransactionId], references: [id], onDelete: Cascade)
+  company                Company          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kind                   SupplyKindLookup @relation(fields: [kindId], references: [id])
+  unit                   UnitLookup       @relation(fields: [unitId], references: [id])
+  cashTransaction        CashTransaction  @relation("MaterialBuyTxn", fields: [cashTransactionId], references: [id], onDelete: Cascade)
+  reverseCashTransaction CashTransaction? @relation("MaterialReverseTxn", fields: [reverseCashTransactionId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, purchasedAt])
   @@index([kindId])

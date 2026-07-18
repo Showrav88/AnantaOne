@@ -110,6 +110,14 @@ export function OwnerWalletPage({ locale }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [purchases, setPurchases] = useState<SupplyPurchase[]>([]);
+  const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(
+    null,
+  );
+  const [reversePurchaseId, setReversePurchaseId] = useState<string | null>(
+    null,
+  );
+  const [reverseReason, setReverseReason] = useState("");
 
   const [material, setMaterial] = useState({
     materialName: "",
@@ -157,8 +165,43 @@ export function OwnerWalletPage({ locale }: Props) {
     return materialTotal / qty;
   }, [material.qty, materialTotal]);
 
+  function blankMaterial(kindCode?: string, unitCode?: string) {
+    return {
+      materialName: "",
+      kindCode: kindCode ?? "RAW_MATERIAL",
+      unitCode: unitCode ?? "LITER",
+      qty: "1",
+      goodsAmountBdt: "",
+      transportBdt: "",
+      driverBdt: "",
+      travelBdt: "",
+      supplierName: "",
+      supplierPhone: "",
+      note: "",
+    };
+  }
+
+  function fillMaterialFromPurchase(p: SupplyPurchase) {
+    setMaterial({
+      materialName: p.materialName,
+      kindCode: p.kind?.code ?? "RAW_MATERIAL",
+      unitCode: p.unit?.code ?? "LITER",
+      qty: String(p.qty),
+      goodsAmountBdt: String(p.goodsAmountBdt),
+      transportBdt: p.transportBdt ? String(p.transportBdt) : "",
+      driverBdt: p.driverBdt ? String(p.driverBdt) : "",
+      travelBdt: p.travelBdt ? String(p.travelBdt) : "",
+      supplierName: p.supplierName ?? "",
+      supplierPhone: p.supplierPhone ?? "",
+      note: p.note ?? "",
+    });
+    setTripOpen(
+      p.transportBdt > 0 || p.driverBdt > 0 || p.travelBdt > 0,
+    );
+  }
+
   async function load() {
-    const [walletRes, catRes, metaRes] = await Promise.all([
+    const [walletRes, catRes, metaRes, purchaseRes] = await Promise.all([
       api.owner.wallet(),
       api.owner
         .expenseCategories()
@@ -167,12 +210,14 @@ export function OwnerWalletPage({ locale }: Props) {
         kinds: [] as SupplyKind[],
         units: [] as UnitOpt[],
       })),
+      api.owner.supplyPurchases().catch(() => ({ purchases: [] as SupplyPurchase[] })),
     ]);
     setWallet(walletRes.wallet);
     setTxns(walletRes.transactions);
     setCategories(catRes.categories);
     setKinds(metaRes.kinds);
     setUnits(metaRes.units);
+    setPurchases(purchaseRes.purchases);
     if (metaRes.kinds[0]) {
       setMaterial((m) =>
         metaRes.kinds.some((k) => k.code === m.kindCode)
@@ -208,38 +253,67 @@ export function OwnerWalletPage({ locale }: Props) {
     e.preventDefault();
     setError(null);
     setOkMsg(null);
+    const body = {
+      materialName: material.materialName,
+      kindCode: material.kindCode,
+      unitCode: material.unitCode,
+      qty: Number(material.qty),
+      goodsAmountBdt: Number(material.goodsAmountBdt || 0),
+      transportBdt: Number(material.transportBdt || 0),
+      driverBdt: Number(material.driverBdt || 0),
+      travelBdt: Number(material.travelBdt || 0),
+      supplierName: material.supplierName || null,
+      supplierPhone: material.supplierPhone || null,
+      note: material.note || null,
+    };
     try {
-      await api.owner.recordMaterial({
-        materialName: material.materialName,
-        kindCode: material.kindCode,
-        unitCode: material.unitCode,
-        qty: Number(material.qty),
-        goodsAmountBdt: Number(material.goodsAmountBdt || 0),
-        transportBdt: Number(material.transportBdt || 0),
-        driverBdt: Number(material.driverBdt || 0),
-        travelBdt: Number(material.travelBdt || 0),
-        supplierName: material.supplierName || null,
-        supplierPhone: material.supplierPhone || null,
-        note: material.note || null,
-      });
-      setMaterial({
-        materialName: "",
-        kindCode: material.kindCode,
-        unitCode: material.unitCode,
-        qty: "1",
-        goodsAmountBdt: "",
-        transportBdt: "",
-        driverBdt: "",
-        travelBdt: "",
-        supplierName: "",
-        supplierPhone: "",
-        note: "",
-      });
-      setOkMsg(t.owner.expenseDebited);
+      if (editingPurchaseId) {
+        await api.owner.updateMaterial(editingPurchaseId, body);
+        setEditingPurchaseId(null);
+        setOkMsg(t.owner.supplyUpdated);
+      } else {
+        await api.owner.recordMaterial(body);
+        setOkMsg(t.owner.expenseDebited);
+      }
+      setMaterial(blankMaterial(material.kindCode, material.unitCode));
+      setTripOpen(false);
       await load();
+      if (tab === "analytics") await loadAnalytics();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
     }
+  }
+
+  async function onReverseMaterial(e: FormEvent) {
+    e.preventDefault();
+    if (!reversePurchaseId) return;
+    setError(null);
+    setOkMsg(null);
+    try {
+      await api.owner.reverseMaterial(reversePurchaseId, reverseReason);
+      setReversePurchaseId(null);
+      setReverseReason("");
+      setOkMsg(t.owner.supplyReversed);
+      if (editingPurchaseId === reversePurchaseId) {
+        setEditingPurchaseId(null);
+        setMaterial(blankMaterial(material.kindCode, material.unitCode));
+      }
+      await load();
+      if (tab === "analytics") await loadAnalytics();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
+  function startEditPurchase(p: SupplyPurchase) {
+    if (p.isReversed) return;
+    setEditingPurchaseId(p.id);
+    setReversePurchaseId(null);
+    fillMaterialFromPurchase(p);
+    setOpenRecord("supply");
+    setTab("record");
+    setError(null);
+    setOkMsg(null);
   }
 
   async function onExpense(e: FormEvent) {
@@ -291,11 +365,18 @@ export function OwnerWalletPage({ locale }: Props) {
     return locale === "bn" ? k.nameBn : k.nameEn;
   }
 
-  function renderPurchaseBreakdown(p: SupplyPurchase) {
+  function renderPurchaseBreakdown(
+    p: SupplyPurchase,
+    opts?: { showActions?: boolean },
+  ) {
+    const showActions = opts?.showActions !== false && canWrite;
     return (
       <div className="cost-breakdown">
         <p>
           <strong>{p.materialName}</strong>
+          {p.isReversed ? (
+            <span className="muted tiny"> · {t.owner.supplyReversedBadge}</span>
+          ) : null}
           <span className="muted tiny">
             {" "}
             · {p.qty}{" "}
@@ -340,6 +421,61 @@ export function OwnerWalletPage({ locale }: Props) {
             {p.supplierName}
             {p.supplierPhone ? ` · ${p.supplierPhone}` : ""}
           </p>
+        ) : null}
+        {p.isReversed && p.reverseReason ? (
+          <p className="muted tiny">{p.reverseReason}</p>
+        ) : null}
+        {showActions && !p.isReversed ? (
+          <div className="media-actions">
+            <button
+              type="button"
+              className="btn ghost compact"
+              onClick={() => startEditPurchase(p)}
+            >
+              {t.owner.editSupplyPurchase}
+            </button>
+            <button
+              type="button"
+              className="btn ghost compact dark"
+              onClick={() => {
+                setReversePurchaseId(p.id);
+                setReverseReason("");
+                setEditingPurchaseId(null);
+              }}
+            >
+              {t.owner.reverseSupply}
+            </button>
+          </div>
+        ) : null}
+        {showActions && reversePurchaseId === p.id ? (
+          <form className="owner-form compact" onSubmit={onReverseMaterial}>
+            <p className="muted tiny full">{t.owner.reverseSupplyHint}</p>
+            <label className="full">
+              {t.owner.reverseSupplyReason}
+              <textarea
+                required
+                minLength={5}
+                rows={2}
+                value={reverseReason}
+                onChange={(e) => setReverseReason(e.target.value)}
+              />
+            </label>
+            <div className="media-actions">
+              <button type="submit" className="btn primary compact">
+                {t.owner.confirmReverseSupply}
+              </button>
+              <button
+                type="button"
+                className="btn ghost compact"
+                onClick={() => {
+                  setReversePurchaseId(null);
+                  setReverseReason("");
+                }}
+              >
+                {t.common.cancel}
+              </button>
+            </div>
+          </form>
         ) : null}
       </div>
     );
@@ -402,6 +538,11 @@ export function OwnerWalletPage({ locale }: Props) {
             >
               <form className="owner-form compact" onSubmit={onMaterial}>
                 <p className="muted tiny full">{t.owner.materialDebitHint}</p>
+                {editingPurchaseId ? (
+                  <p className="ok-banner tiny full">
+                    {t.owner.editSupplyPurchase}
+                  </p>
+                ) : null}
                 <label>
                   {t.owner.fieldMaterial}
                   <input
@@ -608,14 +749,48 @@ export function OwnerWalletPage({ locale }: Props) {
                     ? ` · ${t.owner.landedUnitCost}: ৳${landedHint.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
                     : ""}
                 </p>
-                <button
-                  type="submit"
-                  className="cta"
-                  disabled={pending || !(materialTotal > 0)}
-                >
-                  {t.owner.addMaterial}
-                </button>
+                <div className="media-actions full">
+                  <button
+                    type="submit"
+                    className="cta"
+                    disabled={pending || !(materialTotal > 0)}
+                  >
+                    {editingPurchaseId
+                      ? t.owner.saveSupplyPurchase
+                      : t.owner.addMaterial}
+                  </button>
+                  {editingPurchaseId ? (
+                    <button
+                      type="button"
+                      className="btn ghost compact"
+                      onClick={() => {
+                        setEditingPurchaseId(null);
+                        setMaterial(
+                          blankMaterial(material.kindCode, material.unitCode),
+                        );
+                        setTripOpen(false);
+                      }}
+                    >
+                      {t.owner.cancelEditSupply}
+                    </button>
+                  ) : null}
+                </div>
               </form>
+              <div className="purchase-cards" style={{ marginTop: "1rem" }}>
+                <p className="muted tiny">{t.owner.supplyPurchasesRecent}</p>
+                {purchases.length === 0 ? (
+                  <p className="muted tiny">{t.owner.analyticsEmpty}</p>
+                ) : (
+                  purchases.slice(0, 12).map((p) => (
+                    <article key={p.id} className="panel-card">
+                      <p className="muted tiny">
+                        {new Date(p.purchasedAt).toLocaleString()}
+                      </p>
+                      {renderPurchaseBreakdown(p)}
+                    </article>
+                  ))
+                )}
+              </div>
             </CollapsePanel>
 
             <CollapsePanel
