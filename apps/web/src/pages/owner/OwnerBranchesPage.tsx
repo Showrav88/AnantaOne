@@ -87,7 +87,7 @@ export function OwnerBranchesPage({ locale }: Props) {
       setError(t.owner.managerRequired);
       return;
     }
-    if (!editingId && form.employeeIds.length === 0) {
+    if (form.employeeIds.length === 0) {
       setError(t.owner.employeeRequired);
       return;
     }
