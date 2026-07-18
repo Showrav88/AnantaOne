@@ -1526,6 +1526,18 @@ html[data-theme="night"] .owner-nav a.active {
   min-width: 0;
 }
 
+.owner-form input.sku-field {
+  color: var(--brand-primary, #0f6b4c);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.owner-form input.sku-field:read-only {
+  color: var(--brand-primary, #0f6b4c);
+  background: color-mix(in srgb, var(--brand-primary, #0f6b4c) 8%, var(--input-bg, #fff));
+  border-color: color-mix(in srgb, var(--brand-primary, #0f6b4c) 35%, var(--line, #ddd));
+}
+
 .form-actions {
   grid-column: 1 / -1;
   display: flex;
