@@ -1,19 +1,17 @@
 import type { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../db.js";
+import { makeShortSerialCode } from "./shortCodes.js";
 
 type TxClient = Prisma.TransactionClient;
 
+/** Short unique unit code (SKU + base36 serial, ≥1B capacity). */
 export function makeSerialCode(opts: {
   sku: string;
   batchCode: string;
   serialNo: number;
 }) {
-  const sku = opts.sku.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 12);
-  const batch = opts.batchCode
-    .replace(/[^a-zA-Z0-9]/g, "")
-    .toUpperCase()
-    .slice(0, 16);
-  return `${sku}-${batch}-${String(opts.serialNo).padStart(5, "0")}`;
+  void opts.batchCode; // batch stays on the tag print fields, not in the QR code
+  return makeShortSerialCode(opts.sku, opts.serialNo);
 }
 
 export function buildUnitQrUrl(opts: {

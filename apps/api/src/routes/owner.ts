@@ -8,6 +8,7 @@ import {
   requireOwnerOrManager,
 } from "../middleware/companyAccess.js";
 import { branchFilter, resolveBranchScope } from "../lib/branchScope.js";
+import { buildAutoSku } from "../lib/shortCodes.js";
 
 export const ownerRouter = Router();
 
@@ -340,7 +341,8 @@ ownerRouter.get("/products", async (req, res) => {
 const productCreateSchema = z.object({
   name: z.string().min(2).max(120),
   nameBn: z.string().max(120).nullable().optional(),
-  sku: z.string().min(2).max(64),
+  /** Optional — blank / omitted generates a short ordered SKU (e.g. D001). */
+  sku: z.string().max(64).optional(),
   category: z.string().min(2).max(64).default("water"),
   unitCode: z.string().min(2).max(32).default("BOTTLE"),
   size: z.coerce.number().positive().nullable().optional(),
@@ -351,6 +353,34 @@ const productCreateSchema = z.object({
   imageUrl: z.string().url().nullable().optional(),
   imagePublicId: z.string().max(240).nullable().optional(),
   isActive: z.boolean().optional(),
+});
+
+async function nextAutoSku(tenantId: string, category: string) {
+  const count = await prisma.product.count({ where: { tenantId } });
+  let seq = count + 1;
+  for (let i = 0; i < 5000; i += 1) {
+    const sku = buildAutoSku(category, seq);
+    const exists = await prisma.product.findFirst({
+      where: { tenantId, sku },
+      select: { id: true },
+    });
+    if (!exists) return sku;
+    seq += 1;
+  }
+  throw new Error("Could not allocate SKU");
+}
+
+ownerRouter.get("/products/next-sku", requireOwnerOrManager, async (req, res) => {
+  const category = String(req.query.category ?? "DRINKING");
+  try {
+    const sku = await nextAutoSku(tenantId(req), category);
+    res.json({ ok: true, sku });
+  } catch (error) {
+    res.status(400).json({
+      ok: false,
+      message: error instanceof Error ? error.message : "Failed",
+    });
+  }
 });
 
 ownerRouter.post("/products", requireOwnerOnly, async (req, res) => {
@@ -369,12 +399,19 @@ ownerRouter.post("/products", requireOwnerOnly, async (req, res) => {
   }
 
   try {
+    const tid = tenantId(req);
+    const manual = parsed.data.sku?.trim();
+    const sku =
+      manual && manual.length >= 2
+        ? manual.toUpperCase()
+        : await nextAutoSku(tid, parsed.data.category);
+
     const product = await prisma.product.create({
       data: {
-        tenantId: tenantId(req),
+        tenantId: tid,
         name: parsed.data.name,
         nameBn: parsed.data.nameBn ?? null,
-        sku: parsed.data.sku,
+        sku,
         category: parsed.data.category,
         unitId: unit.id,
         size: parsed.data.size ?? null,
@@ -426,11 +463,16 @@ ownerRouter.patch("/products/:id", requireOwnerOnly, async (req, res) => {
     unitId = unit.id;
   }
 
-  const { unitCode: _unitCode, ...rest } = parsed.data;
+  const { unitCode: _unitCode, sku: skuRaw, ...rest } = parsed.data;
+  const sku =
+    skuRaw != null && skuRaw.trim().length >= 2
+      ? skuRaw.trim().toUpperCase()
+      : undefined;
   const product = await prisma.product.update({
     where: { id: existing.id },
     data: {
       ...rest,
+      ...(sku ? { sku } : {}),
       ...(unitId ? { unitId } : {}),
       updatedBy: req.auth!.id,
     },

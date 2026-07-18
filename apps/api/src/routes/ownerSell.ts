@@ -25,6 +25,7 @@ import {
   canAccessBranch,
   resolveBranchScope,
 } from "../lib/branchScope.js";
+import { makeShortBatchCode } from "../lib/shortCodes.js";
 
 export const ownerSellRouter = Router();
 
@@ -112,12 +113,16 @@ ownerSellRouter.post(
     }
 
     const mfg = parseDate(parsed.data.manufacturedAt);
-    const autoCode =
-      parsed.data.batchCode?.trim() ||
-      `${product.sku}-${mfg.toISOString().slice(0, 10).replace(/-/g, "")}`;
 
     try {
       const batch = await prisma.$transaction(async (tx) => {
+        let autoCode = parsed.data.batchCode?.trim();
+        if (!autoCode) {
+          const prior = await tx.productionBatch.count({
+            where: { tenantId: tid(req), productId: product.id },
+          });
+          autoCode = makeShortBatchCode(product.sku, prior + 1);
+        }
         const created = await tx.productionBatch.create({
           data: {
             tenantId: tid(req),
