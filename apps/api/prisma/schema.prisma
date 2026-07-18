@@ -132,6 +132,7 @@ model Company {
   materialPurchases  MaterialPurchase[]
   cashExpenses       CashExpense[]
   productionBatches  ProductionBatch[]
+  productUnits       ProductUnit[]
   salesOrders        SalesOrder[]
   tagTemplates       TagTemplate[]
   mediaAssets        MediaAsset[]
@@ -372,6 +373,8 @@ model Product {
   sku         String
   category    String   @default("water")
   unitId      String
+  /// How much one item is (e.g. 5 with unit Liter = 5L bottle).
+  size        Decimal? @db.Decimal(12, 3)
   priceBdt    Decimal  @db.Decimal(12, 2)
   stockQty    Decimal  @default(0) @db.Decimal(12, 2)
   minStock    Decimal  @default(0) @db.Decimal(12, 2)
@@ -388,6 +391,7 @@ model Product {
   unit     UnitLookup        @relation(fields: [unitId], references: [id])
   batches  ProductionBatch[]
   orderLines OrderLine[]
+  units    ProductUnit[]
 
   @@unique([tenantId, sku])
   @@index([tenantId])
@@ -432,8 +436,14 @@ model ProductionBatch {
   expiresAt      DateTime?
   qtyProduced    Decimal   @db.Decimal(12, 2)
   qtyRemaining   Decimal   @db.Decimal(12, 2)
+  /// Inclusive serial range for unique unit tags (e.g. 1–100, then 101–500).
+  serialStart    Int?
+  serialEnd      Int?
   note           String?
   isActive       Boolean   @default(true)
+  /// Set when unused production stock is fully reversed.
+  reversedAt     DateTime?
+  reverseReason  String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   createdBy      String?
@@ -441,10 +451,40 @@ model ProductionBatch {
   company    Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
   orderLines OrderLine[]
+  units      ProductUnit[]
 
   @@unique([tenantId, batchCode])
   @@index([tenantId, productId])
   @@index([productId, expiresAt])
+}
+
+/// One physical bottle / item with a unique QR tag.
+model ProductUnit {
+  id          String    @id @default(cuid())
+  tenantId    String
+  productId   String
+  batchId     String
+  /// Running number per product (1, 2, … across batches).
+  serialNo    Int
+  /// Public QR code, unique per company.
+  serialCode  String
+  /// IN_STOCK | SOLD | VOID
+  status      String    @default("IN_STOCK")
+  orderLineId String?
+  soldAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  company Company         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  batch   ProductionBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  orderLine OrderLine?    @relation(fields: [orderLineId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, serialCode])
+  @@unique([tenantId, productId, serialNo])
+  @@index([tenantId, batchId, status])
+  @@index([orderLineId])
+  @@index([status])
 }
 
 /// B2B / counter / online sales order.
@@ -523,6 +563,7 @@ model OrderLine {
   order   SalesOrder       @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product          @relation(fields: [productId], references: [id])
   batch   ProductionBatch? @relation(fields: [batchId], references: [id])
+  units   ProductUnit[]
 
   @@index([orderId])
   @@index([productId])

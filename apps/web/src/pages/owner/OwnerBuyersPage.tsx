@@ -28,6 +28,10 @@ export function OwnerBuyersPage({ locale }: Props) {
     buyers: Array<{ id: string; onlineSpentBdt: number }>;
   } | null>(null);
   const [form, setForm] = useState(empty);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deactivateBuyer, setDeactivateBuyer] = useState<BuyerRow | null>(null);
+  const [deactivating, setDeactivating] = useState(false);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -57,21 +61,62 @@ export function OwnerBuyersPage({ locale }: Props) {
     });
   }, []);
 
-  async function onCreate(e: FormEvent) {
+  function resetForm() {
+    setForm(empty);
+    setEditingId(null);
+  }
+
+  function startEdit(b: BuyerRow) {
+    setEditingId(b.id);
+    setForm({
+      shopName: b.shopName,
+      contactName: b.contactName ?? "",
+      phone: b.phone,
+      address: b.address ?? "",
+      wardId: b.wardId ?? "",
+    });
+    setError(null);
+    setOkMsg(null);
+  }
+
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setOkMsg(null);
     try {
-      await api.owner.createBuyer({
+      const body = {
         shopName: form.shopName,
         contactName: form.contactName || null,
         phone: form.phone,
         address: form.address || null,
         wardId: form.wardId || null,
-      });
-      setForm(empty);
+      };
+      if (editingId) {
+        await api.owner.updateBuyer(editingId, body);
+        setOkMsg(t.owner.buyerUpdated);
+      } else {
+        await api.owner.createBuyer(body);
+      }
+      resetForm();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Create failed");
+      setError(err instanceof Error ? err.message : "Save failed");
+    }
+  }
+
+  async function confirmDeactivate() {
+    if (!deactivateBuyer) return;
+    setDeactivating(true);
+    setError(null);
+    try {
+      await api.owner.updateBuyer(deactivateBuyer.id, { isActive: false });
+      if (editingId === deactivateBuyer.id) resetForm();
+      setDeactivateBuyer(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setDeactivating(false);
     }
   }
 
@@ -106,10 +151,15 @@ export function OwnerBuyersPage({ locale }: Props) {
         </section>
       ) : null}
 
+      {okMsg ? <p className="ok">{okMsg}</p> : null}
       {error ? <p className="error">{error}</p> : null}
 
       {canWrite ? (
-        <form className="owner-form compact" autoComplete="off" onSubmit={onCreate}>
+        <form
+          className="owner-form compact"
+          autoComplete="off"
+          onSubmit={onSubmit}
+        >
           <label>
             {t.owner.fieldShopName}
             <input
@@ -164,9 +214,16 @@ export function OwnerBuyersPage({ locale }: Props) {
               ))}
             </select>
           </label>
-          <button className="btn primary" type="submit" disabled={pending}>
-            {t.owner.addBuyer}
-          </button>
+          <div className="form-actions">
+            <button className="btn primary" type="submit" disabled={pending}>
+              {editingId ? t.common.save : t.owner.addBuyer}
+            </button>
+            {editingId ? (
+              <button type="button" className="btn ghost" onClick={resetForm}>
+                {t.common.cancel}
+              </button>
+            ) : null}
+          </div>
         </form>
       ) : null}
 
@@ -181,6 +238,7 @@ export function OwnerBuyersPage({ locale }: Props) {
               <th>{t.owner.buyerOrders}</th>
               <th>{t.owner.buyerSpent}</th>
               <th>{t.owner.buyerOnlineSpent}</th>
+              {canWrite ? <th /> : null}
             </tr>
           </thead>
           <tbody>
@@ -209,12 +267,76 @@ export function OwnerBuyersPage({ locale }: Props) {
                   <td data-label={t.owner.buyerOnlineSpent}>
                     ৳{online.toLocaleString()}
                   </td>
+                  {canWrite ? (
+                    <td className="cell-actions" data-label="">
+                      {b.isActive ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn ghost compact"
+                            onClick={() => startEdit(b)}
+                          >
+                            {t.common.edit}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn ghost compact dark"
+                            onClick={() => setDeactivateBuyer(b)}
+                          >
+                            {t.owner.deactivate}
+                          </button>
+                        </>
+                      ) : null}
+                    </td>
+                  ) : null}
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+
+      {deactivateBuyer ? (
+        <div
+          className="owner-dialog-backdrop"
+          role="presentation"
+          onClick={() => (!deactivating ? setDeactivateBuyer(null) : null)}
+        >
+          <div
+            className="owner-dialog confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="buyer-deactivate-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="buyer-deactivate-title">{t.owner.deactivateBuyerTitle}</h2>
+            <p>
+              {t.owner.deactivateBuyerHint.replace(
+                "{name}",
+                deactivateBuyer.shopName,
+              )}
+            </p>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="btn primary"
+                disabled={deactivating}
+                onClick={() => void confirmDeactivate()}
+              >
+                {t.owner.confirmDeactivateBuyer}
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                disabled={deactivating}
+                onClick={() => setDeactivateBuyer(null)}
+              >
+                {t.common.cancel}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

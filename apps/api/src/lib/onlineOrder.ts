@@ -1,5 +1,6 @@
 import { prisma } from "../db.js";
 import { quoteOrderTotals, normalizeCategory } from "./delivery.js";
+import { allocateUnitsToLine } from "./productUnits.js";
 import {
   makeInvoiceCode,
   pickBatchFefo,
@@ -211,6 +212,13 @@ export async function acceptOnlineOrder(opts: {
       await tx.orderLine.update({
         where: { id: line.id },
         data: { batchId: batch.id },
+      });
+      await allocateUnitsToLine({
+        tenantId: opts.tenantId,
+        batchId: batch.id,
+        orderLineId: line.id,
+        qty: Number(line.qty),
+        tx,
       });
     }
 

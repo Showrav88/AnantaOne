@@ -97,6 +97,8 @@ export type Product = {
   imagePublicId?: string | null;
   unit: string | null;
   unitId?: string;
+  unitLabel?: { en: string; bn: string } | null;
+  size: number | null;
   priceBdt: number;
   stockQty: number;
   minStock: number;
@@ -440,15 +442,46 @@ export type ProductionBatch = {
   expiresAt: string | null;
   qtyProduced: number;
   qtyRemaining: number;
+  serialStart: number | null;
+  serialEnd: number | null;
+  unitTagCount?: number | null;
   note: string | null;
   isActive: boolean;
+  reversedAt?: string | null;
+  reverseReason?: string | null;
   product: {
     id: string;
     name: string;
     nameBn: string | null;
     sku: string;
+    size?: number | null;
     priceBdt: number;
     description: string | null;
+  } | null;
+};
+
+export type ProductUnitTag = {
+  id: string;
+  serialNo: number;
+  serialCode: string;
+  status: string;
+  soldAt: string | null;
+  qrUrl: string;
+  product: {
+    name: string;
+    nameBn: string | null;
+    sku: string;
+    size: number | null;
+    unit: string | null;
+    unitLabel: { en: string; bn: string } | null;
+    priceBdt: number | null;
+  } | null;
+  batch: {
+    batchCode: string;
+    manufacturedAt: string;
+    expiresAt: string | null;
+    serialStart: number | null;
+    serialEnd: number | null;
   } | null;
 };
 
@@ -1292,6 +1325,41 @@ export const api = {
         { method: "PATCH", body: JSON.stringify(body) },
         true,
       ),
+    reverseBatch: (id: string, reason: string) =>
+      getJson<{ ok: boolean; batch: ProductionBatch; stockRemoved: number }>(
+        `/api/v1/owner/batches/${id}/reverse`,
+        1,
+        { method: "POST", body: JSON.stringify({ reason }) },
+        true,
+      ),
+    batchUnits: (id: string, opts?: { status?: string; limit?: number }) => {
+      const q = new URLSearchParams();
+      if (opts?.status) q.set("status", opts.status);
+      if (opts?.limit) q.set("limit", String(opts.limit));
+      const qs = q.toString();
+      return getJson<{
+        ok: boolean;
+        batch: ProductionBatch;
+        units: ProductUnitTag[];
+      }>(
+        `/api/v1/owner/batches/${id}/units${qs ? `?${qs}` : ""}`,
+        1,
+        undefined,
+        true,
+      );
+    },
+    createUnit: (body: {
+      code: string;
+      nameEn: string;
+      nameBn: string;
+    }) =>
+      getJson<{
+        ok: boolean;
+        unit: { id: string; code: string; nameEn: string; nameBn: string };
+      }>("/api/v1/owner/units", 1, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }, true),
     orders: () =>
       getJson<{ ok: boolean; orders: SalesOrder[] }>(
         "/api/v1/owner/orders",
@@ -1367,7 +1435,9 @@ export const api = {
           name: string;
           nameBn: string | null;
           sku: string;
+          size?: number | null;
           unit: string;
+          unitLabel?: { en: string; bn: string };
           priceBdt: number;
           description: string | null;
         };
@@ -1376,10 +1446,48 @@ export const api = {
           manufacturedAt: string;
           expiresAt: string | null;
           qtyRemaining: number;
+          serialStart?: number | null;
+          serialEnd?: number | null;
         };
       };
     }>(
       `/api/v1/tag/${encodeURIComponent(companySlug)}/${encodeURIComponent(sku)}/${encodeURIComponent(batchCode)}`,
+    ),
+  publicUnit: (companySlug: string, serialCode: string) =>
+    getJson<{
+      ok: boolean;
+      unit: {
+        serialNo: number;
+        serialCode: string;
+        status: string;
+        soldAt: string | null;
+        company: {
+          name: string;
+          phone: string | null;
+          logoUrl?: string | null;
+          brandPrimary?: string | null;
+        };
+        product: {
+          name: string;
+          nameBn: string | null;
+          sku: string;
+          size: number | null;
+          unit: string;
+          unitLabel: { en: string; bn: string };
+          priceBdt: number;
+          description: string | null;
+          imageUrl: string | null;
+        };
+        batch: {
+          batchCode: string;
+          manufacturedAt: string;
+          expiresAt: string | null;
+          serialStart: number | null;
+          serialEnd: number | null;
+        };
+      };
+    }>(
+      `/api/v1/unit/${encodeURIComponent(companySlug)}/${encodeURIComponent(serialCode)}`,
     ),
   publicInvoice: (companySlug: string, invoiceCode: string) =>
     getJson<{ ok: boolean; invoice: SalesInvoice }>(

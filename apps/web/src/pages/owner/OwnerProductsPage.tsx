@@ -1,17 +1,20 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import { api, type Product } from "../../lib/api";
+import { PRODUCT_PRESETS } from "../../lib/productPresets";
 import { getStoredUser } from "../../lib/session";
 import { uploadTenantMedia } from "../../lib/tenantUpload";
 
 type Props = { locale: LocaleCode };
 
 const emptyForm = {
+  presetId: "custom",
   name: "",
   nameBn: "",
   sku: "",
   category: "DRINKING",
-  unitCode: "BOTTLE",
+  size: "",
+  unitCode: "LITER",
   priceBdt: "",
   stockQty: "",
   minStock: "",
@@ -34,12 +37,21 @@ export function OwnerProductsPage({ locale }: Props) {
     Array<{ code: string; nameEn: string; nameBn: string }>
   >([]);
   const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showAddUnit, setShowAddUnit] = useState(false);
+  const [newUnit, setNewUnit] = useState({
+    code: "",
+    nameEn: "",
+    nameBn: "",
+  });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  const isCustom = form.presetId === "custom";
 
   async function load() {
     const [prod, unitRes] = await Promise.all([
@@ -73,14 +85,82 @@ export function OwnerProductsPage({ locale }: Props) {
     setImagePreview(null);
   }
 
-  async function onCreate(e: FormEvent) {
+  function resetForm() {
+    setForm(emptyForm);
+    setEditingId(null);
+    setShowAddUnit(false);
+    setNewUnit({ code: "", nameEn: "", nameBn: "" });
+    clearImage();
+  }
+
+  function applyPreset(presetId: string) {
+    if (presetId === "custom") {
+      setForm((f) => ({ ...f, presetId: "custom" }));
+      return;
+    }
+    const preset = PRODUCT_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+    setForm((f) => ({
+      ...f,
+      presetId,
+      name: preset.name,
+      nameBn: preset.nameBn,
+      sku: preset.sku,
+      category: preset.category,
+      size: String(preset.size),
+      unitCode: preset.unitCode,
+    }));
+    setShowAddUnit(false);
+  }
+
+  function startEdit(p: Product) {
+    setEditingId(p.id);
+    setForm({
+      presetId: "custom",
+      name: p.name,
+      nameBn: p.nameBn ?? "",
+      sku: p.sku,
+      category: p.category,
+      size: p.size == null ? "" : String(p.size),
+      unitCode: p.unit ?? "LITER",
+      priceBdt: String(p.priceBdt),
+      stockQty: String(p.stockQty),
+      minStock: String(p.minStock),
+      description: p.description ?? "",
+    });
+    clearImage();
+    setShowAddUnit(false);
+    setError(null);
+    setOkMsg(null);
+  }
+
+  async function onAddUnit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    try {
+      const created = await api.owner.createUnit({
+        code: newUnit.code.trim().toUpperCase(),
+        nameEn: newUnit.nameEn.trim(),
+        nameBn: newUnit.nameBn.trim(),
+      });
+      const unitRes = await api.auth.units();
+      setUnits(unitRes.units);
+      setForm((f) => ({ ...f, unitCode: created.unit.code }));
+      setNewUnit({ code: "", nameEn: "", nameBn: "" });
+      setShowAddUnit(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setOkMsg(null);
     setUploading(true);
     try {
-      let imageUrl: string | null = null;
-      let imagePublicId: string | null = null;
+      let imageUrl: string | null | undefined;
+      let imagePublicId: string | null | undefined;
 
       if (imageFile) {
         const publicId = form.sku.trim().replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -89,31 +169,40 @@ export function OwnerProductsPage({ locale }: Props) {
           purpose: "products",
           publicId,
           label: form.name,
+          ...(editingId ? { productId: editingId } : {}),
         });
         imageUrl = uploaded.url;
         imagePublicId = uploaded.publicId;
       }
 
-      await api.owner.createProduct({
+      const body: Record<string, unknown> = {
         name: form.name,
         nameBn: form.nameBn || null,
         sku: form.sku,
         category: form.category,
+        size: form.size === "" ? null : Number(form.size),
         unitCode: form.unitCode,
         priceBdt: Number(form.priceBdt),
-        // Empty optional numbers → 0 (product columns are NOT NULL with DB default 0)
         stockQty: form.stockQty === "" ? 0 : Number(form.stockQty),
         minStock: form.minStock === "" ? 0 : Number(form.minStock),
         description: form.description || null,
-        imageUrl,
-        imagePublicId,
-      });
-      setForm(emptyForm);
-      clearImage();
-      setOkMsg(t.owner.productCreated);
+      };
+      if (imageUrl !== undefined) {
+        body.imageUrl = imageUrl;
+        body.imagePublicId = imagePublicId;
+      }
+
+      if (editingId) {
+        await api.owner.updateProduct(editingId, body);
+        setOkMsg(t.owner.productUpdated);
+      } else {
+        await api.owner.createProduct(body);
+        setOkMsg(t.owner.productCreated);
+      }
+      resetForm();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Create failed");
+      setError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setUploading(false);
     }
@@ -123,6 +212,7 @@ export function OwnerProductsPage({ locale }: Props) {
     setError(null);
     try {
       await api.owner.deactivateProduct(id);
+      if (editingId === id) resetForm();
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
@@ -151,6 +241,15 @@ export function OwnerProductsPage({ locale }: Props) {
     }
   }
 
+  function formatSizeUnit(p: Product) {
+    const unitLabel =
+      locale === "bn" && p.unitLabel?.bn
+        ? p.unitLabel.bn
+        : (p.unitLabel?.en ?? p.unit ?? "");
+    if (p.size == null) return unitLabel || "—";
+    return unitLabel ? `${p.size} ${unitLabel}` : String(p.size);
+  }
+
   return (
     <div className="owner-page">
       <header className="owner-header">
@@ -170,12 +269,29 @@ export function OwnerProductsPage({ locale }: Props) {
       ) : null}
 
       {canWrite ? (
-        <form className="owner-form compact" onSubmit={onCreate}>
+        <form className="owner-form compact" onSubmit={onSubmit}>
+          {!editingId ? (
+            <label>
+              {t.owner.productPreset}
+              <select
+                value={form.presetId}
+                onChange={(e) => applyPreset(e.target.value)}
+              >
+                <option value="custom">{t.owner.productPresetCustom}</option>
+                {PRODUCT_PRESETS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {locale === "bn" ? p.nameBn : p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label>
             {t.owner.fieldProductName}
             <input
               required
               value={form.name}
+              disabled={!isCustom && !editingId}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
           </label>
@@ -183,6 +299,7 @@ export function OwnerProductsPage({ locale }: Props) {
             {t.owner.fieldProductNameBn}
             <input
               value={form.nameBn}
+              disabled={!isCustom && !editingId}
               onChange={(e) => setForm({ ...form, nameBn: e.target.value })}
             />
           </label>
@@ -191,6 +308,7 @@ export function OwnerProductsPage({ locale }: Props) {
             <input
               required
               value={form.sku}
+              disabled={!isCustom && !editingId}
               onChange={(e) => setForm({ ...form, sku: e.target.value })}
             />
           </label>
@@ -198,6 +316,7 @@ export function OwnerProductsPage({ locale }: Props) {
             {t.owner.fieldCategory}
             <select
               value={form.category}
+              disabled={!isCustom && !editingId}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
             >
               {PRODUCT_CATEGORIES.map((c) => (
@@ -214,9 +333,24 @@ export function OwnerProductsPage({ locale }: Props) {
             </select>
           </label>
           <label>
+            {t.owner.fieldSize}
+            <input
+              type="number"
+              min="0"
+              step="any"
+              inputMode="decimal"
+              autoComplete="off"
+              value={form.size}
+              disabled={!isCustom && !editingId}
+              placeholder={t.owner.sizeHint}
+              onChange={(e) => setForm({ ...form, size: e.target.value })}
+            />
+          </label>
+          <label>
             {t.owner.fieldUnit}
             <select
               value={form.unitCode}
+              disabled={!isCustom && !editingId}
               onChange={(e) => setForm({ ...form, unitCode: e.target.value })}
             >
               {units.map((u) => (
@@ -226,6 +360,71 @@ export function OwnerProductsPage({ locale }: Props) {
               ))}
             </select>
           </label>
+          {isCustom || editingId ? (
+            <div className="full">
+              {!showAddUnit ? (
+                <button
+                  type="button"
+                  className="btn ghost compact"
+                  onClick={() => setShowAddUnit(true)}
+                >
+                  {t.owner.addUnit}
+                </button>
+              ) : (
+                <div className="owner-form compact inline-unit-form">
+                  <label>
+                    {t.owner.fieldUnitCode}
+                    <input
+                      required
+                      value={newUnit.code}
+                      onChange={(e) =>
+                        setNewUnit({ ...newUnit, code: e.target.value })
+                      }
+                    />
+                  </label>
+                  <label>
+                    {t.owner.unitNameEn}
+                    <input
+                      required
+                      value={newUnit.nameEn}
+                      onChange={(e) =>
+                        setNewUnit({ ...newUnit, nameEn: e.target.value })
+                      }
+                    />
+                  </label>
+                  <label>
+                    {t.owner.unitNameBn}
+                    <input
+                      required
+                      value={newUnit.nameBn}
+                      onChange={(e) =>
+                        setNewUnit({ ...newUnit, nameBn: e.target.value })
+                      }
+                    />
+                  </label>
+                  <div className="form-actions">
+                    <button
+                      type="button"
+                      className="btn primary compact"
+                      onClick={(e) => void onAddUnit(e)}
+                    >
+                      {t.owner.addUnit}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn ghost compact"
+                      onClick={() => {
+                        setShowAddUnit(false);
+                        setNewUnit({ code: "", nameEn: "", nameBn: "" });
+                      }}
+                    >
+                      {t.common.cancel}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
           <label>
             {t.owner.fieldPrice}
             <input
@@ -309,8 +508,17 @@ export function OwnerProductsPage({ locale }: Props) {
               type="submit"
               disabled={pending || uploading}
             >
-              {t.owner.addProduct}
+              {editingId ? t.common.save : t.owner.addProduct}
             </button>
+            {editingId ? (
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={resetForm}
+              >
+                {t.common.cancel}
+              </button>
+            ) : null}
           </div>
         </form>
       ) : (
@@ -325,6 +533,7 @@ export function OwnerProductsPage({ locale }: Props) {
               <th>{t.owner.fieldProductName}</th>
               <th>SKU</th>
               <th>{t.owner.fieldCategory}</th>
+              <th>{t.owner.fieldSize}</th>
               <th>{t.owner.fieldPrice}</th>
               <th>{t.owner.fieldStock}</th>
               <th>{t.owner.fieldStatus}</th>
@@ -368,6 +577,7 @@ export function OwnerProductsPage({ locale }: Props) {
                 </td>
                 <td data-label="SKU">{p.sku}</td>
                 <td data-label={t.owner.fieldCategory}>{p.category}</td>
+                <td data-label={t.owner.fieldSize}>{formatSizeUnit(p)}</td>
                 <td data-label={t.owner.fieldPrice}>৳{p.priceBdt}</td>
                 <td
                   data-label={t.owner.fieldStock}
@@ -380,13 +590,22 @@ export function OwnerProductsPage({ locale }: Props) {
                 </td>
                 <td className="cell-actions" data-label="">
                   {canWrite && p.isActive ? (
-                    <button
-                      type="button"
-                      className="btn ghost compact dark"
-                      onClick={() => void deactivate(p.id)}
-                    >
-                      {t.owner.deactivate}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className="btn ghost compact"
+                        onClick={() => startEdit(p)}
+                      >
+                        {t.common.edit}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn ghost compact dark"
+                        onClick={() => void deactivate(p.id)}
+                      >
+                        {t.owner.deactivate}
+                      </button>
+                    </>
                   ) : null}
                 </td>
               </tr>
