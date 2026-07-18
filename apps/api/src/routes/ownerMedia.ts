@@ -10,6 +10,7 @@ import {
 import {
   destroyCloudinaryAsset,
   isCloudinaryConfigured,
+  signCloudinaryUpload,
   tenantFolder,
   uploadBufferToCloudinary,
 } from "../lib/cloudinary.js";
@@ -239,15 +240,169 @@ ownerMediaRouter.get("/media", async (req, res) => {
   });
 });
 
+function purposeSubfolder(purpose: string) {
+  if (purpose === "logo") return "logo";
+  if (purpose === "hero") return "hero";
+  if (purpose === "products") return "products";
+  return "assets";
+}
+
+const signSchema = z.object({
+  purpose: z.enum(["assets", "logo", "hero", "products"]).default("assets"),
+  publicId: z.string().max(120).optional(),
+});
+
+/** Browser uploads directly to Cloudinary — avoids Render HTTP 413 on large files. */
+ownerMediaRouter.post("/media/sign", requireOwnerOrManager, async (req, res) => {
+  if (!isCloudinaryConfigured()) {
+    res.status(503).json({
+      ok: false,
+      message:
+        "Cloudinary is not configured. Set CLOUDINARY_URL on the API service.",
+    });
+    return;
+  }
+
+  const parsed = signSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, message: parsed.error.message });
+    return;
+  }
+
+  const company = await prisma.company.findUniqueOrThrow({
+    where: { id: tid(req) },
+    select: { slug: true },
+  });
+
+  try {
+    const sign = signCloudinaryUpload({
+      folder: tenantFolder(company.slug, purposeSubfolder(parsed.data.purpose)),
+      publicId: parsed.data.publicId,
+    });
+    res.json({ ok: true, sign });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : "Sign failed",
+    });
+  }
+});
+
+const registerSchema = z.object({
+  purpose: z.enum(["assets", "logo", "hero", "products"]).default("assets"),
+  kind: z.enum(["IMAGE", "VIDEO"]),
+  url: z.string().url(),
+  publicId: z.string().min(1).max(240),
+  folder: z.string().min(1).max(240),
+  format: z.string().max(32).nullable().optional(),
+  bytes: z.number().int().nonnegative().nullable().optional(),
+  width: z.number().int().nonnegative().nullable().optional(),
+  height: z.number().int().nonnegative().nullable().optional(),
+  durationSec: z.number().nonnegative().nullable().optional(),
+  originalName: z.string().max(240).nullable().optional(),
+  label: z.string().max(160).nullable().optional(),
+  productId: z.string().cuid().optional(),
+});
+
+/** Save a Cloudinary asset that was uploaded directly from the browser. */
+ownerMediaRouter.post(
+  "/media/register",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const parsed = registerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: parsed.error.message });
+      return;
+    }
+
+    const data = parsed.data;
+    const tenantId = tid(req);
+
+    const asset = await prisma.mediaAsset.upsert({
+      where: {
+        tenantId_publicId: { tenantId, publicId: data.publicId },
+      },
+      create: {
+        tenantId,
+        kind: data.kind,
+        url: data.url,
+        publicId: data.publicId,
+        folder: data.folder,
+        format: data.format ?? null,
+        bytes: data.bytes ?? null,
+        width: data.width ?? null,
+        height: data.height ?? null,
+        durationSec: data.durationSec ?? null,
+        originalName: data.originalName ?? null,
+        label: data.label ?? null,
+      },
+      update: {
+        url: data.url,
+        format: data.format ?? null,
+        bytes: data.bytes ?? null,
+        width: data.width ?? null,
+        height: data.height ?? null,
+        durationSec: data.durationSec ?? null,
+        originalName: data.originalName ?? null,
+        label: data.label ?? null,
+      },
+    });
+
+    if (data.purpose === "logo" && data.kind === "IMAGE") {
+      await prisma.company.update({
+        where: { id: tenantId },
+        data: { logoUrl: data.url, logoPublicId: data.publicId },
+      });
+    } else if (data.purpose === "hero" && data.kind === "IMAGE") {
+      await prisma.company.update({
+        where: { id: tenantId },
+        data: { heroImageUrl: data.url, heroImagePublicId: data.publicId },
+      });
+    } else if (data.purpose === "hero" && data.kind === "VIDEO") {
+      await prisma.company.update({
+        where: { id: tenantId },
+        data: { heroVideoUrl: data.url, heroVideoPublicId: data.publicId },
+      });
+    }
+
+    if (data.productId && data.kind === "IMAGE") {
+      const product = await prisma.product.findFirst({
+        where: { id: data.productId, tenantId },
+      });
+      if (product) {
+        await prisma.product.update({
+          where: { id: product.id },
+          data: {
+            imageUrl: data.url,
+            imagePublicId: data.publicId,
+            updatedBy: req.auth!.id,
+          },
+        });
+      }
+    }
+
+    res.status(201).json({ ok: true, asset: serializeAsset(asset) });
+  },
+);
+
 ownerMediaRouter.post(
   "/media",
   requireOwnerOrManager,
   (req, res, next) => {
     upload.single("file")(req, res, (err) => {
       if (err) {
-        res.status(400).json({
+        const isTooLarge =
+          err instanceof Error &&
+          ("code" in err
+            ? (err as { code?: string }).code === "LIMIT_FILE_SIZE"
+            : /large|size/i.test(err.message));
+        res.status(isTooLarge ? 413 : 400).json({
           ok: false,
-          message: err instanceof Error ? err.message : "Upload failed",
+          message: isTooLarge
+            ? "File too large for the API proxy. Use a smaller image (under ~1MB) or retry — the app compresses photos automatically."
+            : err instanceof Error
+              ? err.message
+              : "Upload failed",
         });
         return;
       }

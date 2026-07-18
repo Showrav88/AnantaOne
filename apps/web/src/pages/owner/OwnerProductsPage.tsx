@@ -2,6 +2,7 @@ import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import { api, type Product } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
+import { uploadTenantMedia } from "../../lib/tenantUpload";
 
 type Props = { locale: LocaleCode };
 
@@ -26,7 +27,11 @@ export function OwnerProductsPage({ locale }: Props) {
     Array<{ code: string; nameEn: string; nameBn: string }>
   >([]);
   const [form, setForm] = useState(emptyForm);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [pending, startTransition] = useTransition();
 
   async function load() {
@@ -46,10 +51,42 @@ export function OwnerProductsPage({ locale }: Props) {
     });
   }, []);
 
+  useEffect(() => {
+    if (!imageFile) {
+      setImagePreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(imageFile);
+    setImagePreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [imageFile]);
+
+  function clearImage() {
+    setImageFile(null);
+    setImagePreview(null);
+  }
+
   async function onCreate(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setOkMsg(null);
+    setUploading(true);
     try {
+      let imageUrl: string | null = null;
+      let imagePublicId: string | null = null;
+
+      if (imageFile) {
+        const publicId = form.sku.trim().replace(/[^a-zA-Z0-9_-]/g, "_");
+        const { uploaded } = await uploadTenantMedia({
+          file: imageFile,
+          purpose: "products",
+          publicId,
+          label: form.name,
+        });
+        imageUrl = uploaded.url;
+        imagePublicId = uploaded.publicId;
+      }
+
       await api.owner.createProduct({
         name: form.name,
         nameBn: form.nameBn || null,
@@ -60,11 +97,17 @@ export function OwnerProductsPage({ locale }: Props) {
         stockQty: Number(form.stockQty),
         minStock: Number(form.minStock),
         description: form.description || null,
+        imageUrl,
+        imagePublicId,
       });
       setForm(emptyForm);
+      clearImage();
+      setOkMsg(t.owner.productCreated);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Create failed");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -78,14 +121,25 @@ export function OwnerProductsPage({ locale }: Props) {
     }
   }
 
-  async function onProductImage(id: string, file: File | null) {
+  async function onProductImage(id: string, file: File | null, sku: string) {
     if (!file) return;
     setError(null);
+    setOkMsg(null);
+    setUploading(true);
     try {
-      await api.owner.uploadProductImage(id, file);
+      const publicId = sku.replace(/[^a-zA-Z0-9_-]/g, "_");
+      await uploadTenantMedia({
+        file,
+        purpose: "products",
+        publicId,
+        productId: id,
+      });
+      setOkMsg(t.owner.mediaUploaded);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Image upload failed");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -98,6 +152,10 @@ export function OwnerProductsPage({ locale }: Props) {
           <p className="muted">{t.owner.productsHint}</p>
         </div>
       </header>
+
+      {okMsg ? <p className="ok">{okMsg}</p> : null}
+      {error ? <p className="error">{error}</p> : null}
+      {uploading ? <p className="muted">{t.owner.uploading}</p> : null}
 
       {canWrite ? (
         <form className="owner-form compact" onSubmit={onCreate}>
@@ -168,11 +226,51 @@ export function OwnerProductsPage({ locale }: Props) {
               onChange={(e) => setForm({ ...form, minStock: e.target.value })}
             />
           </label>
+          <label className="full">
+            {t.owner.fieldDescription}
+            <input
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+            />
+          </label>
+
+          <div className="full upload-field">
+            <span className="upload-field-title">
+              {t.owner.fieldProductImage}
+            </span>
+            <span className="muted tiny">{t.owner.productImageHint}</span>
+            {imagePreview ? (
+              <img className="product-create-preview" src={imagePreview} alt="" />
+            ) : null}
+            <input
+              type="file"
+              accept="image/*"
+              disabled={uploading}
+              onChange={(e) => {
+                setImageFile(e.target.files?.[0] ?? null);
+              }}
+            />
+            {imageFile ? (
+              <button
+                type="button"
+                className="btn ghost compact"
+                onClick={clearImage}
+              >
+                {t.common.cancel}
+              </button>
+            ) : null}
+          </div>
+
           <div className="form-actions">
-            <button className="btn primary" type="submit" disabled={pending}>
+            <button
+              className="btn primary"
+              type="submit"
+              disabled={pending || uploading}
+            >
               {t.owner.addProduct}
             </button>
-            {error ? <span className="error">{error}</span> : null}
           </div>
         </form>
       ) : (
@@ -210,10 +308,12 @@ export function OwnerProductsPage({ locale }: Props) {
                         <input
                           type="file"
                           accept="image/*"
+                          disabled={uploading}
                           onChange={(e) => {
                             void onProductImage(
                               p.id,
                               e.target.files?.[0] ?? null,
+                              p.sku,
                             );
                             e.target.value = "";
                           }}

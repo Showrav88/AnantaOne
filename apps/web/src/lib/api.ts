@@ -533,6 +533,12 @@ async function postForm<T>(path: string, form: FormData): Promise<T> {
     const body = (await res.json().catch(() => null)) as {
       message?: string;
     } | null;
+    if (res.status === 413) {
+      throw new Error(
+        body?.message ??
+          "File too large (HTTP 413). Use a smaller photo — the app will compress images automatically.",
+      );
+    }
     throw new Error(body?.message ?? `HTTP ${res.status}`);
   }
   return (await res.json()) as T;
@@ -655,6 +661,31 @@ export const api = {
         form,
       );
     },
+    signMedia: (body: {
+      purpose: "assets" | "logo" | "hero" | "products";
+      publicId?: string;
+    }) =>
+      getJson<{
+        ok: boolean;
+        sign: {
+          cloudName: string;
+          apiKey: string;
+          timestamp: number;
+          signature: string;
+          folder: string;
+          publicId?: string;
+        };
+      }>("/api/v1/owner/media/sign", 1, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }, true),
+    registerMedia: (body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; asset: MediaAsset }>(
+        "/api/v1/owner/media/register",
+        1,
+        { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
     deleteMedia: (id: string) =>
       getJson<{ ok: boolean }>(
         `/api/v1/owner/media/${encodeURIComponent(id)}`,

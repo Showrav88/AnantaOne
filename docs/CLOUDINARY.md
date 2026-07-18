@@ -46,8 +46,14 @@ Uploads only succeed after the **API** has `CLOUDINARY_URL` and is redeployed.
 1. Log in as **owner** (or manager) — employees are read-only
 2. Sidebar → **Public shop** (`/#/owner/site`) — file pickers at the top
 3. Or **Company** → logo file picker
-4. Or **Products** → Choose image on each row
+4. Or **Products** → choose image while creating a product, or on each row later
 5. Open **Open public shop** → `#/shop/{your-slug}`
+
+## Uploads & HTTP 413
+
+Images are **compressed in the browser** and uploaded **directly to Cloudinary**
+(signed by the API). That avoids Render “413 Payload Too Large” when the file
+never passes through the API body.
 
 ## Public URLs
 

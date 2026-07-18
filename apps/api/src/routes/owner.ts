@@ -222,6 +222,8 @@ ownerRouter.post("/products", requireOwnerOrManager, async (req, res) => {
         stockQty: parsed.data.stockQty,
         minStock: parsed.data.minStock,
         description: parsed.data.description ?? null,
+        imageUrl: parsed.data.imageUrl ?? null,
+        imagePublicId: parsed.data.imagePublicId ?? null,
         isActive: parsed.data.isActive ?? true,
         createdBy: req.auth!.id,
       },

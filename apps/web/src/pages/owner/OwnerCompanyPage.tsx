@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import { api, type CompanyDetails } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
+import { uploadTenantMedia } from "../../lib/tenantUpload";
 
 type Props = { locale: LocaleCode };
 
@@ -55,7 +56,7 @@ export function OwnerCompanyPage({ locale }: Props) {
     setUploading(true);
     setError(null);
     try {
-      await api.owner.uploadMedia(file, "logo");
+      await uploadTenantMedia({ file, purpose: "logo" });
       const res = await api.owner.company();
       setCompany(res.company);
       setSaved(true);

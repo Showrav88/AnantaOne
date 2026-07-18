@@ -7,6 +7,7 @@ import {
   type ShopBranding,
 } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
+import { uploadTenantMedia } from "../../lib/tenantUpload";
 
 type Props = { locale: LocaleCode };
 
@@ -104,7 +105,7 @@ export function OwnerSitePage({ locale }: Props) {
     setError(null);
     setOkMsg(null);
     try {
-      await api.owner.uploadMedia(file, purpose);
+      await uploadTenantMedia({ file, purpose });
       await load();
       setOkMsg(t.owner.mediaUploaded);
     } catch (err) {

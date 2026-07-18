@@ -25,6 +25,48 @@ export function tenantFolder(slug: string, sub?: string) {
   return sub ? `${base}/${sub}` : base;
 }
 
+export function cloudinaryPublicConfig() {
+  const cld = ensureCloudinary();
+  const cfg = cld.config();
+  if (!cfg.cloud_name || !cfg.api_key || !cfg.api_secret) {
+    throw new Error("Cloudinary config incomplete");
+  }
+  return {
+    cloudName: cfg.cloud_name,
+    apiKey: cfg.api_key,
+    apiSecret: cfg.api_secret,
+  };
+}
+
+/** Signed params so the browser can upload directly to Cloudinary (avoids Render 413). */
+export function signCloudinaryUpload(opts: {
+  folder: string;
+  publicId?: string;
+}) {
+  const { cloudName, apiKey, apiSecret } = cloudinaryPublicConfig();
+  const timestamp = Math.round(Date.now() / 1000);
+  const paramsToSign: Record<string, string | number> = {
+    timestamp,
+    folder: opts.folder,
+  };
+  if (opts.publicId) {
+    paramsToSign.public_id = opts.publicId;
+    paramsToSign.overwrite = "true";
+  }
+  const signature = ensureCloudinary().utils.api_sign_request(
+    paramsToSign,
+    apiSecret,
+  );
+  return {
+    cloudName,
+    apiKey,
+    timestamp,
+    signature,
+    folder: opts.folder,
+    publicId: opts.publicId,
+  };
+}
+
 export type UploadedMedia = {
   kind: "IMAGE" | "VIDEO";
   url: string;

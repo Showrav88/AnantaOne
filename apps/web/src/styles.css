@@ -2610,3 +2610,11 @@ input[type="color"] {
   gap: 0.5rem;
   align-items: center;
 }
+
+.product-create-preview {
+  width: min(100%, 12rem);
+  max-height: 10rem;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  background: var(--ok-bg);
+}
