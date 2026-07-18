@@ -1086,6 +1086,11 @@ html[data-theme="night"] .owner-nav a.active {
     padding: 0;
   }
 
+  /* Keep hamburger above drawer so open → X → close always works */
+  .owner-shell.nav-open .owner-topbar {
+    z-index: 60;
+  }
+
   .owner-nav {
     position: fixed;
     top: 0;
@@ -1098,12 +1103,17 @@ html[data-theme="night"] .owner-nav a.active {
     min-height: 100vh;
     max-height: 100vh;
     box-shadow: none;
-    padding-top: max(1.25rem, env(safe-area-inset-top));
+    /* Leave room for sticky topbar + hamburger */
+    padding-top: calc(3.4rem + env(safe-area-inset-top, 0px));
   }
 
   .owner-shell.nav-open .owner-nav {
     transform: translateX(0);
     box-shadow: 8px 0 28px rgba(0, 0, 0, 0.35);
+  }
+
+  .owner-shell.nav-open {
+    overflow: hidden;
   }
 
   .owner-brand {
