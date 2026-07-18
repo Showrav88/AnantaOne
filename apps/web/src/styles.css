@@ -257,6 +257,23 @@ button {
   border-color: rgba(243, 250, 246, 0.85);
 }
 
+/* Owner workspace: ghost buttons must follow theme ink (not white-on-white in light) */
+.owner-shell .btn.ghost,
+.owner-main .btn.ghost,
+.owner-page .btn.ghost {
+  color: var(--ink);
+  border-color: var(--line);
+  background: var(--panel-bg);
+}
+
+.owner-shell .btn.ghost:hover,
+.owner-main .btn.ghost:hover,
+.owner-page .btn.ghost:hover {
+  color: var(--tide, #0f6b4c);
+  border-color: var(--tide, #0f6b4c);
+  background: var(--ok-bg);
+}
+
 .btn.compact {
   padding: 0.45rem 0.8rem;
   font-size: 0.9rem;
@@ -848,6 +865,7 @@ html[data-theme="night"] .owner-nav a.active {
   min-width: 0;
   animation: rise 400ms ease-out both;
   overflow-x: clip;
+  color: var(--ink);
 }
 
 .owner-header {
@@ -857,6 +875,7 @@ html[data-theme="night"] .owner-nav a.active {
   align-items: flex-start;
   margin-bottom: 1.5rem;
   flex-wrap: wrap;
+  color: var(--ink);
 }
 
 .owner-header h1 {
@@ -864,6 +883,32 @@ html[data-theme="night"] .owner-nav a.active {
   font-family: var(--font-display);
   font-size: clamp(1.35rem, 4vw, 1.85rem);
   word-break: break-word;
+  color: var(--ink);
+}
+
+.owner-header .eyebrow,
+.owner-header .muted {
+  color: var(--muted);
+}
+
+.panel-card,
+.stat-grid article,
+.owner-panels > div {
+  color: var(--ink);
+}
+
+.panel-card h2,
+.owner-panels h2,
+.stat-grid strong {
+  color: var(--ink);
+}
+
+.stat-grid p {
+  color: var(--muted);
+}
+
+.stat-grid .stat-link {
+  color: inherit;
 }
 
 .responsive-panels {
