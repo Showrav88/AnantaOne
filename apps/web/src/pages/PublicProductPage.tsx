@@ -1,6 +1,13 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import { makeToast, ShopToast, type ShopToastMessage } from "../components/ShopToast";
 import { api, type PublicShop, type ShopProduct } from "../lib/api";
 import {
   cartCount,
@@ -27,6 +34,9 @@ export function PublicProductPage({ locale, onLocale }: Props) {
   const [qty, setQty] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState(0);
+  const [toast, setToast] = useState<ShopToastMessage | null>(null);
+
+  const clearToast = useCallback(() => setToast(null), []);
 
   useEffect(() => {
     void Promise.all([
@@ -54,8 +64,10 @@ export function PublicProductPage({ locale, onLocale }: Props) {
     } as CSSProperties;
   }, [shop]);
 
+  const available = (product?.stockQty ?? 0) >= 1;
+
   function addToCart() {
-    if (!product) return;
+    if (!product || !available) return;
     const next = upsertCartLine(
       loadCart(companySlug),
       {
@@ -72,6 +84,7 @@ export function PublicProductPage({ locale, onLocale }: Props) {
     );
     saveCart(companySlug, next);
     setCount(cartCount(next));
+    setToast(makeToast(t.shop.addedToCart, "ok"));
   }
 
   if (error) {
@@ -95,6 +108,8 @@ export function PublicProductPage({ locale, onLocale }: Props) {
 
   return (
     <div className="shop-page" style={theme}>
+      <ShopToast key={toast?.id ?? 0} toast={toast} onDone={clearToast} />
+
       <header className="shop-topbar">
         <Link className="shop-brand-lockup" to={`/shop/${companySlug}`}>
           {shop.logoUrl ? (
@@ -103,8 +118,8 @@ export function PublicProductPage({ locale, onLocale }: Props) {
           <span>{shop.name}</span>
         </Link>
         <div className="shop-topbar-actions">
-          <Link className="lang" to={`/shop/${companySlug}/checkout`}>
-            {t.shop.cart} ({count})
+          <Link className="lang shop-cart-pill" to={`/shop/${companySlug}/checkout`}>
+            {t.shop.cart} <span>{count}</span>
           </Link>
           <button type="button" className="lang" onClick={onLocale}>
             {t.common.language}
@@ -121,36 +136,80 @@ export function PublicProductPage({ locale, onLocale }: Props) {
           )}
         </div>
         <div className="shop-product-detail-body">
-          <p className="muted tiny">{product.category}</p>
+          <div className="shop-detail-meta">
+            <p className="muted tiny">{product.category}</p>
+            <span className={`shop-stock-chip ${available ? "ok" : "oos"}`}>
+              {available ? t.shop.available : t.shop.outOfStock}
+            </span>
+          </div>
           <h1>{title}</h1>
           <p className="muted">SKU {product.sku}</p>
-          <p className="shop-price">৳{product.priceBdt}</p>
-          {product.description ? <p>{product.description}</p> : null}
-          <label className="shop-qty">
-            {t.shop.qty}
-            <input
-              type="number"
-              min={1}
-              max={product.stockQty ?? 999}
-              value={qty}
-              onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
-            />
-          </label>
+          <p className="shop-price shop-price-lg">৳{product.priceBdt}</p>
+          {product.description ? (
+            <p className="shop-detail-desc">{product.description}</p>
+          ) : null}
+
+          {available ? (
+            <label className="shop-qty">
+              {t.shop.qty}
+              <div className="shop-qty-stepper">
+                <button
+                  type="button"
+                  aria-label={t.shop.decreaseQty}
+                  onClick={() => setQty((q) => Math.max(1, q - 1))}
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  min={1}
+                  max={product.stockQty ?? 999}
+                  value={qty}
+                  onChange={(e) =>
+                    setQty(Math.max(1, Number(e.target.value) || 1))
+                  }
+                />
+                <button
+                  type="button"
+                  aria-label={t.shop.increaseQty}
+                  onClick={() =>
+                    setQty((q) =>
+                      Math.min(product.stockQty ?? 999, q + 1),
+                    )
+                  }
+                >
+                  +
+                </button>
+              </div>
+            </label>
+          ) : null}
+
           <div className="shop-cta-row">
-            <button type="button" className="btn primary shop-cta" onClick={addToCart}>
-              {t.shop.addToCart}
-            </button>
             <button
               type="button"
-              className="btn ghost shop-cta"
-              onClick={() => {
-                addToCart();
-                void navigate(`/shop/${companySlug}/checkout`);
-              }}
+              className="btn primary shop-cta"
+              disabled={!available}
+              onClick={addToCart}
             >
-              {t.shop.buyNow}
+              {available ? t.shop.addToCart : t.shop.outOfStock}
             </button>
+            {available ? (
+              <button
+                type="button"
+                className="btn ghost shop-cta"
+                onClick={() => {
+                  addToCart();
+                  void navigate(`/shop/${companySlug}/checkout`);
+                }}
+              >
+                {t.shop.buyNow}
+              </button>
+            ) : null}
           </div>
+
+          <Link className="shop-back-link" to={`/shop/${companySlug}`}>
+            ← {t.shop.backToShop}
+          </Link>
         </div>
       </section>
     </div>

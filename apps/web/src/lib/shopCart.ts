@@ -61,3 +61,18 @@ export function upsertCartLine(
   }
   return next.filter((l) => l.qty > 0);
 }
+
+export function setCartLineQty(
+  lines: CartLine[],
+  productId: string,
+  qty: number,
+): CartLine[] {
+  if (qty <= 0) {
+    return lines.filter((l) => l.productId !== productId);
+  }
+  return lines.map((l) => (l.productId === productId ? { ...l, qty } : l));
+}
+
+export function removeCartLine(lines: CartLine[], productId: string): CartLine[] {
+  return lines.filter((l) => l.productId !== productId);
+}

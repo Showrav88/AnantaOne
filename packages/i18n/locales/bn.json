@@ -55,7 +55,18 @@
     "placeOrder": "অর্ডার দিন",
     "orderPlaced": "অর্ডার হয়েছে",
     "orderPlacedHint": "দোকান কনফার্ম করে ডেলিভারি করবে। চালান কোড রাখুন।",
-    "invoice": "চালান"
+    "invoice": "চালান",
+    "available": "উপলব্ধ",
+    "outOfStock": "স্টক নেই",
+    "addedToCart": "কার্টে যোগ হয়েছে",
+    "removedFromCart": "কার্ট থেকে সরানো হয়েছে",
+    "cartUpdated": "কার্ট আপডেট হয়েছে",
+    "remove": "সরান",
+    "viewDetails": "বিস্তারিত দেখুন",
+    "yourCart": "আপনার কার্ট",
+    "continueShopping": "কেনাকাটা চালিয়ে যান",
+    "decreaseQty": "পরিমাণ কমান",
+    "increaseQty": "পরিমাণ বাড়ান"
   },
   "home": {
     "ctaPrimary": "লাইভ ড্যাশবোর্ড খুলুন",
