@@ -1,7 +1,6 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
-import { QrScannerPanel } from "../../components/QrScannerPanel";
 import {
   api,
   type Product,
@@ -40,7 +39,6 @@ export function OwnerBatchesPage({ locale }: Props) {
   const [highlightBatchId, setHighlightBatchId] = useState<string | null>(
     searchParams.get("batchId"),
   );
-  const [scanning, setScanning] = useState(false);
   const [scanQuery, setScanQuery] = useState("");
 
   const [reverseBatch, setReverseBatch] = useState<ProductionBatch | null>(
@@ -82,7 +80,6 @@ export function OwnerBatchesPage({ locale }: Props) {
   async function applyScan(raw: string) {
     setError(null);
     setOkMsg(null);
-    setScanning(false);
     try {
       const res = await api.owner.lookupUnitScan(raw);
       if (!res.batch) {
@@ -218,56 +215,27 @@ export function OwnerBatchesPage({ locale }: Props) {
       {error ? <p className="error-banner no-print">{error}</p> : null}
       {okMsg ? <p className="ok-banner no-print">{okMsg}</p> : null}
 
-      <section className="panel-card scan-panel no-print">
-        <h2>{t.owner.scanBatchTitle}</h2>
-        <p className="muted tiny">{t.owner.scanBatchHint}</p>
-        <div className="owner-form compact">
-          <label className="full">
-            {t.owner.scanUnitLabel}
-            <input
-              value={scanQuery}
-              placeholder={t.owner.scanUnitPlaceholder}
-              onChange={(e) => setScanQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  if (scanQuery.trim()) void applyScan(scanQuery.trim());
-                }
-              }}
-            />
-          </label>
-          <div className="form-actions">
-            <button
-              type="button"
-              className="btn primary"
-              disabled={!scanQuery.trim()}
-              onClick={() => void applyScan(scanQuery.trim())}
-            >
-              {t.owner.scanUnitLookup}
-            </button>
-            <button
-              type="button"
-              className="btn ghost"
-              onClick={() => setScanning(true)}
-            >
-              {t.owner.scanUnitCamera}
-            </button>
-          </div>
-          <QrScannerPanel
-            readerId="batches-unit-qr-reader"
-            active={scanning}
-            onScan={(decoded) => void applyScan(decoded)}
-            onError={(message) => setError(message)}
-            stopLabel={t.common.cancel}
-            onStop={() => setScanning(false)}
+      <div className="owner-form compact scan-bar no-print">
+        <label className="full">
+          {t.owner.scanUnitLabel}
+          <input
+            value={scanQuery}
+            placeholder={t.owner.scanUnitPlaceholder}
+            autoComplete="off"
+            onChange={(e) => setScanQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                const q = scanQuery.trim();
+                if (q) void applyScan(q);
+              }
+            }}
           />
-        </div>
-      </section>
+        </label>
+      </div>
 
       {canWrite ? (
         <form className="owner-form compact no-print" onSubmit={onCreate}>
-          <h2 className="full">{t.owner.batchesGuideProduction}</h2>
-          <p className="muted tiny full">{t.owner.batchesGuideProductionHint}</p>
           <label>
             {t.owner.fieldProduct}
             <select
