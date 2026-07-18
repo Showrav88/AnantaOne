@@ -494,7 +494,7 @@
     "batchesListTitle": "Batch list",
     "batchesEmpty": "No batches yet.",
     "fieldBatchCode": "Batch code",
-    "batchCodeAuto": "Auto if blank",
+    "batchCodeAuto": "Auto short code if blank (B01, B02, …)",
     "batchStatus": "Status",
     "batchStatusActive": "In stock",
     "batchStatusPartSold": "Partly sold",

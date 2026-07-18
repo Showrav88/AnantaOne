@@ -494,7 +494,7 @@
     "batchesListTitle": "ব্যাচ তালিকা",
     "batchesEmpty": "এখনো কোনো ব্যাচ নেই।",
     "fieldBatchCode": "ব্যাচ কোড",
-    "batchCodeAuto": "খালি রাখলে স্বয়ংক্রিয়",
+    "batchCodeAuto": "খালি রাখলে সংক্ষিপ্ত কোড (B01, B02, …)",
     "batchStatus": "স্ট্যাটাস",
     "batchStatusActive": "স্টকে আছে",
     "batchStatusPartSold": "আংশিক বিক্রি",
