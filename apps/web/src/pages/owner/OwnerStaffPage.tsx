@@ -275,7 +275,28 @@ export function OwnerStaffPage({ locale }: Props) {
       {error ? <p className="error-banner">{error}</p> : null}
 
       {isOwner ? (
-        <form className="owner-form compact" onSubmit={(e) => void onSubmit(e)}>
+        <form
+          className="owner-form compact"
+          autoComplete="off"
+          onSubmit={(e) => void onSubmit(e)}
+        >
+          {/* Decoy fields: stop browsers from stuffing the owner login into staff create */}
+          <input
+            type="text"
+            name="prevent-autofill-user"
+            autoComplete="username"
+            tabIndex={-1}
+            aria-hidden="true"
+            className="autofill-trap"
+          />
+          <input
+            type="password"
+            name="prevent-autofill-pass"
+            autoComplete="current-password"
+            tabIndex={-1}
+            aria-hidden="true"
+            className="autofill-trap"
+          />
           <label className="full">
             {t.owner.fieldStaffPhoto}
             <span className="muted tiny">{t.owner.staffPhotoHint}</span>
@@ -314,6 +335,8 @@ export function OwnerStaffPage({ locale }: Props) {
             {t.owner.fieldStaffName}
             <input
               required
+              name="staffName"
+              autoComplete="off"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
@@ -322,7 +345,9 @@ export function OwnerStaffPage({ locale }: Props) {
             {t.auth.email}
             <input
               required
+              name="staffEmail"
               type="email"
+              autoComplete="off"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
@@ -330,7 +355,12 @@ export function OwnerStaffPage({ locale }: Props) {
           <label>
             {t.auth.phone}
             <input
+              name="staffPhone"
+              type="tel"
+              autoComplete="off"
+              inputMode="tel"
               value={form.phone}
+              placeholder={t.owner.phoneOptionalHint}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
             />
           </label>
@@ -338,10 +368,16 @@ export function OwnerStaffPage({ locale }: Props) {
             {editingId ? t.owner.fieldPasswordOptional : t.auth.password}
             <input
               required={!editingId}
+              name="staffPassword"
               type="password"
               minLength={8}
+              autoComplete="new-password"
+              data-lpignore="true"
+              data-1p-ignore="true"
               value={form.password}
-              placeholder={editingId ? t.owner.passwordKeepHint : undefined}
+              placeholder={
+                editingId ? t.owner.passwordKeepHint : t.owner.passwordNewHint
+              }
               onChange={(e) => setForm({ ...form, password: e.target.value })}
             />
           </label>
@@ -405,10 +441,14 @@ export function OwnerStaffPage({ locale }: Props) {
           <label>
             {t.owner.fieldSalary}
             <input
+              name="staffSalary"
               type="number"
               min={0}
               step="0.01"
+              inputMode="decimal"
+              autoComplete="off"
               value={form.salaryBdt}
+              placeholder={t.owner.numberOptionalHint}
               onChange={(e) => setForm({ ...form, salaryBdt: e.target.value })}
             />
           </label>

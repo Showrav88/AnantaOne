@@ -12,9 +12,9 @@ const emptyForm = {
   sku: "",
   category: "DRINKING",
   unitCode: "BOTTLE",
-  priceBdt: "0",
-  stockQty: "0",
-  minStock: "0",
+  priceBdt: "",
+  stockQty: "",
+  minStock: "",
   description: "",
 };
 
@@ -101,8 +101,9 @@ export function OwnerProductsPage({ locale }: Props) {
         category: form.category,
         unitCode: form.unitCode,
         priceBdt: Number(form.priceBdt),
-        stockQty: Number(form.stockQty),
-        minStock: Number(form.minStock),
+        // Empty optional numbers → 0 (product columns are NOT NULL with DB default 0)
+        stockQty: form.stockQty === "" ? 0 : Number(form.stockQty),
+        minStock: form.minStock === "" ? 0 : Number(form.minStock),
         description: form.description || null,
         imageUrl,
         imagePublicId,
@@ -232,7 +233,10 @@ export function OwnerProductsPage({ locale }: Props) {
               min="0"
               step="0.01"
               required
+              inputMode="decimal"
+              autoComplete="off"
               value={form.priceBdt}
+              placeholder={t.owner.numberRequiredHint}
               onChange={(e) => setForm({ ...form, priceBdt: e.target.value })}
             />
           </label>
@@ -242,7 +246,10 @@ export function OwnerProductsPage({ locale }: Props) {
               type="number"
               min="0"
               step="1"
+              inputMode="numeric"
+              autoComplete="off"
               value={form.stockQty}
+              placeholder={t.owner.numberZeroIfEmptyHint}
               onChange={(e) => setForm({ ...form, stockQty: e.target.value })}
             />
           </label>
@@ -252,7 +259,10 @@ export function OwnerProductsPage({ locale }: Props) {
               type="number"
               min="0"
               step="1"
+              inputMode="numeric"
+              autoComplete="off"
               value={form.minStock}
+              placeholder={t.owner.numberZeroIfEmptyHint}
               onChange={(e) => setForm({ ...form, minStock: e.target.value })}
             />
           </label>
