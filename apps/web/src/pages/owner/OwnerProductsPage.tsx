@@ -203,18 +203,20 @@ export function OwnerProductsPage({ locale }: Props) {
                       <span className="product-thumb placeholder" />
                     )}
                     {canWrite && p.isActive ? (
-                      <label className="btn ghost compact">
-                        {t.owner.uploadProductImage}
+                      <label className="upload-field compact">
+                        <span className="upload-field-title">
+                          {t.owner.chooseImageFile}
+                        </span>
                         <input
                           type="file"
                           accept="image/*"
-                          hidden
-                          onChange={(e) =>
+                          onChange={(e) => {
                             void onProductImage(
                               p.id,
                               e.target.files?.[0] ?? null,
-                            )
-                          }
+                            );
+                            e.target.value = "";
+                          }}
                         />
                       </label>
                     ) : null}

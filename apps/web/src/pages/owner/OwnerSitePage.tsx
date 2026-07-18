@@ -17,6 +17,31 @@ const FONTS = [
   { value: "libre-baskerville", label: "Libre Baskerville" },
 ] as const;
 
+const emptyBranding = (slug = "shop"): ShopBranding => ({
+  id: "",
+  name: "",
+  slug,
+  locale: "bn",
+  phone: null,
+  address: null,
+  tagline: null,
+  description: null,
+  logoUrl: null,
+  logoPublicId: null,
+  heroImageUrl: null,
+  heroImagePublicId: null,
+  heroVideoUrl: null,
+  heroVideoPublicId: null,
+  brandPrimary: "#0f6b4c",
+  brandAccent: "#f42a41",
+  brandBg: "#06281f",
+  brandFont: "source-sans",
+  siteHeadline: null,
+  siteSubhead: null,
+  cloudinaryReady: false,
+  publicShopPath: `/#/shop/${slug}`,
+});
+
 export function OwnerSitePage({ locale }: Props) {
   const t = getMessages(locale);
   const user = getStoredUser();
@@ -27,6 +52,7 @@ export function OwnerSitePage({ locale }: Props) {
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [uploading, setUploading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   async function load() {
     const [b, m] = await Promise.all([
@@ -39,15 +65,18 @@ export function OwnerSitePage({ locale }: Props) {
 
   useEffect(() => {
     startTransition(() => {
-      void load().catch((err) =>
-        setError(err instanceof Error ? err.message : "Failed"),
-      );
+      void load()
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : "Failed");
+          setBranding(emptyBranding("shop"));
+        })
+        .finally(() => setLoaded(true));
     });
   }, []);
 
   async function saveTheme(e: FormEvent) {
     e.preventDefault();
-    if (!branding || !canWrite) return;
+    if (!branding || !canWrite || !branding.id) return;
     setError(null);
     setOkMsg(null);
     try {
@@ -114,8 +143,8 @@ export function OwnerSitePage({ locale }: Props) {
     }
   }
 
-  if (!branding) {
-    return <p className="muted">{error ?? t.common.loading}</p>;
+  if (!loaded || !branding) {
+    return <p className="muted">{t.common.loading}</p>;
   }
 
   return (
@@ -126,101 +155,84 @@ export function OwnerSitePage({ locale }: Props) {
           <h1>{t.owner.siteTitle}</h1>
           <p className="muted">{t.owner.siteHint}</p>
         </div>
-        <div className="header-links">
-          <Link className="btn primary" to={`/shop/${branding.slug}`}>
-            {t.owner.openPublicShop}
-          </Link>
-        </div>
+        {branding.slug ? (
+          <div className="header-links">
+            <Link className="btn primary" to={`/shop/${branding.slug}`}>
+              {t.owner.openPublicShop}
+            </Link>
+          </div>
+        ) : null}
       </header>
 
       {!branding.cloudinaryReady ? (
-        <p className="error panel-card">
-          {t.owner.cloudinaryMissing}
-        </p>
+        <p className="error panel-card">{t.owner.cloudinaryMissing}</p>
       ) : null}
 
       {okMsg ? <p className="ok">{okMsg}</p> : null}
       {error ? <p className="error">{error}</p> : null}
+      {!canWrite ? <p className="muted">{t.owner.readOnlyHint}</p> : null}
 
-      <section className="panel-card">
-        <h2>{t.owner.siteTheme}</h2>
-        <form className="owner-form compact" onSubmit={saveTheme}>
-          <label>
-            {t.owner.fieldBrandPrimary}
-            <input
-              type="color"
-              value={branding.brandPrimary}
-              disabled={!canWrite}
-              onChange={(e) =>
-                setBranding({ ...branding, brandPrimary: e.target.value })
-              }
-            />
-          </label>
-          <label>
-            {t.owner.fieldBrandAccent}
-            <input
-              type="color"
-              value={branding.brandAccent}
-              disabled={!canWrite}
-              onChange={(e) =>
-                setBranding({ ...branding, brandAccent: e.target.value })
-              }
-            />
-          </label>
-          <label>
-            {t.owner.fieldBrandBg}
-            <input
-              type="color"
-              value={branding.brandBg}
-              disabled={!canWrite}
-              onChange={(e) =>
-                setBranding({ ...branding, brandBg: e.target.value })
-              }
-            />
-          </label>
-          <label>
-            {t.owner.fieldBrandFont}
-            <select
-              value={branding.brandFont}
-              disabled={!canWrite}
-              onChange={(e) =>
-                setBranding({ ...branding, brandFont: e.target.value })
-              }
-            >
-              {FONTS.map((f) => (
-                <option key={f.value} value={f.value}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="full">
-            {t.owner.fieldSiteHeadline}
-            <input
-              value={branding.siteHeadline ?? ""}
-              disabled={!canWrite}
-              onChange={(e) =>
-                setBranding({ ...branding, siteHeadline: e.target.value })
-              }
-            />
-          </label>
-          <label className="full">
-            {t.owner.fieldSiteSubhead}
-            <input
-              value={branding.siteSubhead ?? ""}
-              disabled={!canWrite}
-              onChange={(e) =>
-                setBranding({ ...branding, siteSubhead: e.target.value })
-              }
-            />
-          </label>
-          {canWrite ? (
-            <button className="cta" type="submit" disabled={pending}>
-              {t.common.save}
-            </button>
-          ) : null}
-        </form>
-      </section>
+      {canWrite ? (
+        <section className="panel-card upload-panel">
+          <h2>{t.owner.uploadSectionTitle}</h2>
+          <p className="muted tiny">{t.owner.uploadSectionHint}</p>
+          <div className="upload-fields">
+            <label className="upload-field">
+              <span className="upload-field-title">{t.owner.uploadLogo}</span>
+              <span className="muted tiny">{t.owner.uploadLogoHint}</span>
+              <input
+                type="file"
+                accept="image/*"
+                disabled={uploading}
+                onChange={(e) => {
+                  void onUpload(e.target.files?.[0] ?? null, "logo");
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <label className="upload-field">
+              <span className="upload-field-title">{t.owner.uploadHeroImage}</span>
+              <span className="muted tiny">{t.owner.uploadHeroHint}</span>
+              <input
+                type="file"
+                accept="image/*"
+                disabled={uploading}
+                onChange={(e) => {
+                  void onUpload(e.target.files?.[0] ?? null, "hero");
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <label className="upload-field">
+              <span className="upload-field-title">{t.owner.uploadHeroVideo}</span>
+              <span className="muted tiny">{t.owner.uploadVideoHint}</span>
+              <input
+                type="file"
+                accept="video/*"
+                disabled={uploading}
+                onChange={(e) => {
+                  void onUpload(e.target.files?.[0] ?? null, "hero");
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <label className="upload-field">
+              <span className="upload-field-title">{t.owner.uploadAsset}</span>
+              <span className="muted tiny">{t.owner.mediaLibraryHint}</span>
+              <input
+                type="file"
+                accept="image/*,video/*"
+                disabled={uploading}
+                onChange={(e) => {
+                  void onUpload(e.target.files?.[0] ?? null, "assets");
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+          {uploading ? <p className="muted">{t.owner.uploading}</p> : null}
+        </section>
+      ) : null}
 
       <section className="panel-card site-preview-strip">
         <h2>{t.owner.sitePreview}</h2>
@@ -237,58 +249,86 @@ export function OwnerSitePage({ locale }: Props) {
             <video src={branding.heroVideoUrl} muted controls playsInline />
           ) : null}
         </div>
-        {canWrite ? (
-          <div className="site-upload-row">
-            <label className="btn ghost compact">
-              {t.owner.uploadLogo}
-              <input
-                type="file"
-                accept="image/*"
-                hidden
-                disabled={uploading}
-                onChange={(e) =>
-                  void onUpload(e.target.files?.[0] ?? null, "logo")
-                }
-              />
-            </label>
-            <label className="btn ghost compact">
-              {t.owner.uploadHeroImage}
-              <input
-                type="file"
-                accept="image/*"
-                hidden
-                disabled={uploading}
-                onChange={(e) =>
-                  void onUpload(e.target.files?.[0] ?? null, "hero")
-                }
-              />
-            </label>
-            <label className="btn ghost compact">
-              {t.owner.uploadHeroVideo}
-              <input
-                type="file"
-                accept="video/*"
-                hidden
-                disabled={uploading}
-                onChange={(e) =>
-                  void onUpload(e.target.files?.[0] ?? null, "hero")
-                }
-              />
-            </label>
-            <label className="btn ghost compact">
-              {t.owner.uploadAsset}
-              <input
-                type="file"
-                accept="image/*,video/*"
-                hidden
-                disabled={uploading}
-                onChange={(e) =>
-                  void onUpload(e.target.files?.[0] ?? null, "assets")
-                }
-              />
-            </label>
-          </div>
-        ) : null}
+      </section>
+
+      <section className="panel-card">
+        <h2>{t.owner.siteTheme}</h2>
+        <form className="owner-form compact" onSubmit={saveTheme}>
+          <label>
+            {t.owner.fieldBrandPrimary}
+            <input
+              type="color"
+              value={branding.brandPrimary}
+              disabled={!canWrite || !branding.id}
+              onChange={(e) =>
+                setBranding({ ...branding, brandPrimary: e.target.value })
+              }
+            />
+          </label>
+          <label>
+            {t.owner.fieldBrandAccent}
+            <input
+              type="color"
+              value={branding.brandAccent}
+              disabled={!canWrite || !branding.id}
+              onChange={(e) =>
+                setBranding({ ...branding, brandAccent: e.target.value })
+              }
+            />
+          </label>
+          <label>
+            {t.owner.fieldBrandBg}
+            <input
+              type="color"
+              value={branding.brandBg}
+              disabled={!canWrite || !branding.id}
+              onChange={(e) =>
+                setBranding({ ...branding, brandBg: e.target.value })
+              }
+            />
+          </label>
+          <label>
+            {t.owner.fieldBrandFont}
+            <select
+              value={branding.brandFont}
+              disabled={!canWrite || !branding.id}
+              onChange={(e) =>
+                setBranding({ ...branding, brandFont: e.target.value })
+              }
+            >
+              {FONTS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="full">
+            {t.owner.fieldSiteHeadline}
+            <input
+              value={branding.siteHeadline ?? ""}
+              disabled={!canWrite || !branding.id}
+              onChange={(e) =>
+                setBranding({ ...branding, siteHeadline: e.target.value })
+              }
+            />
+          </label>
+          <label className="full">
+            {t.owner.fieldSiteSubhead}
+            <input
+              value={branding.siteSubhead ?? ""}
+              disabled={!canWrite || !branding.id}
+              onChange={(e) =>
+                setBranding({ ...branding, siteSubhead: e.target.value })
+              }
+            />
+          </label>
+          {canWrite && branding.id ? (
+            <button className="cta" type="submit" disabled={pending}>
+              {t.common.save}
+            </button>
+          ) : null}
+        </form>
       </section>
 
       <section className="panel-card">
@@ -303,7 +343,10 @@ export function OwnerSitePage({ locale }: Props) {
                 {asset.kind === "VIDEO" ? (
                   <video src={asset.url} muted controls playsInline />
                 ) : (
-                  <img src={asset.url} alt={asset.label ?? asset.originalName ?? ""} />
+                  <img
+                    src={asset.url}
+                    alt={asset.label ?? asset.originalName ?? ""}
+                  />
                 )}
                 <p className="muted tiny">
                   {asset.folder.replace(/^anantaone\//, "")}

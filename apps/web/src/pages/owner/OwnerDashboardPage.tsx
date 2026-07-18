@@ -41,10 +41,33 @@ export function OwnerDashboardPage({ locale }: Props) {
           <h1>{data.company.name}</h1>
           <p className="muted">{data.company.tagline ?? t.app.pulse}</p>
         </div>
-        <Link className="btn primary" to="/owner/wallet">
-          {t.owner.navWallet}
-        </Link>
+        <div className="header-links">
+          <Link className="btn primary" to="/owner/site">
+            {t.owner.navSite}
+          </Link>
+          <Link className="btn ghost" to="/owner/wallet">
+            {t.owner.navWallet}
+          </Link>
+        </div>
       </header>
+
+      <section className="panel-card upload-panel">
+        <h2>{t.owner.siteTitle}</h2>
+        <p className="muted">{t.owner.siteHint}</p>
+        <div className="site-upload-row">
+          <Link className="btn primary" to="/owner/site">
+            {t.owner.uploadSectionTitle}
+          </Link>
+          <Link className="btn ghost" to="/owner/products">
+            {t.owner.uploadProductImage}
+          </Link>
+          {data.company.slug ? (
+            <Link className="btn ghost" to={`/shop/${data.company.slug}`}>
+              {t.owner.openPublicShop}
+            </Link>
+          ) : null}
+        </div>
+      </section>
 
       <section className="stat-grid">
         <article>

@@ -36,13 +36,18 @@ In `apps/api/.env` (or repo root `.env` loaded by the API):
 CLOUDINARY_URL=cloudinary://<api_key>:<api_secret>@dtd4hpmjb
 ```
 
+## Redeploy both services from `cloud-dev`
+
+Uploads only appear after the **Static Site** is rebuilt from `cloud-dev`.  
+Uploads only succeed after the **API** has `CLOUDINARY_URL` and is redeployed.
+
 ## Owner usage
 
-1. Log in as owner → **Public shop**
-2. Upload logo / hero image or video / library assets
-3. Set primary, accent, background colors and font
-4. Open **Open public shop** → `#/shop/{your-slug}`
-5. On **Products**, upload an image per SKU (saved under `…/products`)
+1. Log in as **owner** (or manager) — employees are read-only
+2. Sidebar → **Public shop** (`/#/owner/site`) — file pickers at the top
+3. Or **Company** → logo file picker
+4. Or **Products** → Choose image on each row
+5. Open **Open public shop** → `#/shop/{your-slug}`
 
 ## Public URLs
 

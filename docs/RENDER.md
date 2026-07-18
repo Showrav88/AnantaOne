@@ -38,7 +38,7 @@ Dashboard → open service named like **anantaone-api** (type **Web Service**, n
 
 | Setting | Value |
 |---|---|
-| **Branch** | `Cloudenv-setup-neon-d75c` |
+| **Branch** | `cloud-dev` |
 | **Root Directory** | *(leave blank)* |
 | **Build Command** | `npm install && npm run render:api:build` |
 | **Start Command** | `npm run render:api:start` |
@@ -93,7 +93,7 @@ https://anantaoneapi.onrender.com/health/db
 
 | Setting | Value |
 |---|---|
-| **Branch** | `Cloudenv-setup-neon-d75c` |
+| **Branch** | `cloud-dev` |
 | **Root Directory** | *(blank)* |
 | **Build Command** | `npm install && npm run build -w @anantaone/web` |
 | **Publish Directory** | `apps/web/dist` |
@@ -103,7 +103,7 @@ https://anantaoneapi.onrender.com/health/db
 | `NODE_VERSION` | `26` |
 | `VITE_API_URL` | `https://anantaoneapi.onrender.com` |
 
-After API `/health` works, refresh the static site (rebuild only if you change `VITE_API_URL`).
+After API `/health` works, **redeploy the Static Site from `cloud-dev`** (Clear build cache) so new UI like uploads appear.
 
 ### Owner dashboard URL (Static Site)
 
@@ -111,7 +111,9 @@ Use hash routes (works without Render rewrite):
 
 ```text
 https://anantaone.onrender.com/#/owner
+https://anantaone.onrender.com/#/owner/site
 https://anantaone.onrender.com/#/owner/products
+https://anantaone.onrender.com/#/shop/ananta-water
 ```
 
 Optional clean URLs (`/owner` without `#`): Static Site → **Redirects/Rewrites**:
