@@ -245,11 +245,14 @@ function purposeSubfolder(purpose: string) {
   if (purpose === "logo") return "logo";
   if (purpose === "hero") return "hero";
   if (purpose === "products") return "products";
+  if (purpose === "staff") return "staff";
   return "assets";
 }
 
 const signSchema = z.object({
-  purpose: z.enum(["assets", "logo", "hero", "products"]).default("assets"),
+  purpose: z
+    .enum(["assets", "logo", "hero", "products", "staff"])
+    .default("assets"),
   publicId: z.string().max(120).optional(),
 });
 
@@ -331,7 +334,9 @@ ownerMediaRouter.post("/media/sign", requireOwnerOrManager, async (req, res) => 
 });
 
 const registerSchema = z.object({
-  purpose: z.enum(["assets", "logo", "hero", "products"]).default("assets"),
+  purpose: z
+    .enum(["assets", "logo", "hero", "products", "staff"])
+    .default("assets"),
   kind: z.enum(["IMAGE", "VIDEO"]),
   url: z.string().url(),
   publicId: z.string().min(1).max(240),
@@ -344,6 +349,7 @@ const registerSchema = z.object({
   originalName: z.string().max(240).nullable().optional(),
   label: z.string().max(160).nullable().optional(),
   productId: z.string().cuid().optional(),
+  staffId: z.string().cuid().optional(),
 });
 
 /** Save a Cloudinary asset that was uploaded directly from the browser. */
@@ -423,6 +429,26 @@ ownerMediaRouter.post(
       }
     }
 
+    if (data.staffId && data.kind === "IMAGE") {
+      const staff = await prisma.user.findFirst({
+        where: {
+          id: data.staffId,
+          tenantId,
+          role: { code: { in: ["MANAGER", "EMPLOYEE"] } },
+        },
+      });
+      if (staff) {
+        await prisma.user.update({
+          where: { id: staff.id },
+          data: {
+            imageUrl: data.url,
+            imagePublicId: data.publicId,
+            updatedBy: req.auth!.id,
+          },
+        });
+      }
+    }
+
     res.status(201).json({ ok: true, asset: serializeAsset(asset) });
   },
 );
@@ -480,7 +506,9 @@ ownerMediaRouter.post(
           ? "hero"
           : purpose === "products"
             ? "products"
-            : "assets";
+            : purpose === "staff"
+              ? "staff"
+              : "assets";
 
     const resourceType = file.mimetype.startsWith("video/")
       ? "video"

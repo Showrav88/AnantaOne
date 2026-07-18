@@ -307,6 +307,8 @@ model User {
   designation  String?
   joiningDate  DateTime?
   salaryBdt    Decimal?  @db.Decimal(12, 2)
+  imageUrl      String?
+  imagePublicId String?
   isActive     Boolean   @default(true)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

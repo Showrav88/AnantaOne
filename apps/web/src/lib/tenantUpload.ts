@@ -4,7 +4,7 @@ import {
   uploadToCloudinaryDirect,
 } from "./imageUpload";
 
-type Purpose = "assets" | "logo" | "hero" | "products";
+type Purpose = "assets" | "logo" | "hero" | "products" | "staff";
 
 /**
  * Compress (images) + upload directly to Cloudinary + register on API.
@@ -16,6 +16,7 @@ export async function uploadTenantMedia(opts: {
   publicId?: string;
   label?: string;
   productId?: string;
+  staffId?: string;
 }) {
   const isVideo = opts.file.type.startsWith("video/");
   const prepared = isVideo
@@ -47,6 +48,7 @@ export async function uploadTenantMedia(opts: {
     originalName: opts.file.name,
     label: opts.label ?? null,
     productId: opts.productId,
+    staffId: opts.staffId,
   });
 
   return { asset, uploaded };

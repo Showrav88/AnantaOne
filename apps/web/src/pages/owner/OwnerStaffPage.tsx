@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import { api, type BranchRow, type StaffMember } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
+import { uploadTenantMedia } from "../../lib/tenantUpload";
 
 type Props = { locale: LocaleCode };
 
@@ -19,6 +20,11 @@ const emptyForm = {
   salaryBdt: "",
 };
 
+function joiningDateInput(value: string | null | undefined) {
+  if (!value) return "";
+  return value.slice(0, 10);
+}
+
 export function OwnerStaffPage({ locale }: Props) {
   const t = getMessages(locale);
   const user = getStoredUser();
@@ -28,7 +34,14 @@ export function OwnerStaffPage({ locale }: Props) {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [branches, setBranches] = useState<BranchRow[]>([]);
   const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
+  const [clearExistingImage, setClearExistingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [pending, startTransition] = useTransition();
 
   async function load() {
@@ -49,26 +62,144 @@ export function OwnerStaffPage({ locale }: Props) {
     });
   }, [canView]);
 
-  async function onCreate(e: FormEvent) {
-    e.preventDefault();
+  function clearImagePicker() {
+    setImageFile(null);
+    setImagePreview(null);
+  }
+
+  function resetForm() {
+    setEditingId(null);
+    setForm(emptyForm);
+    clearImagePicker();
+    setExistingImageUrl(null);
+    setClearExistingImage(false);
+  }
+
+  function startEdit(member: StaffMember) {
+    if (member.role.code === "OWNER") return;
+    setEditingId(member.id);
+    setForm({
+      name: member.name,
+      email: member.email,
+      phone: member.phone ?? "",
+      password: "",
+      roleCode:
+        member.role.code === "MANAGER" ? "MANAGER" : "EMPLOYEE",
+      branchId: member.branchId ?? "",
+      employeeCode: member.employeeCode ?? "",
+      designation: member.designation ?? "",
+      joiningDate: joiningDateInput(member.joiningDate),
+      salaryBdt: member.salaryBdt != null ? String(member.salaryBdt) : "",
+    });
+    clearImagePicker();
+    setExistingImageUrl(member.imageUrl);
+    setClearExistingImage(false);
     setError(null);
+    setOkMsg(null);
+  }
+
+  function onPickImage(file: File | null) {
+    clearImagePicker();
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setClearExistingImage(false);
+  }
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!isOwner) return;
+    setError(null);
+    setOkMsg(null);
+    setUploading(true);
     try {
-      await api.owner.createStaff({
-        name: form.name,
-        email: form.email,
-        phone: form.phone || null,
-        password: form.password,
-        roleCode: form.roleCode,
-        branchId: form.branchId || null,
-        employeeCode: form.employeeCode || null,
-        designation: form.designation || null,
-        joiningDate: form.joiningDate || null,
-        salaryBdt: form.salaryBdt === "" ? null : Number(form.salaryBdt),
-      });
-      setForm(emptyForm);
+      let imageUrl: string | null | undefined;
+      let imagePublicId: string | null | undefined;
+
+      if (imageFile) {
+        const publicIdBase = (form.employeeCode || form.email || form.name)
+          .trim()
+          .replace(/[^a-zA-Z0-9_-]/g, "_")
+          .slice(0, 40);
+        const { uploaded } = await uploadTenantMedia({
+          file: imageFile,
+          purpose: "staff",
+          publicId: publicIdBase || undefined,
+          label: form.name,
+          staffId: editingId ?? undefined,
+        });
+        imageUrl = uploaded.url;
+        imagePublicId = uploaded.publicId;
+      }
+
+      if (editingId) {
+        const body: Record<string, unknown> = {
+          name: form.name.trim(),
+          email: form.email.trim(),
+          phone: form.phone.trim() || null,
+          roleCode: form.roleCode,
+          branchId: form.branchId || null,
+          employeeCode: form.employeeCode.trim() || null,
+          designation: form.designation.trim() || null,
+          joiningDate: form.joiningDate || null,
+          salaryBdt: form.salaryBdt === "" ? null : Number(form.salaryBdt),
+        };
+        if (form.password.trim()) {
+          body.password = form.password;
+        }
+        if (imageUrl) {
+          body.imageUrl = imageUrl;
+          body.imagePublicId = imagePublicId;
+        } else if (clearExistingImage) {
+          body.clearImage = true;
+        }
+        await api.owner.updateStaff(editingId, body);
+        setOkMsg(t.owner.staffUpdated);
+      } else {
+        await api.owner.createStaff({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          phone: form.phone.trim() || null,
+          password: form.password,
+          roleCode: form.roleCode,
+          branchId: form.branchId || null,
+          employeeCode: form.employeeCode.trim() || null,
+          designation: form.designation.trim() || null,
+          joiningDate: form.joiningDate || null,
+          salaryBdt: form.salaryBdt === "" ? null : Number(form.salaryBdt),
+          imageUrl: imageUrl ?? null,
+          imagePublicId: imagePublicId ?? null,
+        });
+        setOkMsg(t.owner.staffCreated);
+      }
+      resetForm();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Create failed");
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function onStaffImage(id: string, file: File | null, label: string) {
+    if (!file || !isOwner) return;
+    setError(null);
+    setOkMsg(null);
+    setUploading(true);
+    try {
+      await uploadTenantMedia({
+        file,
+        purpose: "staff",
+        publicId: id.slice(0, 24),
+        label,
+        staffId: id,
+      });
+      setOkMsg(t.owner.mediaUploaded);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Image upload failed");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -88,11 +219,16 @@ export function OwnerStaffPage({ locale }: Props) {
     setError(null);
     try {
       await api.owner.deactivateStaff(id);
+      if (editingId === id) resetForm();
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
     }
   }
+
+  const previewUrl =
+    imagePreview ??
+    (!clearExistingImage ? existingImageUrl : null);
 
   if (!canView) {
     return (
@@ -117,10 +253,45 @@ export function OwnerStaffPage({ locale }: Props) {
         </div>
       </header>
 
+      {okMsg ? <p className="ok">{okMsg}</p> : null}
       {error ? <p className="error-banner">{error}</p> : null}
 
       {isOwner ? (
-        <form className="owner-form compact" onSubmit={onCreate}>
+        <form className="owner-form compact" onSubmit={(e) => void onSubmit(e)}>
+          <label className="full">
+            {t.owner.fieldStaffPhoto}
+            <span className="muted tiny">{t.owner.staffPhotoHint}</span>
+            <div className="staff-photo-field">
+              {previewUrl ? (
+                <img className="staff-thumb lg" src={previewUrl} alt="" />
+              ) : (
+                <span className="staff-thumb lg placeholder" />
+              )}
+              <div className="staff-photo-actions">
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={uploading}
+                  onChange={(e) => {
+                    onPickImage(e.target.files?.[0] ?? null);
+                    e.target.value = "";
+                  }}
+                />
+                {previewUrl ? (
+                  <button
+                    type="button"
+                    className="btn ghost compact"
+                    onClick={() => {
+                      clearImagePicker();
+                      if (existingImageUrl) setClearExistingImage(true);
+                    }}
+                  >
+                    {t.owner.clearStaffPhoto}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </label>
           <label>
             {t.owner.fieldStaffName}
             <input
@@ -146,12 +317,13 @@ export function OwnerStaffPage({ locale }: Props) {
             />
           </label>
           <label>
-            {t.auth.password}
+            {editingId ? t.owner.fieldPasswordOptional : t.auth.password}
             <input
-              required
+              required={!editingId}
               type="password"
               minLength={8}
               value={form.password}
+              placeholder={editingId ? t.owner.passwordKeepHint : undefined}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
             />
           </label>
@@ -222,9 +394,16 @@ export function OwnerStaffPage({ locale }: Props) {
               onChange={(e) => setForm({ ...form, salaryBdt: e.target.value })}
             />
           </label>
-          <button type="submit" className="cta" disabled={pending}>
-            {t.owner.addStaff}
-          </button>
+          <div className="form-actions full">
+            <button type="submit" className="cta" disabled={pending || uploading}>
+              {editingId ? t.common.save : t.owner.addStaff}
+            </button>
+            {editingId ? (
+              <button type="button" className="btn ghost" onClick={resetForm}>
+                {t.common.cancel}
+              </button>
+            ) : null}
+          </div>
         </form>
       ) : (
         <p className="muted">{t.owner.staffOwnerOnly}</p>
@@ -247,11 +426,43 @@ export function OwnerStaffPage({ locale }: Props) {
             {staff.map((s) => (
               <tr key={s.id}>
                 <td data-label={t.owner.fieldStaffName}>
-                  <strong>{s.name}</strong>
-                  <div className="muted tiny">{s.email}</div>
-                  {s.designation ? (
-                    <div className="muted tiny">{s.designation}</div>
-                  ) : null}
+                  <div className="staff-name-cell">
+                    {s.imageUrl ? (
+                      <img className="staff-thumb" src={s.imageUrl} alt="" />
+                    ) : (
+                      <span className="staff-thumb placeholder" aria-hidden />
+                    )}
+                    <div className="staff-name-meta">
+                      <strong>{s.name}</strong>
+                      <div className="muted tiny">{s.email}</div>
+                      {s.phone ? (
+                        <div className="muted tiny">{s.phone}</div>
+                      ) : null}
+                      {s.designation ? (
+                        <div className="muted tiny">{s.designation}</div>
+                      ) : null}
+                      {isOwner && s.role.code !== "OWNER" && s.isActive ? (
+                        <label className="upload-field compact">
+                          <span className="muted tiny">
+                            {t.owner.changeStaffPhoto}
+                          </span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            disabled={uploading}
+                            onChange={(e) => {
+                              void onStaffImage(
+                                s.id,
+                                e.target.files?.[0] ?? null,
+                                s.name,
+                              );
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                      ) : null}
+                    </div>
+                  </div>
                 </td>
                 <td data-label={t.owner.fieldRole}>{s.role.code}</td>
                 <td data-label={t.owner.fieldBranch}>
@@ -288,6 +499,13 @@ export function OwnerStaffPage({ locale }: Props) {
                 </td>
                 {isOwner && s.role.code !== "OWNER" && s.isActive ? (
                   <td className="cell-actions" data-label="">
+                    <button
+                      type="button"
+                      className="linkish"
+                      onClick={() => startEdit(s)}
+                    >
+                      {t.common.edit}
+                    </button>
                     <button
                       type="button"
                       className="linkish"

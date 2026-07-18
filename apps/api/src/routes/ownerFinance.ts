@@ -32,6 +32,8 @@ function serializeStaff(user: {
   designation: string | null;
   joiningDate: Date | null;
   salaryBdt: { toString(): string } | number | string | null;
+  imageUrl?: string | null;
+  imagePublicId?: string | null;
   isActive: boolean;
   createdAt: Date;
   branchId?: string | null;
@@ -47,6 +49,8 @@ function serializeStaff(user: {
     designation: user.designation,
     joiningDate: user.joiningDate,
     salaryBdt: user.salaryBdt == null ? null : Number(user.salaryBdt),
+    imageUrl: user.imageUrl ?? null,
+    imagePublicId: user.imagePublicId ?? null,
     isActive: user.isActive,
     createdAt: user.createdAt,
     branchId: user.branchId ?? null,
@@ -97,6 +101,8 @@ const staffCreateSchema = z.object({
   designation: z.string().max(120).nullable().optional(),
   joiningDate: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).nullable().optional(),
   salaryBdt: z.coerce.number().nonnegative().nullable().optional(),
+  imageUrl: z.string().url().nullable().optional(),
+  imagePublicId: z.string().max(240).nullable().optional(),
 });
 
 ownerFinanceRouter.post("/staff", requireOwnerOnly, async (req, res) => {
@@ -163,6 +169,8 @@ ownerFinanceRouter.post("/staff", requireOwnerOnly, async (req, res) => {
         designation: data.designation ?? null,
         joiningDate,
         salaryBdt: data.salaryBdt ?? null,
+        imageUrl: data.imageUrl ?? null,
+        imagePublicId: data.imagePublicId ?? null,
         createdBy: req.auth!.id,
       },
       include: { role: true, branch: { select: { id: true, name: true } } },
@@ -189,6 +197,7 @@ ownerFinanceRouter.post("/staff", requireOwnerOnly, async (req, res) => {
 
 const staffUpdateSchema = z.object({
   name: z.string().min(2).max(120).optional(),
+  email: z.string().email().optional(),
   phone: z.string().max(32).nullable().optional(),
   roleCode: z.enum(["MANAGER", "EMPLOYEE"]).optional(),
   branchId: z.string().cuid().nullable().optional(),
@@ -201,6 +210,9 @@ const staffUpdateSchema = z.object({
     .nullable()
     .optional(),
   salaryBdt: z.coerce.number().nonnegative().nullable().optional(),
+  imageUrl: z.string().url().nullable().optional(),
+  imagePublicId: z.string().max(240).nullable().optional(),
+  clearImage: z.boolean().optional(),
   isActive: z.boolean().optional(),
   password: z.string().min(8).max(100).optional(),
 });
@@ -224,6 +236,18 @@ ownerFinanceRouter.patch("/staff/:id", requireOwnerOnly, async (req, res) => {
   if (existing.role.code === "OWNER") {
     res.status(400).json({ ok: false, message: "Cannot edit owner via staff API" });
     return;
+  }
+
+  let email: string | undefined;
+  if (parsed.data.email) {
+    email = parsed.data.email.toLowerCase().trim();
+    if (email !== existing.email) {
+      const taken = await prisma.user.findUnique({ where: { email } });
+      if (taken) {
+        res.status(409).json({ ok: false, message: "Email already registered" });
+        return;
+      }
+    }
   }
 
   let roleId: string | undefined;
@@ -271,16 +295,22 @@ ownerFinanceRouter.patch("/staff/:id", requireOwnerOnly, async (req, res) => {
     password: _p,
     joiningDate: _j,
     branchId: _b,
+    email: _e,
+    clearImage,
     ...rest
   } = parsed.data;
   const user = await prisma.user.update({
     where: { id: existing.id },
     data: {
       ...rest,
+      ...(email ? { email } : {}),
       ...(roleId ? { roleId } : {}),
       ...(branchId !== undefined ? { branchId } : {}),
       ...(joiningDate !== undefined ? { joiningDate } : {}),
       ...(passwordHash ? { passwordHash } : {}),
+      ...(clearImage
+        ? { imageUrl: null, imagePublicId: null }
+        : {}),
       updatedBy: req.auth!.id,
     },
     include: { role: true, branch: { select: { id: true, name: true } } },
