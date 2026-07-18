@@ -55,7 +55,18 @@
     "placeOrder": "Place order",
     "orderPlaced": "Order placed",
     "orderPlacedHint": "The shop will confirm and deliver. Keep your invoice code.",
-    "invoice": "Invoice"
+    "invoice": "Invoice",
+    "available": "Available",
+    "outOfStock": "Out of stock",
+    "addedToCart": "Added to cart",
+    "removedFromCart": "Removed from cart",
+    "cartUpdated": "Cart updated",
+    "remove": "Remove",
+    "viewDetails": "View details",
+    "yourCart": "Your cart",
+    "continueShopping": "Continue shopping",
+    "decreaseQty": "Decrease quantity",
+    "increaseQty": "Increase quantity"
   },
   "home": {
     "ctaPrimary": "Open live dashboard",

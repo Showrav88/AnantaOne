@@ -1,6 +1,14 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { Link, useParams } from "react-router-dom";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+} from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import { makeToast, ShopToast, type ShopToastMessage } from "../components/ShopToast";
 import { api, type PublicShop } from "../lib/api";
 import {
   cartCount,
@@ -21,12 +29,20 @@ const FONT_STACK: Record<string, string> = {
   "libre-baskerville": '"Libre Baskerville", Georgia, serif',
 };
 
+function inStock(qty: number | undefined) {
+  return (qty ?? 0) >= 1;
+}
+
 export function PublicShopPage({ locale, onLocale }: Props) {
   const { companySlug = "" } = useParams();
+  const navigate = useNavigate();
   const t = getMessages(locale);
   const [shop, setShop] = useState<PublicShop | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState(0);
+  const [toast, setToast] = useState<ShopToastMessage | null>(null);
+
+  const clearToast = useCallback(() => setToast(null), []);
 
   useEffect(() => {
     if (!companySlug) return;
@@ -52,7 +68,17 @@ export function PublicShopPage({ locale, onLocale }: Props) {
     } as CSSProperties;
   }, [shop]);
 
-  function add(p: PublicShop["products"][number]) {
+  function scrollCatalog() {
+    document.getElementById("catalog")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+
+  function add(e: MouseEvent, p: PublicShop["products"][number]) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!inStock(p.stockQty)) return;
     const next = upsertCartLine(loadCart(companySlug), {
       productId: p.id,
       name: p.name,
@@ -65,13 +91,16 @@ export function PublicShopPage({ locale, onLocale }: Props) {
     });
     saveCart(companySlug, next);
     setCount(cartCount(next));
+    setToast(makeToast(t.shop.addedToCart, "ok"));
   }
 
   if (error) {
     return (
       <div className="shop-page shop-error">
         <p>{error}</p>
-        <Link to="/login">{t.auth.loginCta}</Link>
+        <button type="button" className="btn ghost" onClick={() => window.location.reload()}>
+          {t.common.retry}
+        </button>
       </div>
     );
   }
@@ -86,6 +115,8 @@ export function PublicShopPage({ locale, onLocale }: Props) {
 
   return (
     <div className="shop-page" style={theme}>
+      <ShopToast key={toast?.id ?? 0} toast={toast} onDone={clearToast} />
+
       <header className="shop-topbar">
         <div className="shop-brand-lockup">
           {shop.logoUrl ? (
@@ -94,18 +125,15 @@ export function PublicShopPage({ locale, onLocale }: Props) {
           <span>{shop.name}</span>
         </div>
         <div className="shop-topbar-actions">
-          <a className="lang" href="#catalog">
+          <button type="button" className="lang" onClick={scrollCatalog}>
             {t.shop.catalog}
-          </a>
-          <Link className="lang" to={`/shop/${companySlug}/checkout`}>
-            {t.shop.cart} ({count})
+          </button>
+          <Link className="lang shop-cart-pill" to={`/shop/${companySlug}/checkout`}>
+            {t.shop.cart} <span>{count}</span>
           </Link>
           <button type="button" className="lang" onClick={onLocale}>
             {t.common.language}
           </button>
-          <Link className="lang" to="/login">
-            {t.auth.loginCta}
-          </Link>
         </div>
       </header>
 
@@ -136,9 +164,13 @@ export function PublicShopPage({ locale, onLocale }: Props) {
             <p className="shop-lede">{shop.siteSubhead}</p>
           ) : null}
           <div className="shop-cta-row">
-            <a className="btn primary shop-cta" href="#catalog">
+            <button
+              type="button"
+              className="btn primary shop-cta"
+              onClick={scrollCatalog}
+            >
               {t.shop.viewProducts}
-            </a>
+            </button>
             <Link
               className="btn ghost shop-cta"
               to={`/shop/${companySlug}/checkout`}
@@ -158,44 +190,64 @@ export function PublicShopPage({ locale, onLocale }: Props) {
           <p className="muted">{t.shop.catalogEmpty}</p>
         ) : (
           <ul className="shop-product-grid">
-            {shop.products.map((p) => (
-              <li key={p.id}>
-                <Link
-                  to={`/shop/${companySlug}/product/${p.id}`}
-                  className="shop-product-media"
-                >
-                  {p.imageUrl ? (
-                    <img src={p.imageUrl} alt={p.name} />
-                  ) : (
-                    <div
-                      className="shop-product-placeholder"
-                      aria-hidden="true"
-                    />
-                  )}
-                </Link>
-                <div className="shop-product-body">
-                  <Link to={`/shop/${companySlug}/product/${p.id}`}>
-                    <h3>
-                      {locale === "bn" && p.nameBn ? p.nameBn : p.name}
-                    </h3>
-                  </Link>
-                  <p className="muted tiny">
-                    {p.sku} · {p.category}
-                  </p>
-                  {p.description ? (
-                    <p className="shop-product-desc">{p.description}</p>
-                  ) : null}
-                  <p className="shop-price">৳{p.priceBdt}</p>
-                  <button
-                    type="button"
-                    className="btn ghost compact"
-                    onClick={() => add(p)}
+            {shop.products.map((p) => {
+              const available = inStock(p.stockQty);
+              const title =
+                locale === "bn" && p.nameBn ? p.nameBn : p.name;
+              const detailPath = `/shop/${companySlug}/product/${p.id}`;
+              return (
+                <li key={p.id}>
+                  <article
+                    className={`shop-product-card ${available ? "" : "is-oos"}`}
+                    role="link"
+                    tabIndex={0}
+                    onClick={() => void navigate(detailPath)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        void navigate(detailPath);
+                      }
+                    }}
                   >
-                    {t.shop.addToCart}
-                  </button>
-                </div>
-              </li>
-            ))}
+                    <div className="shop-product-media">
+                      {p.imageUrl ? (
+                        <img src={p.imageUrl} alt={title} />
+                      ) : (
+                        <div
+                          className="shop-product-placeholder"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span
+                        className={`shop-stock-chip ${available ? "ok" : "oos"}`}
+                      >
+                        {available ? t.shop.available : t.shop.outOfStock}
+                      </span>
+                    </div>
+                    <div className="shop-product-body">
+                      <h3>{title}</h3>
+                      <p className="muted tiny">
+                        {p.sku} · {p.category}
+                      </p>
+                      {p.description ? (
+                        <p className="shop-product-desc">{p.description}</p>
+                      ) : null}
+                      <div className="shop-product-foot">
+                        <p className="shop-price">৳{p.priceBdt}</p>
+                        <button
+                          type="button"
+                          className="btn primary compact"
+                          disabled={!available}
+                          onClick={(e) => add(e, p)}
+                        >
+                          {available ? t.shop.addToCart : t.shop.outOfStock}
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
