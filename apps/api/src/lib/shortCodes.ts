@@ -25,36 +25,43 @@ export function toBase36(n: number, width: number): string {
   return s;
 }
 
-export function normalizeSkuPart(sku: string, max = 4): string {
+/** Keep full auto SKU (e.g. MW001 = 5 chars). */
+export function normalizeSkuPart(sku: string, max = 5): string {
   return sku.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, max);
 }
 
+/**
+ * Two-letter prefix from product type words:
+ * Distilled Water → DW, Mineral Water → MW, Battery Water → BW
+ * (Category code DRINKING = Mineral Water in the UI.)
+ */
 export function categorySkuPrefix(category: string): string {
   switch (category.toUpperCase()) {
     case "DRINKING":
-      return "D";
+    case "MINERAL":
+      return "MW";
     case "DISTILLED":
-      return "T";
+      return "DW";
     case "BATTERY":
-      return "B";
+      return "BW";
     default:
-      return "X";
+      return "XX";
   }
 }
 
 /**
  * Compact unit QR code: {SKU}{base36 serial width 6}
- * Example: D001000001 → product D001, unit #1
+ * Example: MW001000001 → product MW001, unit #1
  * Max serial with width 6: ~2.17B (≥ 1 billion).
  */
 export function makeShortSerialCode(sku: string, serialNo: number): string {
-  const s = normalizeSkuPart(sku, 4);
+  const s = normalizeSkuPart(sku, 5);
   return `${s}${toBase36(serialNo, UNIT_SERIAL_WIDTH)}`;
 }
 
-/** Short batch code: {SKU}B{base36 seq} e.g. D001B01 */
+/** Short batch code: {SKU}B{base36 seq} e.g. MW001B01 */
 export function makeShortBatchCode(sku: string, batchSeq: number): string {
-  const s = normalizeSkuPart(sku, 4);
+  const s = normalizeSkuPart(sku, 5);
   return `${s}B${toBase36(batchSeq, BATCH_SEQ_WIDTH)}`;
 }
 

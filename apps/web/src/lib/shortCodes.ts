@@ -15,12 +15,12 @@ export function toBase36(n: number, width: number): string {
   return s;
 }
 
-export function normalizeSkuPart(sku: string, max = 4): string {
+export function normalizeSkuPart(sku: string, max = 5): string {
   return sku.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, max);
 }
 
-/** Compact unit code used on tags / QR: {SKU}{base36×6} */
+/** Compact unit code used on tags / QR: {SKU}{base36×6} e.g. MW001000001 */
 export function makeShortSerialCode(sku: string, serialNo: number): string {
-  const s = normalizeSkuPart(sku, 4);
+  const s = normalizeSkuPart(sku, 5);
   return `${s}${toBase36(serialNo, UNIT_SERIAL_WIDTH)}`;
 }

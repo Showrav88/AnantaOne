@@ -8,7 +8,7 @@ import {
   requireOwnerOrManager,
 } from "../middleware/companyAccess.js";
 import { branchFilter, resolveBranchScope } from "../lib/branchScope.js";
-import { buildAutoSku } from "../lib/shortCodes.js";
+import { buildAutoSku, categorySkuPrefix } from "../lib/shortCodes.js";
 
 export const ownerRouter = Router();
 
@@ -356,7 +356,10 @@ const productCreateSchema = z.object({
 });
 
 async function nextAutoSku(tenantId: string, category: string) {
-  const count = await prisma.product.count({ where: { tenantId } });
+  const prefix = categorySkuPrefix(category);
+  const count = await prisma.product.count({
+    where: { tenantId, sku: { startsWith: prefix } },
+  });
   let seq = count + 1;
   for (let i = 0; i < 5000; i += 1) {
     const sku = buildAutoSku(category, seq);
