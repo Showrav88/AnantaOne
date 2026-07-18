@@ -373,39 +373,50 @@ export function OwnerBatchesPage({ locale }: Props) {
                       {serialRangeLabel(b)}
                     </td>
                     {canWrite ? (
-                      <td className="cell-actions" data-label="">
+                      <td className="cell-actions" data-label={t.owner.batchActions}>
                         {editId === b.id ? (
-                          <button
-                            type="button"
-                            className="linkish"
-                            onClick={() => void saveEdit(b.id)}
-                          >
-                            {t.owner.saved}
-                          </button>
+                          <div className="batch-actions">
+                            <button
+                              type="button"
+                              className="btn primary compact"
+                              onClick={() => void saveEdit(b.id)}
+                            >
+                              {t.owner.saved}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn ghost compact"
+                              onClick={() => setEditId(null)}
+                            >
+                              {t.common.cancel}
+                            </button>
+                          </div>
                         ) : (
-                          <>
-                            {!softDeleted ? (
-                              <button
-                                type="button"
-                                className="linkish"
-                                onClick={() => startEdit(b)}
-                              >
-                                {t.owner.editBatchDates}
-                              </button>
-                            ) : null}
-                            {b.serialStart != null ? (
-                              <button
-                                type="button"
-                                className="linkish"
-                                onClick={() => void openUnitTags(b)}
-                              >
-                                {t.owner.viewUnitTags}
-                              </button>
-                            ) : null}
+                          <div className="batch-actions">
+                            <div className="batch-actions-safe">
+                              {!softDeleted ? (
+                                <button
+                                  type="button"
+                                  className="btn ghost compact"
+                                  onClick={() => startEdit(b)}
+                                >
+                                  {t.owner.editBatchDates}
+                                </button>
+                              ) : null}
+                              {b.serialStart != null ? (
+                                <button
+                                  type="button"
+                                  className="btn ghost compact"
+                                  onClick={() => void openUnitTags(b)}
+                                >
+                                  {t.owner.viewUnitTags}
+                                </button>
+                              ) : null}
+                            </div>
                             {canSoftDelete ? (
                               <button
                                 type="button"
-                                className="linkish dangerish"
+                                className="btn ghost compact dark batch-soft-delete"
                                 onClick={() => {
                                   setReverseBatch(b);
                                   setReverseReason("");
@@ -414,11 +425,11 @@ export function OwnerBatchesPage({ locale }: Props) {
                                 {t.owner.reverseBatch}
                               </button>
                             ) : !softDeleted ? (
-                              <div className="muted tiny">
+                              <p className="muted tiny batch-soft-delete-hint">
                                 {t.owner.batchSoftDeleteBlocked}
-                              </div>
+                              </p>
                             ) : null}
-                          </>
+                          </div>
                         )}
                       </td>
                     ) : null}
