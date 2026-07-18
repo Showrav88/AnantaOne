@@ -418,12 +418,12 @@ export function OwnerProductsPage({ locale }: Props) {
           <label>
             {t.owner.fieldSku}
             <input
+              className="sku-field"
               value={editingId ? form.sku : form.sku || autoSkuPreview}
               readOnly={!editingId}
               onChange={(e) =>
                 setForm({ ...form, sku: e.target.value.toUpperCase() })
               }
-              placeholder={autoSkuPreview || "MW001"}
             />
           </label>
           <label>
@@ -575,10 +575,8 @@ export function OwnerProductsPage({ locale }: Props) {
               inputMode="numeric"
               autoComplete="off"
               value={form.minStock}
-              placeholder={t.owner.numberZeroIfEmptyHint}
               onChange={(e) => setForm({ ...form, minStock: e.target.value })}
             />
-            <span className="muted tiny">{t.owner.minStockHint}</span>
           </label>
           <label className="full">
             {t.owner.fieldDescription}
