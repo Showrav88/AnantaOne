@@ -16,6 +16,7 @@ import {
   type ProductUnitTag,
   type TagTemplate,
 } from "../../lib/api";
+import { makeShortSerialCode } from "../../lib/shortCodes";
 import { getStoredUser } from "../../lib/session";
 
 type Props = { locale: LocaleCode };
@@ -248,10 +249,9 @@ export function OwnerTagsPage({ locale }: Props) {
       selectedProduct.nameBn ||
       selectedProduct.name;
     const sampleSerial = Number(serialFrom) || selectedBatch?.serialStart || 1;
-    const unitSerialCode =
-      selectedBatch && selectedProduct
-        ? `${selectedProduct.sku}-${selectedBatch.batchCode}-${String(sampleSerial).padStart(5, "0")}`
-        : null;
+    const unitSerialCode = selectedProduct
+      ? makeShortSerialCode(selectedProduct.sku, sampleSerial)
+      : null;
     const qrValue =
       tpl.showQr && company?.slug && selectedBatch
         ? printMode === "units" && unitSerialCode

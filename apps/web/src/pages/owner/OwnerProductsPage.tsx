@@ -46,12 +46,25 @@ export function OwnerProductsPage({ locale }: Props) {
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [autoSkuPreview, setAutoSkuPreview] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const isCustom = form.presetId === "custom";
+
+  async function refreshAutoSku(category = form.category) {
+    try {
+      const res = await api.owner.nextProductSku(category);
+      setAutoSkuPreview(res.sku);
+      if (!editingId) {
+        setForm((f) => ({ ...f, sku: res.sku }));
+      }
+    } catch {
+      /* preview optional */
+    }
+  }
 
   async function load() {
     const [prod, unitRes] = await Promise.all([
@@ -64,11 +77,18 @@ export function OwnerProductsPage({ locale }: Props) {
 
   useEffect(() => {
     startTransition(() => {
-      void load().catch((err) =>
-        setError(err instanceof Error ? err.message : "Failed"),
-      );
+      void load()
+        .then(() => refreshAutoSku())
+        .catch((err) =>
+          setError(err instanceof Error ? err.message : "Failed"),
+        );
     });
   }, []);
+
+  useEffect(() => {
+    if (editingId) return;
+    void refreshAutoSku(form.category);
+  }, [form.category, editingId]);
 
   useEffect(() => {
     if (!imageFile) {
@@ -91,6 +111,7 @@ export function OwnerProductsPage({ locale }: Props) {
     setShowAddUnit(false);
     setNewUnit({ code: "", nameEn: "", nameBn: "" });
     clearImage();
+    void refreshAutoSku(emptyForm.category);
   }
 
   function applyPreset(presetId: string) {
@@ -105,12 +126,13 @@ export function OwnerProductsPage({ locale }: Props) {
       presetId,
       name: preset.name,
       nameBn: preset.nameBn,
-      sku: preset.sku,
+      sku: "",
       category: preset.category,
       size: String(preset.size),
       unitCode: preset.unitCode,
     }));
     setShowAddUnit(false);
+    void refreshAutoSku(preset.category);
   }
 
   function startEdit(p: Product) {
@@ -178,7 +200,6 @@ export function OwnerProductsPage({ locale }: Props) {
       const body: Record<string, unknown> = {
         name: form.name,
         nameBn: form.nameBn || null,
-        sku: form.sku,
         category: form.category,
         size: form.size === "" ? null : Number(form.size),
         unitCode: form.unitCode,
@@ -187,6 +208,13 @@ export function OwnerProductsPage({ locale }: Props) {
         minStock: form.minStock === "" ? 0 : Number(form.minStock),
         description: form.description || null,
       };
+      // Create: leave SKU blank → server assigns short ordered code (D001…).
+      // Edit: keep existing SKU unless user typed a new one.
+      if (editingId) {
+        body.sku = form.sku;
+      } else if (form.sku.trim().length >= 2) {
+        body.sku = form.sku.trim().toUpperCase();
+      }
       if (imageUrl !== undefined) {
         body.imageUrl = imageUrl;
         body.imagePublicId = imagePublicId;
@@ -304,13 +332,18 @@ export function OwnerProductsPage({ locale }: Props) {
             />
           </label>
           <label>
-            SKU
+            {t.owner.fieldSku}
             <input
-              required
-              value={form.sku}
-              disabled={!isCustom && !editingId}
-              onChange={(e) => setForm({ ...form, sku: e.target.value })}
+              value={editingId ? form.sku : form.sku || autoSkuPreview}
+              readOnly={!editingId}
+              onChange={(e) =>
+                setForm({ ...form, sku: e.target.value.toUpperCase() })
+              }
+              placeholder={autoSkuPreview || "D001"}
             />
+            <span className="muted tiny">
+              {editingId ? t.owner.skuShortExplain : t.owner.skuAutoHint}
+            </span>
           </label>
           <label>
             {t.owner.fieldCategory}

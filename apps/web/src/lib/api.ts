@@ -942,6 +942,13 @@ export const api = {
         { method: "POST", body: JSON.stringify(body) },
         true,
       ),
+    nextProductSku: (category?: string) =>
+      getJson<{ ok: boolean; sku: string }>(
+        `/api/v1/owner/products/next-sku${category ? `?category=${encodeURIComponent(category)}` : ""}`,
+        1,
+        undefined,
+        true,
+      ),
     updateProduct: (id: string, body: Record<string, unknown>) =>
       getJson<{ ok: boolean; product: Product }>(
         `/api/v1/owner/products/${id}`,
