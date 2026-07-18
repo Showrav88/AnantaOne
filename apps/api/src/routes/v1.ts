@@ -133,6 +133,10 @@ v1Router.get("/shop/:companySlug", async (req, res) => {
       where: { slug: companySlug },
       include: {
         branches: { orderBy: { createdAt: "asc" }, take: 5 },
+        division: true,
+        district: true,
+        upazila: true,
+        deliverySettings: true,
       },
     });
     if (!company || !company.isActive) {
@@ -164,6 +168,8 @@ v1Router.get("/shop/:companySlug", async (req, res) => {
       }),
     ]);
 
+    const settings = company.deliverySettings;
+
     res.json({
       ok: true,
       shop: {
@@ -172,6 +178,35 @@ v1Router.get("/shop/:companySlug", async (req, res) => {
         locale: company.locale,
         phone: company.phone,
         address: company.address,
+        divisionId: company.divisionId,
+        districtId: company.districtId,
+        upazilaId: company.upazilaId,
+        division: company.division
+          ? {
+              id: company.division.id,
+              name: company.division.name,
+              nameBn: company.division.nameBn,
+            }
+          : null,
+        district: company.district
+          ? {
+              id: company.district.id,
+              name: company.district.name,
+              nameBn: company.district.nameBn,
+            }
+          : null,
+        upazila: company.upazila
+          ? {
+              id: company.upazila.id,
+              name: company.upazila.name,
+              nameBn: company.upazila.nameBn,
+            }
+          : null,
+        deliveryCharges: {
+          outsideAreaBdt: Number(settings?.outsideAreaChargeBdt ?? 80),
+          sameDistrictBdt: Number(settings?.sameDistrictChargeBdt ?? 120),
+          otherDistrictBdt: Number(settings?.otherDistrictChargeBdt ?? 250),
+        },
         tagline: company.tagline,
         description: company.description,
         logoUrl: company.logoUrl,
@@ -193,6 +228,8 @@ v1Router.get("/shop/:companySlug", async (req, res) => {
           id: w.id,
           name: w.name,
           nameBn: w.nameBn,
+          districtId: w.districtId,
+          upazilaId: w.upazilaId,
           freeDelivery: w.freeDelivery,
           baseChargeBdt: Number(w.baseChargeBdt),
         })),
@@ -259,7 +296,9 @@ v1Router.get("/shop/:companySlug/products/:productId", async (req, res) => {
 });
 
 const quoteSchema = z.object({
-  wardId: z.string().cuid(),
+  districtId: z.string().cuid().nullable().optional(),
+  upazilaId: z.string().cuid().nullable().optional(),
+  wardId: z.string().cuid().nullable().optional(),
   branchId: z.string().cuid().nullable().optional(),
   couponCode: z.string().max(40).nullable().optional(),
   lines: z
@@ -307,6 +346,8 @@ v1Router.post("/shop/:companySlug/quote", async (req, res) => {
     const quote = await quoteOrderTotals(company.id, {
       lines,
       wardId: parsed.data.wardId,
+      districtId: parsed.data.districtId,
+      upazilaId: parsed.data.upazilaId,
       branchId: parsed.data.branchId,
       couponCode: parsed.data.couponCode,
     });
@@ -323,7 +364,10 @@ const checkoutSchema = quoteSchema.extend({
   phone: z.string().min(6).max(32),
   address: z.string().min(4).max(240),
   note: z.string().max(500).nullable().optional(),
-});
+}).refine(
+  (v) => Boolean(v.wardId || v.districtId),
+  { message: "Select district (and ward if available)" },
+);
 
 v1Router.post("/shop/:companySlug/checkout", async (req, res) => {
   try {
@@ -346,6 +390,8 @@ v1Router.post("/shop/:companySlug/checkout", async (req, res) => {
       clientName: parsed.data.clientName,
       phone: parsed.data.phone,
       address: parsed.data.address,
+      districtId: parsed.data.districtId,
+      upazilaId: parsed.data.upazilaId,
       wardId: parsed.data.wardId,
       couponCode: parsed.data.couponCode,
       note: parsed.data.note,

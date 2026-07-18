@@ -38,6 +38,59 @@ model UnitLookup {
   materialPurchases  MaterialPurchase[]
 }
 
+/// Bangladesh division (বিভাগ) — shared reference data.
+model BdDivision {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  nameBn    String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  districts BdDistrict[]
+  companies Company[]
+}
+
+/// Bangladesh district / zila (জেলা).
+model BdDistrict {
+  id         String   @id @default(cuid())
+  divisionId String
+  code       String   @unique
+  name       String
+  nameBn     String?
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  division  BdDivision  @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  upazilas  BdUpazila[]
+  companies Company[]
+  wards     DeliveryWard[]
+  orders    SalesOrder[]
+
+  @@index([divisionId])
+}
+
+/// Bangladesh upazila (উপজেলা).
+model BdUpazila {
+  id         String   @id @default(cuid())
+  districtId String
+  code       String   @unique
+  name       String
+  nameBn     String?
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  district  BdDistrict    @relation(fields: [districtId], references: [id], onDelete: Cascade)
+  companies Company[]
+  wards     DeliveryWard[]
+  orders    SalesOrder[]
+
+  @@index([districtId])
+}
+
 model Company {
   id          String   @id @default(cuid())
   name        String
@@ -45,6 +98,10 @@ model Company {
   locale      String   @default("bn")
   phone       String?
   address     String?
+  /// Structured BD location for delivery area setup.
+  divisionId  String?
+  districtId  String?
+  upazilaId   String?
   tagline     String?
   description String?
   /// Public shop branding (Cloudinary URLs + theme).
@@ -80,7 +137,15 @@ model Company {
   mediaAssets        MediaAsset[]
   deliveryWards      DeliveryWard[]
   deliveryRates      DeliveryCategoryRate[]
+  deliverySettings   DeliverySettings?
   coupons            Coupon[]
+  division           BdDivision? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+  district           BdDistrict? @relation(fields: [districtId], references: [id], onDelete: SetNull)
+  upazila            BdUpazila?  @relation(fields: [upazilaId], references: [id], onDelete: SetNull)
+
+  @@index([divisionId])
+  @@index([districtId])
+  @@index([upazilaId])
 }
 
 /// Tenant media library — images/videos in Cloudinary folder anantaone/{slug}/...
@@ -124,12 +189,34 @@ model Branch {
   @@index([tenantId])
 }
 
-/// Union / ward area for delivery pricing (e.g. Lakshmipur Ward 1–15).
+/// Tenant delivery pricing settings (outside area / zila charges).
+model DeliverySettings {
+  id                     String   @id @default(cuid())
+  tenantId               String   @unique
+  /// Same upazila but not in a listed free/local ward (fallback).
+  outsideAreaChargeBdt   Decimal  @default(80) @db.Decimal(12, 2)
+  /// Same district (zila), different upazila.
+  sameDistrictChargeBdt  Decimal  @default(120) @db.Decimal(12, 2)
+  /// Other district (zila) delivery charge.
+  otherDistrictChargeBdt Decimal  @default(250) @db.Decimal(12, 2)
+  /// Default ward count when auto-seeding company upazila.
+  defaultWardCount       Int      @default(15)
+  /// How many nearest wards are free by default when seeding.
+  freeWardCount          Int      @default(5)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  company Company @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+/// Ward / local area for delivery pricing under a company upazila.
 model DeliveryWard {
   id              String   @id @default(cuid())
   tenantId        String
   /// Null = company-wide; set for per-branch free-delivery zones.
   branchId        String?
+  districtId      String?
+  upazilaId       String?
   name            String
   nameBn          String?
   sortOrder       Int      @default(0)
@@ -141,14 +228,19 @@ model DeliveryWard {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  company Company  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  branch  Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  buyers  Buyer[]
-  orders  SalesOrder[]
+  company  Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch   Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  district BdDistrict? @relation(fields: [districtId], references: [id], onDelete: SetNull)
+  upazila  BdUpazila?  @relation(fields: [upazilaId], references: [id], onDelete: SetNull)
+  buyers   Buyer[]
+  orders   SalesOrder[]
 
   @@index([tenantId])
   @@index([tenantId, branchId])
+  @@index([tenantId, upazilaId])
   @@index([branchId])
+  @@index([districtId])
+  @@index([upazilaId])
 }
 
 /// Per-category delivery rate (e.g. drinking water charged by qty/weight).
@@ -360,6 +452,8 @@ model SalesOrder {
   shopName       String?
   phone          String?
   address        String?
+  districtId     String?
+  upazilaId      String?
   wardId         String?
   couponId       String?
   couponCode     String?
@@ -381,10 +475,12 @@ model SalesOrder {
   createdBy      String?
   updatedBy      String?
 
-  company Company           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  branch  Branch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  buyer   Buyer?            @relation(fields: [buyerId], references: [id], onDelete: SetNull)
-  ward    DeliveryWard?     @relation(fields: [wardId], references: [id], onDelete: SetNull)
+  company  Company           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch   Branch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  buyer    Buyer?            @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  district BdDistrict?       @relation(fields: [districtId], references: [id], onDelete: SetNull)
+  upazila  BdUpazila?        @relation(fields: [upazilaId], references: [id], onDelete: SetNull)
+  ward     DeliveryWard?     @relation(fields: [wardId], references: [id], onDelete: SetNull)
   coupon  Coupon?           @relation(fields: [couponId], references: [id], onDelete: SetNull)
   source  OrderSourceLookup @relation(fields: [sourceId], references: [id])
   status  OrderStatusLookup @relation(fields: [statusId], references: [id])
@@ -398,6 +494,8 @@ model SalesOrder {
   @@index([invoiceCode])
   @@index([wardId])
   @@index([branchId])
+  @@index([districtId])
+  @@index([upazilaId])
 }
 
 model OrderLine {

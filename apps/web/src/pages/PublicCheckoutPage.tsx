@@ -12,6 +12,7 @@ import { makeToast, ShopToast, type ShopToastMessage } from "../components/ShopT
 import {
   api,
   type DeliveryQuote,
+  type GeoPlace,
   type PublicShop,
 } from "../lib/api";
 import {
@@ -44,11 +45,15 @@ export function PublicCheckoutPage({ locale, onLocale }: Props) {
   );
   const [pending, setPending] = useState(false);
   const [toast, setToast] = useState<ShopToastMessage | null>(null);
+  const [districts, setDistricts] = useState<GeoPlace[]>([]);
+  const [upazilas, setUpazilas] = useState<GeoPlace[]>([]);
   const [form, setForm] = useState({
     shopName: "",
     clientName: "",
     phone: "",
     address: "",
+    districtId: "",
+    upazilaId: "",
     wardId: "",
     couponCode: "",
     note: "",
@@ -57,31 +62,43 @@ export function PublicCheckoutPage({ locale, onLocale }: Props) {
   const clearToast = useCallback(() => setToast(null), []);
 
   useEffect(() => {
-    void api
-      .publicShop(companySlug)
-      .then((res) => {
+    void Promise.all([api.publicShop(companySlug), api.geo.districts()])
+      .then(([res, dist]) => {
         setShop(res.shop);
+        setDistricts(dist.districts);
         const cart = loadCart(companySlug);
         setLines(cart);
-        if (res.shop.wards[0] && !form.wardId) {
-          setForm((f) => ({ ...f, wardId: res.shop.wards[0]!.id }));
+        const homeDistrict = res.shop.districtId ?? "";
+        const homeUpazila = res.shop.upazilaId ?? "";
+        const homeWards = res.shop.wards.filter(
+          (w) => !homeUpazila || w.upazilaId === homeUpazila,
+        );
+        setForm((f) => ({
+          ...f,
+          districtId: homeDistrict || f.districtId,
+          upazilaId: homeUpazila || f.upazilaId,
+          wardId: homeWards[0]?.id ?? f.wardId,
+        }));
+        if (homeDistrict) {
+          void api.geo.upazilas(homeDistrict).then((u) => setUpazilas(u.upazilas));
         }
       })
       .catch((err) =>
         setError(err instanceof Error ? err.message : "Shop not found"),
       );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companySlug]);
 
   useEffect(() => {
-    if (!form.wardId || lines.length === 0) {
+    if ((!form.wardId && !form.districtId) || lines.length === 0) {
       setQuote(null);
       return;
     }
     const handle = window.setTimeout(() => {
       void api
         .shopQuote(companySlug, {
-          wardId: form.wardId,
+          districtId: form.districtId || null,
+          upazilaId: form.upazilaId || null,
+          wardId: form.wardId || null,
           couponCode: form.couponCode || null,
           lines: lines.map((l) => ({ productId: l.productId, qty: l.qty })),
         })
@@ -95,7 +112,50 @@ export function PublicCheckoutPage({ locale, onLocale }: Props) {
         });
     }, 280);
     return () => window.clearTimeout(handle);
-  }, [companySlug, form.wardId, form.couponCode, lines]);
+  }, [
+    companySlug,
+    form.districtId,
+    form.upazilaId,
+    form.wardId,
+    form.couponCode,
+    lines,
+  ]);
+
+  const wardsForUpazila = useMemo(() => {
+    if (!shop) return [];
+    if (!form.upazilaId) return shop.wards;
+    return shop.wards.filter(
+      (w) => !w.upazilaId || w.upazilaId === form.upazilaId,
+    );
+  }, [shop, form.upazilaId]);
+
+  async function onDistrictChange(districtId: string) {
+    setForm((f) => ({
+      ...f,
+      districtId,
+      upazilaId: "",
+      wardId: "",
+    }));
+    setUpazilas([]);
+    if (!districtId) return;
+    const u = await api.geo.upazilas(districtId);
+    setUpazilas(u.upazilas);
+  }
+
+  function onUpazilaChange(upazilaId: string) {
+    const matching = (shop?.wards ?? []).filter(
+      (w) => !w.upazilaId || w.upazilaId === upazilaId,
+    );
+    setForm((f) => ({
+      ...f,
+      upazilaId,
+      wardId: matching[0]?.id ?? "",
+    }));
+  }
+
+  function placeLabel(p: { name: string; nameBn: string | null }) {
+    return locale === "bn" && p.nameBn ? p.nameBn : p.name;
+  }
 
   const theme = useMemo(() => {
     if (!shop) return undefined;
@@ -137,7 +197,9 @@ export function PublicCheckoutPage({ locale, onLocale }: Props) {
         clientName: form.clientName,
         phone: form.phone,
         address: form.address,
-        wardId: form.wardId,
+        districtId: form.districtId || null,
+        upazilaId: form.upazilaId || null,
+        wardId: form.wardId || null,
         couponCode: form.couponCode || null,
         note: form.note || null,
         lines: lines.map((l) => ({ productId: l.productId, qty: l.qty })),
@@ -331,16 +393,49 @@ export function PublicCheckoutPage({ locale, onLocale }: Props) {
                 />
               </label>
               <label>
-                {t.shop.fieldWard}
+                {t.shop.fieldDistrict}
                 <select
                   required
+                  value={form.districtId}
+                  onChange={(e) => void onDistrictChange(e.target.value)}
+                >
+                  <option value="">{t.shop.selectDistrict}</option>
+                  {districts.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {placeLabel(d)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t.shop.fieldUpazila}
+                <select
+                  value={form.upazilaId}
+                  disabled={!form.districtId}
+                  onChange={(e) => onUpazilaChange(e.target.value)}
+                >
+                  <option value="">{t.shop.selectUpazila}</option>
+                  {upazilas.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {placeLabel(u)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t.shop.fieldWard}
+                <select
                   value={form.wardId}
                   onChange={(e) =>
                     setForm({ ...form, wardId: e.target.value })
                   }
                 >
-                  <option value="">{t.shop.selectWard}</option>
-                  {shop.wards.map((w) => (
+                  <option value="">
+                    {wardsForUpazila.length
+                      ? t.shop.selectWard
+                      : t.shop.outsideDeliveryNote}
+                  </option>
+                  {wardsForUpazila.map((w) => (
                     <option key={w.id} value={w.id}>
                       {locale === "bn" && w.nameBn ? w.nameBn : w.name}
                       {w.freeDelivery
@@ -370,6 +465,11 @@ export function PublicCheckoutPage({ locale, onLocale }: Props) {
 
               {quote ? (
                 <div className="shop-quote">
+                  {quote.zoneLabel ? (
+                    <p className="muted tiny">
+                      {t.shop.deliveryZone}: {quote.zoneLabel}
+                    </p>
+                  ) : null}
                   <p>
                     <span>{t.shop.subtotal}</span>
                     <strong>৳{quote.subtotalBdt}</strong>

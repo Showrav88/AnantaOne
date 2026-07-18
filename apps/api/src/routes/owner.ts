@@ -83,39 +83,101 @@ ownerRouter.get("/dashboard", async (req, res) => {
   });
 });
 
+function serializeCompany(company: {
+  id: string;
+  name: string;
+  slug: string;
+  locale: string;
+  phone: string | null;
+  address: string | null;
+  divisionId: string | null;
+  districtId: string | null;
+  upazilaId: string | null;
+  tagline: string | null;
+  description: string | null;
+  logoUrl: string | null;
+  heroImageUrl: string | null;
+  heroVideoUrl: string | null;
+  brandPrimary: string | null;
+  brandAccent: string | null;
+  brandBg: string | null;
+  brandFont: string | null;
+  siteHeadline: string | null;
+  siteSubhead: string | null;
+  branches: Array<{ id: string; name: string; address: string | null }>;
+  _count: { users: number; buyers: number; products: number };
+  division?: { id: string; code: string; name: string; nameBn: string | null } | null;
+  district?: { id: string; code: string; name: string; nameBn: string | null } | null;
+  upazila?: { id: string; code: string; name: string; nameBn: string | null } | null;
+}) {
+  return {
+    id: company.id,
+    name: company.name,
+    slug: company.slug,
+    locale: company.locale,
+    phone: company.phone,
+    address: company.address,
+    divisionId: company.divisionId,
+    districtId: company.districtId,
+    upazilaId: company.upazilaId,
+    division: company.division
+      ? {
+          id: company.division.id,
+          code: company.division.code,
+          name: company.division.name,
+          nameBn: company.division.nameBn,
+        }
+      : null,
+    district: company.district
+      ? {
+          id: company.district.id,
+          code: company.district.code,
+          name: company.district.name,
+          nameBn: company.district.nameBn,
+        }
+      : null,
+    upazila: company.upazila
+      ? {
+          id: company.upazila.id,
+          code: company.upazila.code,
+          name: company.upazila.name,
+          nameBn: company.upazila.nameBn,
+        }
+      : null,
+    tagline: company.tagline,
+    description: company.description,
+    logoUrl: company.logoUrl,
+    heroImageUrl: company.heroImageUrl,
+    heroVideoUrl: company.heroVideoUrl,
+    brandPrimary: company.brandPrimary,
+    brandAccent: company.brandAccent,
+    brandBg: company.brandBg,
+    brandFont: company.brandFont,
+    siteHeadline: company.siteHeadline,
+    siteSubhead: company.siteSubhead,
+    branches: company.branches,
+    counts: company._count,
+  };
+}
+
+const companyInclude = {
+  branches: { orderBy: { createdAt: "asc" as const } },
+  division: true,
+  district: true,
+  upazila: true,
+  _count: { select: { users: true, buyers: true, products: true } },
+};
+
 ownerRouter.get("/company", async (req, res) => {
   const company = await prisma.company.findUniqueOrThrow({
     where: { id: tenantId(req) },
-    include: {
-      branches: { orderBy: { createdAt: "asc" } },
-      _count: { select: { users: true, buyers: true, products: true } },
-    },
+    include: companyInclude,
   });
 
   res.json({
     ok: true,
     role: req.auth!.roleCode,
-    company: {
-      id: company.id,
-      name: company.name,
-      slug: company.slug,
-      locale: company.locale,
-      phone: company.phone,
-      address: company.address,
-      tagline: company.tagline,
-      description: company.description,
-      logoUrl: company.logoUrl,
-      heroImageUrl: company.heroImageUrl,
-      heroVideoUrl: company.heroVideoUrl,
-      brandPrimary: company.brandPrimary,
-      brandAccent: company.brandAccent,
-      brandBg: company.brandBg,
-      brandFont: company.brandFont,
-      siteHeadline: company.siteHeadline,
-      siteSubhead: company.siteSubhead,
-      branches: company.branches,
-      counts: company._count,
-    },
+    company: serializeCompany(company),
   });
 });
 
@@ -123,6 +185,12 @@ const companyUpdateSchema = z.object({
   name: z.string().min(2).max(120).optional(),
   phone: z.string().max(32).nullable().optional(),
   address: z.string().max(240).nullable().optional(),
+  divisionId: z.string().cuid().nullable().optional(),
+  districtId: z.string().cuid().nullable().optional(),
+  upazilaId: z.string().cuid().nullable().optional(),
+  setupDeliveryAreas: z.boolean().optional(),
+  wardCount: z.coerce.number().int().min(1).max(50).optional(),
+  freeWardCount: z.coerce.number().int().min(0).max(50).optional(),
   tagline: z.string().max(160).nullable().optional(),
   description: z.string().max(2000).nullable().optional(),
   locale: z.enum(["bn", "en"]).optional(),
@@ -135,38 +203,73 @@ ownerRouter.patch("/company", requireOwnerOnly, async (req, res) => {
     return;
   }
 
+  const {
+    setupDeliveryAreas,
+    wardCount,
+    freeWardCount,
+    ...data
+  } = parsed.data;
+
+  if (data.districtId) {
+    const dist = await prisma.bdDistrict.findUnique({
+      where: { id: data.districtId },
+    });
+    if (!dist) {
+      res.status(400).json({ ok: false, message: "Invalid district" });
+      return;
+    }
+    if (data.divisionId && data.divisionId !== dist.divisionId) {
+      res.status(400).json({ ok: false, message: "District/division mismatch" });
+      return;
+    }
+    data.divisionId = dist.divisionId;
+  }
+  if (data.upazilaId) {
+    const upa = await prisma.bdUpazila.findUnique({
+      where: { id: data.upazilaId },
+    });
+    if (!upa) {
+      res.status(400).json({ ok: false, message: "Invalid upazila" });
+      return;
+    }
+    if (data.districtId && data.districtId !== upa.districtId) {
+      res.status(400).json({ ok: false, message: "Upazila/district mismatch" });
+      return;
+    }
+    data.districtId = upa.districtId;
+    const dist = await prisma.bdDistrict.findUniqueOrThrow({
+      where: { id: upa.districtId },
+    });
+    data.divisionId = dist.divisionId;
+  }
+
   const company = await prisma.company.update({
     where: { id: tenantId(req) },
-    data: parsed.data,
-    include: {
-      branches: { orderBy: { createdAt: "asc" } },
-      _count: { select: { users: true, buyers: true, products: true } },
-    },
+    data,
+    include: companyInclude,
   });
+
+  let wardsSeeded = 0;
+  if (
+    setupDeliveryAreas &&
+    company.districtId &&
+    company.upazilaId
+  ) {
+    const { seedWardsForCompanyLocation } = await import("../lib/bdGeo.js");
+    const wards = await seedWardsForCompanyLocation({
+      tenantId: company.id,
+      districtId: company.districtId,
+      upazilaId: company.upazilaId,
+      wardCount,
+      freeWardCount,
+    });
+    wardsSeeded = wards.length;
+  }
 
   res.json({
     ok: true,
-    company: {
-      id: company.id,
-      name: company.name,
-      slug: company.slug,
-      locale: company.locale,
-      phone: company.phone,
-      address: company.address,
-      tagline: company.tagline,
-      description: company.description,
-      logoUrl: company.logoUrl,
-      heroImageUrl: company.heroImageUrl,
-      heroVideoUrl: company.heroVideoUrl,
-      brandPrimary: company.brandPrimary,
-      brandAccent: company.brandAccent,
-      brandBg: company.brandBg,
-      brandFont: company.brandFont,
-      siteHeadline: company.siteHeadline,
-      siteSubhead: company.siteSubhead,
-      branches: company.branches,
-      counts: company._count,
-    },
+    wardsSeeded,
+    company: serializeCompany(company),
   });
 });
 

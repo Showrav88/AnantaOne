@@ -19,7 +19,9 @@ export type OnlineCheckoutInput = {
   clientName: string;
   phone: string;
   address: string;
-  wardId: string;
+  districtId?: string | null;
+  upazilaId?: string | null;
+  wardId?: string | null;
   couponCode?: string | null;
   note?: string | null;
   lines: OnlineCheckoutLine[];
@@ -54,6 +56,8 @@ export async function placeOnlineOrder(input: OnlineCheckoutInput) {
   const quote = await quoteOrderTotals(input.tenantId, {
     lines: quoteLines,
     wardId: input.wardId,
+    districtId: input.districtId,
+    upazilaId: input.upazilaId,
     branchId: input.branchId,
     couponCode: input.couponCode,
   });
@@ -79,7 +83,7 @@ export async function placeOnlineOrder(input: OnlineCheckoutInput) {
         contactName: input.clientName.trim(),
         phone,
         address: input.address.trim(),
-        wardId: input.wardId,
+        wardId: input.wardId ?? null,
       },
     });
   } else {
@@ -89,7 +93,7 @@ export async function placeOnlineOrder(input: OnlineCheckoutInput) {
         shopName: input.shopName.trim(),
         contactName: input.clientName.trim(),
         address: input.address.trim(),
-        wardId: input.wardId,
+        wardId: input.wardId ?? null,
         isActive: true,
       },
     });
@@ -114,7 +118,9 @@ export async function placeOnlineOrder(input: OnlineCheckoutInput) {
         shopName: input.shopName.trim(),
         phone,
         address: input.address.trim(),
-        wardId: input.wardId,
+        districtId: input.districtId ?? null,
+        upazilaId: input.upazilaId ?? null,
+        wardId: input.wardId ?? null,
         couponId: quote.coupon?.id ?? null,
         couponCode: quote.coupon?.code ?? null,
         subtotalBdt: quote.subtotalBdt,

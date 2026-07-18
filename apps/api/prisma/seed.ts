@@ -417,39 +417,30 @@ async function main() {
     });
   }
 
-  // Demo wards: nearest free, farther charged
-  for (let i = 1; i <= 15; i += 1) {
-    const name = `Ward ${i}`;
-    const existing = await prisma.deliveryWard.findFirst({
-      where: { tenantId: company.id, name, branchId: null },
-    });
-    if (!existing) {
-      await prisma.deliveryWard.create({
-        data: {
-          tenantId: company.id,
-          name,
-          nameBn: `ওয়ার্ড ${i}`,
-          sortOrder: i,
-          freeDelivery: i <= 5,
-          baseChargeBdt: i <= 5 ? 0 : 30 + i * 5,
-        },
-      });
-    }
-  }
-
-  const rateDefaults = [
-    { category: "DRINKING", chargePerUnitBdt: 5, note: "Per bottle/jar by weight" },
-    { category: "DISTILLED", chargePerUnitBdt: 8, note: "Distilled water delivery" },
-    { category: "BATTERY", chargePerUnitBdt: 10, note: "Battery water delivery" },
-    { category: "OTHER", chargePerUnitBdt: 6, note: "Fallback" },
-  ] as const;
-  for (const d of rateDefaults) {
-    await prisma.deliveryCategoryRate.upsert({
-      where: {
-        tenantId_category: { tenantId: company.id, category: d.category },
+  const { ensureBdGeoSeeded, seedWardsForCompanyLocation, getOrCreateDeliverySettings } =
+    await import("../src/lib/bdGeo.js");
+  await ensureBdGeoSeeded();
+  const lakshmipurSadar = await prisma.bdUpazila.findFirst({
+    where: { code: "lakshmipur-01" },
+    include: { district: true },
+  });
+  if (lakshmipurSadar) {
+    await prisma.company.update({
+      where: { id: company.id },
+      data: {
+        divisionId: lakshmipurSadar.district.divisionId,
+        districtId: lakshmipurSadar.districtId,
+        upazilaId: lakshmipurSadar.id,
+        address: "Lakshmipur Sadar, Lakshmipur",
       },
-      create: { tenantId: company.id, ...d },
-      update: {},
+    });
+    await getOrCreateDeliverySettings(company.id);
+    await seedWardsForCompanyLocation({
+      tenantId: company.id,
+      districtId: lakshmipurSadar.districtId,
+      upazilaId: lakshmipurSadar.id,
+      wardCount: 15,
+      freeWardCount: 5,
     });
   }
 

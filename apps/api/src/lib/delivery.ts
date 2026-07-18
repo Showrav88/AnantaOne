@@ -1,5 +1,6 @@
 import type { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../db.js";
+import { getOrCreateDeliverySettings } from "./bdGeo.js";
 
 type Tx = Prisma.TransactionClient | typeof prisma;
 
@@ -21,12 +22,21 @@ export type QuoteLine = {
   unitPriceBdt: number;
 };
 
+export type DeliveryZone =
+  | "WARD_FREE"
+  | "WARD_LOCAL"
+  | "OUTSIDE_AREA"
+  | "SAME_DISTRICT"
+  | "OTHER_DISTRICT";
+
 export type DeliveryQuote = {
   subtotalBdt: number;
   deliveryBdt: number;
   discountBdt: number;
   totalBdt: number;
   freeDelivery: boolean;
+  zone: DeliveryZone;
+  zoneLabel: string;
   ward: {
     id: string;
     name: string;
@@ -53,6 +63,8 @@ export async function quoteOrderTotals(
   opts: {
     lines: QuoteLine[];
     wardId?: string | null;
+    districtId?: string | null;
+    upazilaId?: string | null;
     branchId?: string | null;
     couponCode?: string | null;
   },
@@ -63,9 +75,18 @@ export async function quoteOrderTotals(
     0,
   );
 
+  const company = await db.company.findUniqueOrThrow({
+    where: { id: tenantId },
+    select: { districtId: true, upazilaId: true },
+  });
+  const settings = await getOrCreateDeliverySettings(tenantId);
+
   let ward: DeliveryQuote["ward"] = null;
   let freeDelivery = false;
   let baseCharge = 0;
+  let zone: DeliveryZone = "OUTSIDE_AREA";
+  let zoneLabel = "Outside delivery area";
+  let applyCategoryRates = true;
 
   if (opts.wardId) {
     const w = await db.deliveryWard.findFirst({
@@ -89,6 +110,38 @@ export async function quoteOrderTotals(
       };
       freeDelivery = w.freeDelivery;
       baseCharge = Number(w.baseChargeBdt);
+      zone = freeDelivery ? "WARD_FREE" : "WARD_LOCAL";
+      zoneLabel = freeDelivery ? "Free delivery (nearest ward)" : "Local ward";
+    }
+  }
+
+  if (!ward) {
+    applyCategoryRates = false;
+    const destDistrictId = opts.districtId ?? null;
+    const destUpazilaId = opts.upazilaId ?? null;
+
+    if (
+      company.districtId &&
+      destDistrictId &&
+      destDistrictId !== company.districtId
+    ) {
+      zone = "OTHER_DISTRICT";
+      zoneLabel = "Other district (zila) delivery";
+      baseCharge = Number(settings.otherDistrictChargeBdt);
+    } else if (
+      company.upazilaId &&
+      destUpazilaId &&
+      destUpazilaId !== company.upazilaId &&
+      company.districtId &&
+      destDistrictId === company.districtId
+    ) {
+      zone = "SAME_DISTRICT";
+      zoneLabel = "Same district, other upazila";
+      baseCharge = Number(settings.sameDistrictChargeBdt);
+    } else {
+      zone = "OUTSIDE_AREA";
+      zoneLabel = "Outside covered wards / area";
+      baseCharge = Number(settings.outsideAreaChargeBdt);
     }
   }
 
@@ -110,12 +163,13 @@ export async function quoteOrderTotals(
   for (const [category, qty] of byCat) {
     const perUnit =
       rateMap.get(category) ?? rateMap.get("*") ?? rateMap.get("OTHER") ?? 0;
-    const lineDeliveryBdt = freeDelivery ? 0 : perUnit * qty;
+    const lineDeliveryBdt =
+      freeDelivery || !applyCategoryRates ? 0 : perUnit * qty;
     categoryDelivery += lineDeliveryBdt;
     breakdown.push({
       category,
       qty,
-      chargePerUnitBdt: perUnit,
+      chargePerUnitBdt: freeDelivery || !applyCategoryRates ? 0 : perUnit,
       lineDeliveryBdt,
     });
   }
@@ -171,6 +225,8 @@ export async function quoteOrderTotals(
     discountBdt: round2(discountBdt),
     totalBdt: round2(totalBdt),
     freeDelivery,
+    zone,
+    zoneLabel,
     ward,
     coupon,
     breakdown,

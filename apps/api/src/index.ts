@@ -9,8 +9,10 @@ import { ownerFinanceRouter } from "./routes/ownerFinance.js";
 import { ownerSellRouter } from "./routes/ownerSell.js";
 import { ownerMediaRouter } from "./routes/ownerMedia.js";
 import { ownerCommerceRouter } from "./routes/ownerCommerce.js";
+import { geoRouter } from "./routes/geo.js";
 import { authRouter } from "./routes/auth.js";
 import { adminRouter } from "./routes/admin.js";
+import { ensureBdGeoSeeded } from "./lib/bdGeo.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 5000);
@@ -77,6 +79,7 @@ app.get("/health/db", async (_req, res) => {
 });
 
 app.use("/api/v1", v1Router);
+app.use("/api/v1/geo", geoRouter);
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/owner", ownerRouter);
 app.use("/api/v1/owner", ownerFinanceRouter);
@@ -87,4 +90,7 @@ app.use("/api/v1/admin", adminRouter);
 
 app.listen(port, "0.0.0.0", () => {
   console.log(`${APP_NAME} API listening on http://0.0.0.0:${port}`);
+  void ensureBdGeoSeeded().catch((err) => {
+    console.warn("BD geo seed deferred:", err instanceof Error ? err.message : err);
+  });
 });
