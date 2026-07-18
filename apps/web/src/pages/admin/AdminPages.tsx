@@ -173,18 +173,20 @@ export function AdminCompaniesPage({ locale }: { locale: LocaleCode }) {
           <tbody>
             {rows.map((c) => (
               <tr key={c.id} className={c.isActive ? "" : "dim"}>
-                <td>
+                <td data-label={t.owner.fieldName}>
                   {c.name}
                   <div className="muted">{c.slug}</div>
                 </td>
-                <td>
+                <td data-label={t.auth.ownerName}>
                   {c.owner?.name ?? "—"}
                   <div className="muted">{c.owner?.email}</div>
                 </td>
-                <td>{c.counts.products}</td>
-                <td>{c.counts.buyers}</td>
-                <td>{c.isActive ? t.common.online : t.common.offline}</td>
-                <td>
+                <td data-label={t.owner.statProducts}>{c.counts.products}</td>
+                <td data-label={t.owner.statBuyers}>{c.counts.buyers}</td>
+                <td data-label={t.owner.fieldStatus}>
+                  {c.isActive ? t.common.online : t.common.offline}
+                </td>
+                <td className="cell-actions" data-label="">
                   <button
                     type="button"
                     className="btn ghost compact dark"

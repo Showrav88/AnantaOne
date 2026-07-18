@@ -320,7 +320,7 @@ export function OwnerProductsPage({ locale }: Props) {
           <tbody>
             {products.map((p) => (
               <tr key={p.id} className={p.isActive ? "" : "dim"}>
-                <td>
+                <td data-label={t.owner.uploadProductImage}>
                   <div className="product-thumb-cell">
                     {p.imageUrl ? (
                       <img className="product-thumb" src={p.imageUrl} alt="" />
@@ -349,15 +349,22 @@ export function OwnerProductsPage({ locale }: Props) {
                     ) : null}
                   </div>
                 </td>
-                <td>{locale === "bn" && p.nameBn ? p.nameBn : p.name}</td>
-                <td>{p.sku}</td>
-                <td>{p.category}</td>
-                <td>৳{p.priceBdt}</td>
-                <td className={p.stockQty <= p.minStock ? "warn" : ""}>
+                <td data-label={t.owner.fieldProductName}>
+                  {locale === "bn" && p.nameBn ? p.nameBn : p.name}
+                </td>
+                <td data-label="SKU">{p.sku}</td>
+                <td data-label={t.owner.fieldCategory}>{p.category}</td>
+                <td data-label={t.owner.fieldPrice}>৳{p.priceBdt}</td>
+                <td
+                  data-label={t.owner.fieldStock}
+                  className={p.stockQty <= p.minStock ? "warn" : ""}
+                >
                   {p.stockQty}
                 </td>
-                <td>{p.isActive ? t.common.online : t.common.offline}</td>
-                <td>
+                <td data-label={t.owner.fieldStatus}>
+                  {p.isActive ? t.common.online : t.common.offline}
+                </td>
+                <td className="cell-actions" data-label="">
                   {canWrite && p.isActive ? (
                     <button
                       type="button"

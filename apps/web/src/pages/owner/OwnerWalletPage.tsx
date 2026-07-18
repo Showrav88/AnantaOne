@@ -808,13 +808,16 @@ export function OwnerWalletPage({ locale }: Props) {
                 ) : (
                   txns.map((txn) => (
                     <tr key={txn.id}>
-                      <td>{new Date(txn.occurredAt).toLocaleString()}</td>
-                      <td>
+                      <td data-label={t.owner.fieldDate}>
+                        {new Date(txn.occurredAt).toLocaleString()}
+                      </td>
+                      <td data-label={t.owner.fieldTxnType}>
                         {locale === "bn"
                           ? (txn.type?.nameBn ?? txn.type?.code)
                           : (txn.type?.nameEn ?? txn.type?.code)}
                       </td>
                       <td
+                        data-label={t.owner.fieldDirection}
                         className={
                           txn.type?.direction === "credit"
                             ? "credit"
@@ -825,9 +828,13 @@ export function OwnerWalletPage({ locale }: Props) {
                           ? t.owner.credit
                           : t.owner.debit}
                       </td>
-                      <td>৳{txn.amountBdt.toLocaleString()}</td>
-                      <td>৳{txn.balanceAfter.toLocaleString()}</td>
-                      <td>{txn.note ?? "—"}</td>
+                      <td data-label={t.owner.fieldAmount}>
+                        ৳{txn.amountBdt.toLocaleString()}
+                      </td>
+                      <td data-label={t.owner.fieldBalanceAfter}>
+                        ৳{txn.balanceAfter.toLocaleString()}
+                      </td>
+                      <td data-label={t.owner.fieldNote}>{txn.note ?? "—"}</td>
                     </tr>
                   ))
                 )}

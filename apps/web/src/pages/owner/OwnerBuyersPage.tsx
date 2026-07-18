@@ -173,19 +173,25 @@ export function OwnerBuyersPage({ locale }: Props) {
                   ?.onlineSpentBdt ?? 0;
               return (
                 <tr key={b.id} className={b.isActive ? "" : "dim"}>
-                  <td>{b.shopName}</td>
-                  <td>{b.contactName ?? "—"}</td>
-                  <td>{b.phone}</td>
-                  <td>
+                  <td data-label={t.owner.fieldShopName}>{b.shopName}</td>
+                  <td data-label={t.owner.fieldContactName}>
+                    {b.contactName ?? "—"}
+                  </td>
+                  <td data-label={t.owner.fieldPhone}>{b.phone}</td>
+                  <td data-label={t.owner.fieldWard}>
                     {b.ward
                       ? locale === "bn" && b.ward.nameBn
                         ? b.ward.nameBn
                         : b.ward.name
                       : "—"}
                   </td>
-                  <td>{b.orderCount}</td>
-                  <td>৳{b.totalSpentBdt.toLocaleString()}</td>
-                  <td>৳{online.toLocaleString()}</td>
+                  <td data-label={t.owner.buyerOrders}>{b.orderCount}</td>
+                  <td data-label={t.owner.buyerSpent}>
+                    ৳{b.totalSpentBdt.toLocaleString()}
+                  </td>
+                  <td data-label={t.owner.buyerOnlineSpent}>
+                    ৳{online.toLocaleString()}
+                  </td>
                 </tr>
               );
             })}

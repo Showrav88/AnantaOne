@@ -206,27 +206,29 @@ export function OwnerStaffPage({ locale }: Props) {
           <tbody>
             {staff.map((s) => (
               <tr key={s.id}>
-                <td>
+                <td data-label={t.owner.fieldStaffName}>
                   <strong>{s.name}</strong>
                   <div className="muted tiny">{s.email}</div>
                   {s.designation ? (
                     <div className="muted tiny">{s.designation}</div>
                   ) : null}
                 </td>
-                <td>{s.role.code}</td>
-                <td>
+                <td data-label={t.owner.fieldRole}>{s.role.code}</td>
+                <td data-label={t.owner.fieldJoiningDate}>
                   {s.joiningDate
                     ? new Date(s.joiningDate).toLocaleDateString()
                     : "—"}
                 </td>
-                <td>
+                <td data-label={t.owner.fieldSalary}>
                   {s.salaryBdt != null
                     ? `৳${s.salaryBdt.toLocaleString()}`
                     : "—"}
                 </td>
-                <td>{s.isActive ? "✓" : "—"}</td>
+                <td data-label={t.owner.fieldStatus}>
+                  {s.isActive ? "✓" : "—"}
+                </td>
                 {isOwner && s.role.code !== "OWNER" && s.isActive ? (
-                  <td>
+                  <td className="cell-actions" data-label="">
                     <button
                       type="button"
                       className="linkish"
@@ -236,7 +238,7 @@ export function OwnerStaffPage({ locale }: Props) {
                     </button>
                   </td>
                 ) : isOwner ? (
-                  <td />
+                  <td className="cell-actions" data-label="" />
                 ) : null}
               </tr>
             ))}

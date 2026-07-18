@@ -214,10 +214,10 @@ export function OwnerDeliveryPage({ locale }: Props) {
             <tbody>
               {wards.map((w) => (
                 <tr key={w.id}>
-                  <td>
+                  <td data-label={t.owner.fieldWard}>
                     {locale === "bn" && w.nameBn ? w.nameBn : w.name}
                   </td>
-                  <td>
+                  <td data-label={t.shop.freeDelivery}>
                     {canWrite ? (
                       <label className="check">
                         <input
@@ -237,7 +237,7 @@ export function OwnerDeliveryPage({ locale }: Props) {
                       "—"
                     )}
                   </td>
-                  <td>
+                  <td data-label={t.owner.baseDeliveryCharge}>
                     {canWrite && !w.freeDelivery ? (
                       <input
                         className="inline-number"
