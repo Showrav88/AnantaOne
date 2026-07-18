@@ -7,7 +7,7 @@ export const UNIT_SERIAL_WIDTH = 6;
 /** 36^3 = 46_656 products per category prefix. */
 export const PRODUCT_SKU_WIDTH = 3;
 
-/** 36^2 = 1_296 batches per product. */
+/** 36^2 = 1_296 company-wide short batches (B01…BZZ); grows past width if needed. */
 export const BATCH_SEQ_WIDTH = 2;
 
 export function toBase36(n: number, width: number): string {
@@ -59,10 +59,12 @@ export function makeShortSerialCode(sku: string, serialNo: number): string {
   return `${s}${toBase36(serialNo, UNIT_SERIAL_WIDTH)}`;
 }
 
-/** Short batch code: {SKU}B{base36 seq} e.g. MW001B01 */
-export function makeShortBatchCode(sku: string, batchSeq: number): string {
-  const s = normalizeSkuPart(sku, 5);
-  return `${s}B${toBase36(batchSeq, BATCH_SEQ_WIDTH)}`;
+/**
+ * Short batch code (company-wide): B01, B02, … BZZ
+ * Product SKU stays on the product/tag — not repeated in the batch code.
+ */
+export function makeShortBatchCode(batchSeq: number): string {
+  return `B${toBase36(batchSeq, BATCH_SEQ_WIDTH)}`;
 }
 
 export function buildAutoSku(category: string, seq: number): string {

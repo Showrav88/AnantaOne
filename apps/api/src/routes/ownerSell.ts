@@ -119,9 +119,19 @@ ownerSellRouter.post(
         let autoCode = parsed.data.batchCode?.trim();
         if (!autoCode) {
           const prior = await tx.productionBatch.count({
-            where: { tenantId: tid(req), productId: product.id },
+            where: { tenantId: tid(req) },
           });
-          autoCode = makeShortBatchCode(product.sku, prior + 1);
+          let seq = prior + 1;
+          autoCode = makeShortBatchCode(seq);
+          for (let i = 0; i < 5000; i += 1) {
+            const exists = await tx.productionBatch.findFirst({
+              where: { tenantId: tid(req), batchCode: autoCode },
+              select: { id: true },
+            });
+            if (!exists) break;
+            seq += 1;
+            autoCode = makeShortBatchCode(seq);
+          }
         }
         const created = await tx.productionBatch.create({
           data: {
