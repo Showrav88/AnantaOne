@@ -316,6 +316,8 @@ export type StaffMember = {
   designation: string | null;
   joiningDate: string | null;
   salaryBdt: number | null;
+  imageUrl: string | null;
+  imagePublicId: string | null;
   isActive: boolean;
   createdAt: string;
   branchId: string | null;
@@ -851,7 +853,7 @@ export const api = {
       );
     },
     signMedia: (body: {
-      purpose: "assets" | "logo" | "hero" | "products";
+      purpose: "assets" | "logo" | "hero" | "products" | "staff";
       publicId?: string;
     }) =>
       getJson<{
