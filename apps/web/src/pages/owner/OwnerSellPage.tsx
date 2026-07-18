@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
-import { QrScannerPanel } from "../../components/QrScannerPanel";
 import { SalesInvoiceView } from "../../components/SalesInvoiceView";
 import {
   api,
@@ -62,7 +61,6 @@ export function OwnerSellPage({ locale }: Props) {
   const [cancelReason, setCancelReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
-  const [scanning, setScanning] = useState(false);
   const [scanQuery, setScanQuery] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -288,7 +286,6 @@ export function OwnerSellPage({ locale }: Props) {
   async function applyScan(raw: string) {
     setError(null);
     setOkMsg(null);
-    setScanning(false);
     try {
       const res = await api.owner.lookupUnitScan(raw);
       if (!res.product?.isActive) {
@@ -586,49 +583,23 @@ export function OwnerSellPage({ locale }: Props) {
           </div>
 
           <h2>{t.owner.sellAddLines}</h2>
-          <div className="scan-row owner-form compact">
+          <div className="owner-form compact">
             <label className="full">
               {t.owner.scanUnitLabel}
               <input
                 value={scanQuery}
                 placeholder={t.owner.scanUnitPlaceholder}
+                autoComplete="off"
                 onChange={(e) => setScanQuery(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
-                    if (scanQuery.trim()) void applyScan(scanQuery.trim());
+                    const q = scanQuery.trim();
+                    if (q) void applyScan(q);
                   }
                 }}
               />
             </label>
-            <div className="form-actions">
-              <button
-                type="button"
-                className="btn primary"
-                disabled={!scanQuery.trim()}
-                onClick={() => void applyScan(scanQuery.trim())}
-              >
-                {t.owner.scanUnitLookup}
-              </button>
-              <button
-                type="button"
-                className="btn ghost"
-                onClick={() => setScanning(true)}
-              >
-                {t.owner.scanUnitCamera}
-              </button>
-            </div>
-            <p className="muted tiny full">{t.owner.scanUnitHint}</p>
-            <QrScannerPanel
-              readerId="sell-unit-qr-reader"
-              active={scanning}
-              onScan={(decoded) => void applyScan(decoded)}
-              onError={(message) => setError(message)}
-              stopLabel={t.common.cancel}
-              onStop={() => setScanning(false)}
-            />
-          </div>
-          <div className="owner-form compact">
             <label>
               {t.owner.fieldProduct}
               <select

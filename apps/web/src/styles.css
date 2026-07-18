@@ -2496,18 +2496,13 @@ a.cta.secondary {
   display: none;
 }
 
-.scan-panel {
-  margin-bottom: 1.25rem;
+.scan-bar {
+  margin-bottom: 1rem;
 }
 
-.scan-result {
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--line, #ddd);
-}
-
-.qr-scan-panel {
-  margin-top: 0.5rem;
+.scan-result-inline {
+  margin: 0;
+  font-size: 0.9rem;
 }
 
 .row-highlight {

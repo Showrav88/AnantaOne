@@ -1,7 +1,6 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
-import { QrScannerPanel } from "../../components/QrScannerPanel";
 import { api, type Product, type ProductionBatch } from "../../lib/api";
 import { PRODUCT_PRESETS } from "../../lib/productPresets";
 import { getStoredUser } from "../../lib/session";
@@ -66,7 +65,6 @@ export function OwnerProductsPage({ locale }: Props) {
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [scanning, setScanning] = useState(false);
   const [scanQuery, setScanQuery] = useState("");
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
 
@@ -299,7 +297,6 @@ export function OwnerProductsPage({ locale }: Props) {
   async function applyScan(raw: string) {
     setError(null);
     setOkMsg(null);
-    setScanning(false);
     try {
       const res = await api.owner.lookupUnitScan(raw);
       setScanResult({
@@ -338,94 +335,46 @@ export function OwnerProductsPage({ locale }: Props) {
       {error ? <p className="error">{error}</p> : null}
       {uploading ? <p className="muted">{t.owner.uploading}</p> : null}
 
-      <section className="panel-card scan-panel">
-        <h2>{t.owner.scanProductTitle}</h2>
-        <p className="muted tiny">{t.owner.scanProductHint}</p>
-        <div className="owner-form compact">
-          <label className="full">
-            {t.owner.scanUnitLabel}
-            <input
-              value={scanQuery}
-              placeholder={t.owner.scanUnitPlaceholder}
-              onChange={(e) => setScanQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  if (scanQuery.trim()) void applyScan(scanQuery.trim());
-                }
-              }}
-            />
-          </label>
-          <div className="form-actions">
-            <button
-              type="button"
-              className="btn primary"
-              disabled={!scanQuery.trim()}
-              onClick={() => void applyScan(scanQuery.trim())}
-            >
-              {t.owner.scanUnitLookup}
-            </button>
-            <button
-              type="button"
-              className="btn ghost"
-              onClick={() => setScanning(true)}
-            >
-              {t.owner.scanUnitCamera}
-            </button>
-          </div>
-          <QrScannerPanel
-            readerId="products-unit-qr-reader"
-            active={scanning}
-            onScan={(decoded) => void applyScan(decoded)}
-            onError={(message) => setError(message)}
-            stopLabel={t.common.cancel}
-            onStop={() => setScanning(false)}
+      <div className="owner-form compact scan-bar">
+        <label className="full">
+          {t.owner.scanUnitLabel}
+          <input
+            value={scanQuery}
+            placeholder={t.owner.scanUnitPlaceholder}
+            autoComplete="off"
+            onChange={(e) => setScanQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                const q = scanQuery.trim();
+                if (q) void applyScan(q);
+              }
+            }}
           />
-        </div>
+        </label>
         {scanResult ? (
-          <div className="scan-result">
-            <p>
-              <strong>
-                {locale === "bn" && scanResult.product.nameBn
-                  ? scanResult.product.nameBn
-                  : scanResult.product.name}
-              </strong>{" "}
-              · {scanResult.product.sku}
-            </p>
-            {scanResult.unitSerial ? (
-              <p className="muted tiny">
-                QR {scanResult.unitSerial}
-                {scanResult.unitStatus ? ` · ${scanResult.unitStatus}` : ""}
-              </p>
-            ) : null}
-            {scanResult.batch ? (
-              <p>
-                {t.owner.fieldBatch}: <strong>{scanResult.batch.batchCode}</strong>
-                {" · "}
-                {t.owner.qtyRemaining}: {scanResult.batch.qtyRemaining}
-                {scanResult.batch.expiresAt
-                  ? ` · EXP ${new Date(scanResult.batch.expiresAt).toLocaleDateString()}`
-                  : ""}
-              </p>
-            ) : (
-              <p className="error">{t.owner.scanNoBatch.replace("{sku}", scanResult.product.sku)}</p>
-            )}
-            <div className="form-actions">
-              <Link
-                className="btn ghost"
-                to={`/owner/batches?productId=${scanResult.product.id}${
-                  scanResult.batch ? `&batchId=${scanResult.batch.id}` : ""
-                }`}
-              >
-                {t.owner.navBatches}
-              </Link>
-              <Link className="btn primary" to="/owner/sell">
-                {t.owner.navSell}
-              </Link>
-            </div>
-          </div>
+          <p className="full scan-result-inline">
+            <strong>
+              {locale === "bn" && scanResult.product.nameBn
+                ? scanResult.product.nameBn
+                : scanResult.product.name}
+            </strong>
+            {" · "}
+            {scanResult.product.sku}
+            {scanResult.batch
+              ? ` · ${t.owner.fieldBatch} ${scanResult.batch.batchCode}`
+              : ` · ${t.owner.scanNoBatch.replace("{sku}", scanResult.product.sku)}`}
+            {" · "}
+            <Link
+              to={`/owner/batches?productId=${scanResult.product.id}${
+                scanResult.batch ? `&batchId=${scanResult.batch.id}` : ""
+              }`}
+            >
+              {t.owner.navBatches}
+            </Link>
+          </p>
         ) : null}
-      </section>
+      </div>
 
       {!canWrite ? (
         <p className="muted">{t.owner.productsOwnerOnly}</p>
@@ -474,11 +423,8 @@ export function OwnerProductsPage({ locale }: Props) {
               onChange={(e) =>
                 setForm({ ...form, sku: e.target.value.toUpperCase() })
               }
-              placeholder={autoSkuPreview || "D001"}
+              placeholder={autoSkuPreview || "MW001"}
             />
-            <span className="muted tiny">
-              {editingId ? t.owner.skuShortExplain : t.owner.skuAutoHint}
-            </span>
           </label>
           <label>
             {t.owner.fieldCategory}
@@ -632,6 +578,7 @@ export function OwnerProductsPage({ locale }: Props) {
               placeholder={t.owner.numberZeroIfEmptyHint}
               onChange={(e) => setForm({ ...form, minStock: e.target.value })}
             />
+            <span className="muted tiny">{t.owner.minStockHint}</span>
           </label>
           <label className="full">
             {t.owner.fieldDescription}
