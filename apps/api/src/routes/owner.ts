@@ -8,6 +8,12 @@ import {
   requireOwnerOrManager,
 } from "../middleware/companyAccess.js";
 import { branchFilter, resolveBranchScope } from "../lib/branchScope.js";
+import {
+  allocateNextGtin,
+  backfillProductGtins,
+  normalizeCompanyPrefix,
+  validateGtin,
+} from "../lib/gs1.js";
 import { buildAutoSku } from "../lib/shortCodes.js";
 
 export const ownerRouter = Router();
@@ -143,6 +149,9 @@ function serializeCompany(company: {
   brandFont: string | null;
   siteHeadline: string | null;
   siteSubhead: string | null;
+  gs1CompanyPrefix?: string | null;
+  gs1Enabled?: boolean;
+  gs1NextItemRef?: number;
   branches: Array<{
     id: string;
     name: string;
@@ -201,6 +210,9 @@ function serializeCompany(company: {
     brandFont: company.brandFont,
     siteHeadline: company.siteHeadline,
     siteSubhead: company.siteSubhead,
+    gs1CompanyPrefix: company.gs1CompanyPrefix ?? null,
+    gs1Enabled: company.gs1Enabled ?? false,
+    gs1NextItemRef: company.gs1NextItemRef ?? 1,
     branches: company.branches,
     counts: company._count,
   };
@@ -250,6 +262,10 @@ const companyUpdateSchema = z.object({
   tagline: z.string().max(160).nullable().optional(),
   description: z.string().max(2000).nullable().optional(),
   locale: z.enum(["bn", "en"]).optional(),
+  gs1CompanyPrefix: z.string().max(16).nullable().optional(),
+  gs1Enabled: z.boolean().optional(),
+  /** When enabling GS1, assign GTINs to existing products that lack one. */
+  gs1BackfillProducts: z.boolean().optional(),
 });
 
 ownerRouter.patch("/company", requireOwnerOnly, async (req, res) => {
@@ -263,8 +279,44 @@ ownerRouter.patch("/company", requireOwnerOnly, async (req, res) => {
     setupDeliveryAreas,
     wardCount,
     freeWardCount,
+    gs1BackfillProducts,
+    gs1CompanyPrefix: prefixRaw,
     ...data
   } = parsed.data;
+
+  if (prefixRaw !== undefined) {
+    if (prefixRaw == null || prefixRaw.trim() === "") {
+      (data as { gs1CompanyPrefix?: string | null }).gs1CompanyPrefix = null;
+    } else {
+      try {
+        (data as { gs1CompanyPrefix?: string | null }).gs1CompanyPrefix =
+          normalizeCompanyPrefix(prefixRaw);
+      } catch (error) {
+        res.status(400).json({
+          ok: false,
+          message: error instanceof Error ? error.message : "Invalid prefix",
+        });
+        return;
+      }
+    }
+  }
+
+  if (data.gs1Enabled === true) {
+    const existing = await prisma.company.findUniqueOrThrow({
+      where: { id: tenantId(req) },
+      select: { gs1CompanyPrefix: true },
+    });
+    const prefix =
+      (data as { gs1CompanyPrefix?: string | null }).gs1CompanyPrefix ??
+      existing.gs1CompanyPrefix;
+    if (!prefix) {
+      res.status(400).json({
+        ok: false,
+        message: "Set a GS1 Company Prefix before enabling GS1",
+      });
+      return;
+    }
+  }
 
   if (data.districtId) {
     const dist = await prisma.bdDistrict.findUnique({
@@ -322,9 +374,30 @@ ownerRouter.patch("/company", requireOwnerOnly, async (req, res) => {
     wardsSeeded = wards.length;
   }
 
+  let gs1Assigned = 0;
+  if (
+    gs1BackfillProducts &&
+    company.gs1Enabled &&
+    company.gs1CompanyPrefix
+  ) {
+    try {
+      const result = await backfillProductGtins(company.id);
+      gs1Assigned = result.assigned;
+    } catch (error) {
+      res.status(400).json({
+        ok: false,
+        message:
+          error instanceof Error ? error.message : "GS1 backfill failed",
+        company: serializeCompany(company),
+      });
+      return;
+    }
+  }
+
   res.json({
     ok: true,
     wardsSeeded,
+    gs1Assigned,
     company: serializeCompany(company),
   });
 });
@@ -353,6 +426,8 @@ const productCreateSchema = z.object({
   imageUrl: z.string().url().nullable().optional(),
   imagePublicId: z.string().max(240).nullable().optional(),
   isActive: z.boolean().optional(),
+  /** Optional manual GTIN-13; when omitted and GS1 is on, one is allocated. */
+  gtin: z.string().max(14).nullable().optional(),
 });
 
 async function nextAutoSku(tenantId: string, category: string) {
@@ -406,12 +481,38 @@ ownerRouter.post("/products", requireOwnerOnly, async (req, res) => {
         ? manual.toUpperCase()
         : await nextAutoSku(tid, parsed.data.category);
 
+    const company = await prisma.company.findUniqueOrThrow({
+      where: { id: tid },
+      select: { gs1Enabled: true, gs1CompanyPrefix: true },
+    });
+
+    let gtin: string | null = null;
+    let gs1ItemReference: string | null = null;
+    const manualGtin = parsed.data.gtin?.replace(/\D/g, "") || null;
+    if (manualGtin) {
+      if (!validateGtin(manualGtin)) {
+        res.status(400).json({ ok: false, message: "Invalid GTIN check digit" });
+        return;
+      }
+      gtin = manualGtin.length === 14 ? manualGtin.slice(1) : manualGtin;
+      if (gtin.length !== 13) {
+        res.status(400).json({ ok: false, message: "Use a GTIN-13" });
+        return;
+      }
+    } else if (company.gs1Enabled && company.gs1CompanyPrefix) {
+      const allocated = await allocateNextGtin(tid);
+      gtin = allocated.gtin;
+      gs1ItemReference = allocated.itemReference;
+    }
+
     const product = await prisma.product.create({
       data: {
         tenantId: tid,
         name: parsed.data.name,
         nameBn: parsed.data.nameBn ?? null,
         sku,
+        gtin,
+        gs1ItemReference,
         category: parsed.data.category,
         unitId: unit.id,
         size: parsed.data.size ?? null,
@@ -463,17 +564,53 @@ ownerRouter.patch("/products/:id", requireOwnerOnly, async (req, res) => {
     unitId = unit.id;
   }
 
-  const { unitCode: _unitCode, sku: skuRaw, ...rest } = parsed.data;
+  const { unitCode: _unitCode, sku: skuRaw, gtin: gtinRaw, ...rest } =
+    parsed.data;
   const sku =
     skuRaw != null && skuRaw.trim().length >= 2
       ? skuRaw.trim().toUpperCase()
       : undefined;
+
+  let gtinUpdate: { gtin: string | null; gs1ItemReference?: string | null } | null =
+    null;
+  if (gtinRaw !== undefined) {
+    if (gtinRaw == null || String(gtinRaw).trim() === "") {
+      gtinUpdate = { gtin: null, gs1ItemReference: null };
+    } else {
+      const digits = String(gtinRaw).replace(/\D/g, "");
+      const gtin13 =
+        digits.length === 14 ? digits.slice(1) : digits;
+      if (gtin13.length !== 13 || !validateGtin(gtin13)) {
+        res.status(400).json({ ok: false, message: "Invalid GTIN-13" });
+        return;
+      }
+      gtinUpdate = { gtin: gtin13 };
+    }
+  } else if (!existing.gtin) {
+    const company = await prisma.company.findUniqueOrThrow({
+      where: { id: tenantId(req) },
+      select: { gs1Enabled: true, gs1CompanyPrefix: true },
+    });
+    if (company.gs1Enabled && company.gs1CompanyPrefix) {
+      try {
+        const allocated = await allocateNextGtin(tenantId(req));
+        gtinUpdate = {
+          gtin: allocated.gtin,
+          gs1ItemReference: allocated.itemReference,
+        };
+      } catch {
+        /* leave without GTIN if allocation fails */
+      }
+    }
+  }
+
   const product = await prisma.product.update({
     where: { id: existing.id },
     data: {
       ...rest,
       ...(sku ? { sku } : {}),
       ...(unitId ? { unitId } : {}),
+      ...(gtinUpdate ?? {}),
       updatedBy: req.auth!.id,
     },
     include: { unit: true },
@@ -551,6 +688,8 @@ function serializeProduct(product: {
   name: string;
   nameBn: string | null;
   sku: string;
+  gtin?: string | null;
+  gs1ItemReference?: string | null;
   category: string;
   unitId: string;
   size?: { toString(): string } | number | string | null;
@@ -571,6 +710,8 @@ function serializeProduct(product: {
     name: product.name,
     nameBn: product.nameBn,
     sku: product.sku,
+    gtin: product.gtin ?? null,
+    gs1ItemReference: product.gs1ItemReference ?? null,
     category: product.category,
     unitId: product.unitId,
     size: product.size == null ? null : Number(product.size),

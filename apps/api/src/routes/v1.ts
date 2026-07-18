@@ -539,6 +539,76 @@ v1Router.get("/tag/:companySlug/:sku/:batchCode", async (req, res) => {
   }
 });
 
+function serializePublicUnit(
+  company: {
+    name: string;
+    phone: string | null;
+    logoUrl: string | null;
+    brandPrimary: string | null;
+    slug: string;
+  },
+  unit: {
+    serialNo: number;
+    serialCode: string;
+    status: string;
+    soldAt: Date | null;
+    product: {
+      name: string;
+      nameBn: string | null;
+      sku: string;
+      gtin: string | null;
+      size: { toString(): string } | number | string | null;
+      priceBdt: { toString(): string } | number | string;
+      description: string | null;
+      imageUrl: string | null;
+      unit: { code: string; nameEn: string; nameBn: string };
+    };
+    batch: {
+      batchCode: string;
+      manufacturedAt: Date;
+      expiresAt: Date | null;
+      serialStart: number | null;
+      serialEnd: number | null;
+    };
+  },
+) {
+  return {
+    serialNo: unit.serialNo,
+    serialCode: unit.serialCode,
+    status: unit.status,
+    soldAt: unit.soldAt,
+    company: {
+      name: company.name,
+      slug: company.slug,
+      phone: company.phone,
+      logoUrl: company.logoUrl,
+      brandPrimary: company.brandPrimary,
+    },
+    product: {
+      name: unit.product.name,
+      nameBn: unit.product.nameBn,
+      sku: unit.product.sku,
+      gtin: unit.product.gtin,
+      size: unit.product.size == null ? null : Number(unit.product.size),
+      unit: unit.product.unit.code,
+      unitLabel: {
+        en: unit.product.unit.nameEn,
+        bn: unit.product.unit.nameBn,
+      },
+      priceBdt: Number(unit.product.priceBdt),
+      description: unit.product.description,
+      imageUrl: unit.product.imageUrl,
+    },
+    batch: {
+      batchCode: unit.batch.batchCode,
+      manufacturedAt: unit.batch.manufacturedAt,
+      expiresAt: unit.batch.expiresAt,
+      serialStart: unit.batch.serialStart,
+      serialEnd: unit.batch.serialEnd,
+    },
+  };
+}
+
 /** Public unique unit QR lookup — one bottle / item. */
 v1Router.get("/unit/:companySlug/:serialCode", async (req, res) => {
   try {
@@ -566,39 +636,58 @@ v1Router.get("/unit/:companySlug/:serialCode", async (req, res) => {
 
     res.json({
       ok: true,
-      unit: {
-        serialNo: unit.serialNo,
-        serialCode: unit.serialCode,
-        status: unit.status,
-        soldAt: unit.soldAt,
-        company: {
-          name: company.name,
-          phone: company.phone,
-          logoUrl: company.logoUrl,
-          brandPrimary: company.brandPrimary,
-        },
-        product: {
-          name: unit.product.name,
-          nameBn: unit.product.nameBn,
-          sku: unit.product.sku,
-          size: unit.product.size == null ? null : Number(unit.product.size),
-          unit: unit.product.unit.code,
-          unitLabel: {
-            en: unit.product.unit.nameEn,
-            bn: unit.product.unit.nameBn,
-          },
-          priceBdt: Number(unit.product.priceBdt),
-          description: unit.product.description,
-          imageUrl: unit.product.imageUrl,
-        },
-        batch: {
-          batchCode: unit.batch.batchCode,
-          manufacturedAt: unit.batch.manufacturedAt,
-          expiresAt: unit.batch.expiresAt,
-          serialStart: unit.batch.serialStart,
-          serialEnd: unit.batch.serialEnd,
-        },
+      unit: serializePublicUnit(company, unit),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    res.status(500).json({ ok: false, message });
+  }
+});
+
+/**
+ * GS1 Digital Link resolver — GTIN (AI 01) + serial (AI 21).
+ * Path: /api/v1/gs1/01/:gtin/21/:serial
+ */
+v1Router.get("/gs1/01/:gtin/21/:serial", async (req, res) => {
+  try {
+    const rawGtin = String(req.params.gtin).replace(/\D/g, "");
+    const serialCode = decodeURIComponent(String(req.params.serial));
+    const gtin13 =
+      rawGtin.length === 14 && rawGtin.startsWith("0")
+        ? rawGtin.slice(1)
+        : rawGtin;
+    const candidates = [gtin13, rawGtin].filter(
+      (v, i, arr) => v.length >= 12 && arr.indexOf(v) === i,
+    );
+
+    const product = await prisma.product.findFirst({
+      where: { gtin: { in: candidates }, isActive: true },
+      include: { company: true },
+    });
+    if (!product || !product.company.isActive) {
+      res.status(404).json({ ok: false, message: "GTIN not found" });
+      return;
+    }
+
+    const unit = await prisma.productUnit.findFirst({
+      where: { tenantId: product.tenantId, serialCode },
+      include: {
+        product: { include: { unit: true } },
+        batch: true,
       },
+    });
+    if (!unit) {
+      res.status(404).json({ ok: false, message: "Unit tag not found" });
+      return;
+    }
+    if (unit.productId !== product.id) {
+      res.status(404).json({ ok: false, message: "Serial does not match GTIN" });
+      return;
+    }
+
+    res.json({
+      ok: true,
+      unit: serializePublicUnit(product.company, unit),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";

@@ -44,20 +44,21 @@ function statusLabel(status: string, t: ReturnType<typeof getMessages>) {
   return status;
 }
 
-export function PublicUnitPage({ locale, onLocale }: Props) {
+/** Resolves GS1 Digital Link QR: #/dl/01/{gtin}/21/{serial} */
+export function PublicGs1UnitPage({ locale, onLocale }: Props) {
   const t = getMessages(locale);
-  const { companySlug = "", serialCode = "" } = useParams();
+  const { gtin = "", serialCode = "" } = useParams();
   const [unit, setUnit] = useState<PublicUnit | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     void api
-      .publicUnit(companySlug, serialCode)
+      .publicGs1Unit(gtin, serialCode)
       .then((res) => setUnit(res.unit))
       .catch((err) =>
         setError(err instanceof Error ? err.message : "Not found"),
       );
-  }, [companySlug, serialCode]);
+  }, [gtin, serialCode]);
 
   const sizeUnit = unit
     ? unit.product.size == null
@@ -102,11 +103,6 @@ export function PublicUnitPage({ locale, onLocale }: Props) {
                 ? unit.product.nameBn
                 : unit.product.name}
             </h1>
-            {locale === "bn" && unit.product.nameBn ? (
-              <p className="muted">{unit.product.name}</p>
-            ) : unit.product.nameBn ? (
-              <p className="muted">{unit.product.nameBn}</p>
-            ) : null}
             <p className="muted">SKU {unit.product.sku}</p>
             {unit.product.gtin ? (
               <p className="muted">GTIN {unit.product.gtin}</p>

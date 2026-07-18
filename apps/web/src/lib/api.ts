@@ -92,6 +92,8 @@ export type Product = {
   name: string;
   nameBn: string | null;
   sku: string;
+  gtin?: string | null;
+  gs1ItemReference?: string | null;
   category: string;
   imageUrl?: string | null;
   imagePublicId?: string | null;
@@ -140,6 +142,9 @@ export type CompanyDetails = {
   brandFont?: string | null;
   siteHeadline?: string | null;
   siteSubhead?: string | null;
+  gs1CompanyPrefix?: string | null;
+  gs1Enabled?: boolean;
+  gs1NextItemRef?: number;
   branches: Array<{
     id: string;
     name: string;
@@ -470,10 +475,13 @@ export type ProductUnitTag = {
   status: string;
   soldAt: string | null;
   qrUrl: string;
+  gtin?: string | null;
+  gs1ElementString?: string | null;
   product: {
     name: string;
     nameBn: string | null;
     sku: string;
+    gtin?: string | null;
     size: number | null;
     unit: string | null;
     unitLabel: { en: string; bn: string } | null;
@@ -841,14 +849,18 @@ export const api = {
         setupDeliveryAreas?: boolean;
         wardCount?: number;
         freeWardCount?: number;
+        gs1BackfillProducts?: boolean;
       },
     ) =>
-      getJson<{ ok: boolean; company: CompanyDetails; wardsSeeded?: number }>(
-        "/api/v1/owner/company",
-        1,
-        { method: "PATCH", body: JSON.stringify(body) },
-        true,
-      ),
+      getJson<{
+        ok: boolean;
+        company: CompanyDetails;
+        wardsSeeded?: number;
+        gs1Assigned?: number;
+      }>("/api/v1/owner/company", 1, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }, true),
     branding: () =>
       getJson<{ ok: boolean; branding: ShopBranding }>(
         "/api/v1/owner/branding",
@@ -1583,6 +1595,7 @@ export const api = {
         soldAt: string | null;
         company: {
           name: string;
+          slug?: string;
           phone: string | null;
           logoUrl?: string | null;
           brandPrimary?: string | null;
@@ -1591,6 +1604,7 @@ export const api = {
           name: string;
           nameBn: string | null;
           sku: string;
+          gtin?: string | null;
           size: number | null;
           unit: string;
           unitLabel: { en: string; bn: string };
@@ -1608,6 +1622,44 @@ export const api = {
       };
     }>(
       `/api/v1/unit/${encodeURIComponent(companySlug)}/${encodeURIComponent(serialCode)}`,
+    ),
+  publicGs1Unit: (gtin: string, serialCode: string) =>
+    getJson<{
+      ok: boolean;
+      unit: {
+        serialNo: number;
+        serialCode: string;
+        status: string;
+        soldAt: string | null;
+        company: {
+          name: string;
+          slug?: string;
+          phone: string | null;
+          logoUrl?: string | null;
+          brandPrimary?: string | null;
+        };
+        product: {
+          name: string;
+          nameBn: string | null;
+          sku: string;
+          gtin?: string | null;
+          size: number | null;
+          unit: string;
+          unitLabel: { en: string; bn: string };
+          priceBdt: number;
+          description: string | null;
+          imageUrl: string | null;
+        };
+        batch: {
+          batchCode: string;
+          manufacturedAt: string;
+          expiresAt: string | null;
+          serialStart: number | null;
+          serialEnd: number | null;
+        };
+      };
+    }>(
+      `/api/v1/gs1/01/${encodeURIComponent(gtin)}/21/${encodeURIComponent(serialCode)}`,
     ),
   publicInvoice: (companySlug: string, invoiceCode: string) =>
     getJson<{ ok: boolean; invoice: SalesInvoice }>(

@@ -16,6 +16,7 @@ import {
   type ProductUnitTag,
   type TagTemplate,
 } from "../../lib/api";
+import { buildGs1DigitalLink, validateGtin } from "../../lib/gs1";
 import { makeShortSerialCode } from "../../lib/shortCodes";
 import { getStoredUser } from "../../lib/session";
 
@@ -75,6 +76,7 @@ export function OwnerTagsPage({ locale }: Props) {
     name: string;
     slug: string;
     phone: string | null;
+    gs1Enabled?: boolean;
   } | null>(null);
   const [form, setForm] = useState(emptyTpl);
   const [productId, setProductId] = useState("");
@@ -114,6 +116,7 @@ export function OwnerTagsPage({ locale }: Props) {
         name: companyRes.company.name,
         slug: companyRes.company.slug,
         phone: companyRes.company.phone ?? null,
+        gs1Enabled: Boolean(companyRes.company.gs1Enabled),
       });
     }
     const firstProd = prod.products.find((p) => p.isActive) ?? prod.products[0];
@@ -252,10 +255,23 @@ export function OwnerTagsPage({ locale }: Props) {
     const unitSerialCode = selectedProduct
       ? makeShortSerialCode(selectedProduct.sku, sampleSerial)
       : null;
+    const gtin =
+      selectedProduct.gtin && validateGtin(selectedProduct.gtin)
+        ? selectedProduct.gtin
+        : null;
+    const useGs1 =
+      Boolean(company?.gs1Enabled) && Boolean(gtin) && printMode === "units";
     const qrValue =
       tpl.showQr && company?.slug && selectedBatch
         ? printMode === "units" && unitSerialCode
-          ? `${window.location.origin}${window.location.pathname}#/unit/${company.slug}/${encodeURIComponent(unitSerialCode)}`
+          ? useGs1 && gtin
+            ? buildGs1DigitalLink({
+                origin: window.location.origin,
+                gtin,
+                serial: unitSerialCode,
+                lot: selectedBatch.batchCode,
+              })
+            : `${window.location.origin}${window.location.pathname}#/unit/${company.slug}/${encodeURIComponent(unitSerialCode)}`
           : `${window.location.origin}${window.location.pathname}#/tag/${company.slug}/${encodeURIComponent(selectedProduct.sku)}/${encodeURIComponent(selectedBatch.batchCode)}`
         : null;
 
@@ -266,6 +282,7 @@ export function OwnerTagsPage({ locale }: Props) {
         phone: tpl.showCompany ? (company?.phone ?? null) : null,
         productName,
         sku: tpl.showSku ? selectedProduct.sku : null,
+        gtin: useGs1 ? gtin : null,
         priceBdt: tpl.showPrice ? selectedProduct.priceBdt : null,
         description: tpl.showDescription ? description : null,
         batchCode: tpl.showBatch ? (selectedBatch?.batchCode ?? null) : null,
@@ -274,6 +291,7 @@ export function OwnerTagsPage({ locale }: Props) {
         manufacturedAt: tpl.showMfgDate && mfgDate ? mfgDate : null,
         expiresAt: tpl.showExpDate && expDate ? expDate : null,
         qrValue,
+        gs1Mode: useGs1,
       },
     };
   }, [
@@ -798,6 +816,9 @@ export function OwnerTagsPage({ locale }: Props) {
         <section className="panel-card tags-live-preview">
           <h2>{t.owner.previewTag}</h2>
           <p className="muted tiny">{t.owner.tagLiveHint}</p>
+          {liveTag?.fields.gs1Mode ? (
+            <p className="muted tiny">{t.owner.gs1TagQrHint}</p>
+          ) : null}
           {liveTag ? (
             <div
               className={
@@ -819,6 +840,9 @@ export function OwnerTagsPage({ locale }: Props) {
                 <p className="tag-name">{liveTag.fields.productName}</p>
                 {liveTag.fields.sku ? (
                   <p className="tag-row">SKU: {liveTag.fields.sku}</p>
+                ) : null}
+                {liveTag.fields.gtin ? (
+                  <p className="tag-row">GTIN: {liveTag.fields.gtin}</p>
                 ) : null}
                 {liveTag.fields.priceBdt != null ? (
                   <p className="tag-price">৳{liveTag.fields.priceBdt}</p>
@@ -992,6 +1016,11 @@ export function OwnerTagsPage({ locale }: Props) {
                   <p className="tag-name">{productName}</p>
                   {selectedTemplate?.showSku !== false && u.product?.sku ? (
                     <p className="tag-row">SKU: {u.product.sku}</p>
+                  ) : null}
+                  {u.gtin || u.product?.gtin ? (
+                    <p className="tag-row">
+                      GTIN: {u.gtin ?? u.product?.gtin}
+                    </p>
                   ) : null}
                   {selectedTemplate?.showPrice !== false &&
                   u.product?.priceBdt != null ? (

@@ -19,6 +19,7 @@ export function OwnerCompanyPage({ locale }: Props) {
   const [wardCount, setWardCount] = useState("15");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [gs1Note, setGs1Note] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -83,6 +84,7 @@ export function OwnerCompanyPage({ locale }: Props) {
     e.preventDefault();
     if (!company) return;
     setSaved(false);
+    setGs1Note(null);
     setError(null);
     try {
       const res = await api.owner.updateCompany({
@@ -98,9 +100,17 @@ export function OwnerCompanyPage({ locale }: Props) {
         tagline: company.tagline,
         description: company.description,
         locale: company.locale as "bn" | "en",
+        gs1CompanyPrefix: company.gs1CompanyPrefix ?? null,
+        gs1Enabled: Boolean(company.gs1Enabled),
+        gs1BackfillProducts: Boolean(company.gs1Enabled),
       });
       setCompany(res.company);
       setSaved(true);
+      if (res.gs1Assigned && res.gs1Assigned > 0) {
+        setGs1Note(
+          t.owner.gs1BackfillOk.replace("{count}", String(res.gs1Assigned)),
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     }
@@ -316,11 +326,47 @@ export function OwnerCompanyPage({ locale }: Props) {
             }
           />
         </label>
+
+        <fieldset className="full owner-gs1-fieldset">
+          <legend>{t.owner.gs1Title}</legend>
+          <p className="muted tiny">{t.owner.gs1Hint}</p>
+          <label>
+            {t.owner.gs1CompanyPrefix}
+            <input
+              value={company.gs1CompanyPrefix ?? ""}
+              placeholder="8801234"
+              inputMode="numeric"
+              disabled={!canWrite}
+              onChange={(e) =>
+                setCompany({
+                  ...company,
+                  gs1CompanyPrefix: e.target.value.replace(/\D/g, "").slice(0, 10),
+                })
+              }
+            />
+          </label>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={Boolean(company.gs1Enabled)}
+              disabled={!canWrite || !(company.gs1CompanyPrefix ?? "").trim()}
+              onChange={(e) =>
+                setCompany({ ...company, gs1Enabled: e.target.checked })
+              }
+            />
+            <span>{t.owner.gs1Enabled}</span>
+          </label>
+          {company.gs1Enabled ? (
+            <p className="muted tiny">{t.owner.gs1EnabledHint}</p>
+          ) : null}
+        </fieldset>
+
         <div className="form-actions">
           <button className="btn primary" type="submit" disabled={pending || !canWrite}>
             {t.common.save}
           </button>
           {saved ? <span className="ok">{t.owner.saved}</span> : null}
+          {gs1Note ? <span className="ok">{gs1Note}</span> : null}
           {error ? <span className="error">{error}</span> : null}
         </div>
       </form>

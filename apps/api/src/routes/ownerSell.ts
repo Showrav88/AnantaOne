@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
+import { buildUnitQrPayload } from "../lib/gs1.js";
 import {
-  buildUnitQrUrl,
   createBatchUnits,
   serializeProductUnit,
   voidUnusedBatchUnits,
@@ -415,7 +415,7 @@ ownerSellRouter.get(
 
     const company = await prisma.company.findUniqueOrThrow({
       where: { id: tid(req) },
-      select: { slug: true },
+      select: { slug: true, gs1Enabled: true },
     });
     const base = publicBaseUrl(req);
     res.json({
@@ -429,15 +429,24 @@ ownerSellRouter.get(
         serialEnd: batch.serialEnd,
         manufacturedAt: batch.manufacturedAt,
         expiresAt: batch.expiresAt,
+        gs1Enabled: company.gs1Enabled,
       },
-      units: units.map((u) => ({
-        ...serializeProductUnit(u),
-        qrUrl: buildUnitQrUrl({
+      units: units.map((u) => {
+        const gs1 = buildUnitQrPayload({
           publicBaseUrl: base,
           companySlug: company.slug,
           serialCode: u.serialCode,
-        }),
-      })),
+          gtin: u.product.gtin,
+          lot: u.batch.batchCode,
+          gs1Enabled: company.gs1Enabled,
+        });
+        return {
+          ...serializeProductUnit(u),
+          qrUrl: gs1.qrUrl,
+          gs1ElementString: gs1.gs1ElementString,
+          gtin: gs1.gtin ?? u.product.gtin ?? null,
+        };
+      }),
     });
   },
 );
