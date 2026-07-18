@@ -345,21 +345,6 @@ export function OwnerProductsPage({ locale }: Props) {
               {editingId ? t.owner.skuShortExplain : t.owner.skuAutoHint}
             </span>
           </label>
-          {editingId ? (
-            <label>
-              {t.owner.fieldGtin}
-              <input
-                value={
-                  products.find((p) => p.id === editingId)?.gtin ??
-                  t.owner.gtinPending
-                }
-                readOnly
-              />
-              <span className="muted tiny">{t.owner.gtinHint}</span>
-            </label>
-          ) : (
-            <p className="muted tiny full">{t.owner.gtinAutoOnCreate}</p>
-          )}
           <label>
             {t.owner.fieldCategory}
             <select
@@ -580,7 +565,6 @@ export function OwnerProductsPage({ locale }: Props) {
               <th>{t.owner.uploadProductImage}</th>
               <th>{t.owner.fieldProductName}</th>
               <th>SKU</th>
-              <th>{t.owner.fieldGtin}</th>
               <th>{t.owner.fieldCategory}</th>
               <th>{t.owner.fieldSize}</th>
               <th>{t.owner.fieldPrice}</th>
@@ -625,7 +609,6 @@ export function OwnerProductsPage({ locale }: Props) {
                   {locale === "bn" && p.nameBn ? p.nameBn : p.name}
                 </td>
                 <td data-label="SKU">{p.sku}</td>
-                <td data-label={t.owner.fieldGtin}>{p.gtin ?? "—"}</td>
                 <td data-label={t.owner.fieldCategory}>{p.category}</td>
                 <td data-label={t.owner.fieldSize}>{formatSizeUnit(p)}</td>
                 <td data-label={t.owner.fieldPrice}>৳{p.priceBdt}</td>

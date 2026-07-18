@@ -1,6 +1,5 @@
 import type { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../db.js";
-import { buildUnitQrPayload } from "./gs1.js";
 import { makeShortSerialCode } from "./shortCodes.js";
 
 type TxClient = Prisma.TransactionClient;
@@ -19,11 +18,8 @@ export function buildUnitQrUrl(opts: {
   publicBaseUrl: string;
   companySlug: string;
   serialCode: string;
-  gtin?: string | null;
-  lot?: string | null;
-  gs1Enabled?: boolean;
 }) {
-  return buildUnitQrPayload(opts).qrUrl;
+  return `${opts.publicBaseUrl.replace(/\/$/, "")}/#/unit/${opts.companySlug}/${encodeURIComponent(opts.serialCode)}`;
 }
 
 export async function nextSerialStart(
@@ -192,7 +188,6 @@ export function serializeProductUnit(unit: {
     name: string;
     nameBn: string | null;
     sku: string;
-    gtin?: string | null;
     size?: { toString(): string } | number | string | null;
     priceBdt?: { toString(): string } | number | string;
     unit?: { code: string; nameEn: string; nameBn: string } | null;
@@ -218,7 +213,6 @@ export function serializeProductUnit(unit: {
           name: unit.product.name,
           nameBn: unit.product.nameBn,
           sku: unit.product.sku,
-          gtin: unit.product.gtin ?? null,
           size:
             unit.product.size == null ? null : Number(unit.product.size),
           priceBdt:

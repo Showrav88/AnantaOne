@@ -20,7 +20,6 @@ type PublicUnit = {
     name: string;
     nameBn: string | null;
     sku: string;
-    gtin?: string | null;
     size: number | null;
     unit: string;
     unitLabel: { en: string; bn: string };
@@ -108,9 +107,6 @@ export function PublicUnitPage({ locale, onLocale }: Props) {
               <p className="muted">{unit.product.nameBn}</p>
             ) : null}
             <p className="muted">SKU {unit.product.sku}</p>
-            {unit.product.gtin ? (
-              <p className="muted">GTIN {unit.product.gtin}</p>
-            ) : null}
             {sizeUnit ? <p className="muted">{sizeUnit}</p> : null}
             <p className="wallet-amount">৳{unit.product.priceBdt}</p>
             {unit.product.description ? (

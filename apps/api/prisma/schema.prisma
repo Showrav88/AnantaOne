@@ -117,11 +117,6 @@ model Company {
   brandFont         String?  @default("source-sans")
   siteHeadline      String?
   siteSubhead       String?
-  /// GS1 Company Prefix from GS1 membership (6–10 digits). Enables GTIN allocation.
-  gs1CompanyPrefix  String?
-  gs1Enabled        Boolean  @default(false)
-  /// Next item reference to allocate into GTIN-13 (per company prefix capacity).
-  gs1NextItemRef    Int      @default(1)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -376,10 +371,6 @@ model Product {
   name        String
   nameBn      String?
   sku         String
-  /// GTIN-13 (or stored 13-digit retail GTIN) when company GS1 is enabled.
-  gtin        String?  @unique
-  /// Item reference digits allocated under the company GS1 prefix.
-  gs1ItemReference String?
   category    String   @default("water")
   unitId      String
   /// How much one item is (e.g. 5 with unit Liter = 5L bottle).
