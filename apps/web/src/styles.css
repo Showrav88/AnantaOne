@@ -2851,9 +2851,19 @@ html[data-theme="light"] .shop-stock-chip.oos {
   color: #f3faf6;
 }
 
-.shop-hero-copy .btn.ghost {
+/* Hero always sits on a dark veil — keep CTAs light in every theme */
+.shop-hero-copy .btn.ghost,
+.shop-hero-copy .shop-cta.btn.ghost {
   color: #fff;
-  border-color: rgba(255, 255, 255, 0.5);
+  border-color: rgba(255, 255, 255, 0.65);
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.shop-hero-copy .btn.ghost:hover,
+.shop-hero-copy .shop-cta.btn.ghost:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .shop-logo-hero {
@@ -2914,6 +2924,19 @@ html[data-theme="light"] .shop-stock-chip.oos {
 
 .shop-page .btn.ghost:hover {
   border-color: color-mix(in srgb, var(--shop-primary, #0f6b4c) 50%, var(--shop-fg));
+}
+
+/* Re-assert hero cart contrast after theme ghost styles (light mode uses dark --shop-fg) */
+.shop-page .shop-hero-copy .shop-cta.btn.ghost {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.65);
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.shop-page .shop-hero-copy .shop-cta.btn.ghost:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.45);
 }
 
 @keyframes shop-rise {
