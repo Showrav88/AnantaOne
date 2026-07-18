@@ -6,17 +6,23 @@ import {
   useTransition,
   type FormEvent,
 } from "react";
+import { useSearchParams } from "react-router-dom";
 import QRCode from "qrcode";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import {
   api,
   type Product,
   type ProductionBatch,
+  type ProductUnitTag,
   type TagTemplate,
 } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
 
 type Props = { locale: LocaleCode };
+
+type PrintMode = "sample" | "units";
+
+type PrintUnitRow = ProductUnitTag & { qrDataUrl: string };
 
 const emptyTpl = {
   name: "",
@@ -57,6 +63,7 @@ function formatTagDate(value: string) {
 export function OwnerTagsPage({ locale }: Props) {
   const t = getMessages(locale);
   const user = getStoredUser();
+  const [searchParams, setSearchParams] = useSearchParams();
   const canWrite =
     user?.role.code === "OWNER" || user?.role.code === "MANAGER";
 
@@ -77,12 +84,19 @@ export function OwnerTagsPage({ locale }: Props) {
   const [printWidth, setPrintWidth] = useState("50");
   const [printHeight, setPrintHeight] = useState("30");
   const [saveDates, setSaveDates] = useState(true);
+  const [printMode, setPrintMode] = useState<PrintMode>("units");
+  const [serialFrom, setSerialFrom] = useState("");
+  const [serialTo, setSerialTo] = useState("");
+  const [printUnits, setPrintUnits] = useState<PrintUnitRow[]>([]);
+  const [printingUnits, setPrintingUnits] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savingDates, setSavingDates] = useState(false);
   const [pending, startTransition] = useTransition();
   const lastProductId = useRef("");
+  const lastBatchId = useRef("");
+  const bootstrappedQuery = useRef(false);
 
   async function load() {
     const [tpl, prod, batchRes, companyRes] = await Promise.all([
@@ -144,16 +158,55 @@ export function OwnerTagsPage({ locale }: Props) {
     else setBatchId("");
   }, [productId, productBatches, batchId]);
 
-  // MFG defaults from product create date when product changes; EXP blank until set.
+  // Deep-link from Batches: ?batchId=&mode=units
   useEffect(() => {
-    if (!selectedProduct?.createdAt) {
-      setMfgDate("");
-      setExpDate("");
+    if (bootstrappedQuery.current || !batches.length) return;
+    const qBatch = searchParams.get("batchId");
+    const qMode = searchParams.get("mode");
+    if (!qBatch) {
+      bootstrappedQuery.current = true;
       return;
     }
-    setMfgDate(toDateInput(selectedProduct.createdAt));
-    setExpDate("");
-  }, [productId, selectedProduct?.createdAt]);
+    const found = batches.find((b) => b.id === qBatch);
+    if (found) {
+      setProductId(found.productId);
+      setBatchId(found.id);
+      if (qMode === "units" || qMode === "sample") setPrintMode(qMode);
+      bootstrappedQuery.current = true;
+    }
+  }, [batches, searchParams]);
+
+  // Live sync MFG/EXP + serial range from selected batch (real-time reflection).
+  useEffect(() => {
+    if (!selectedBatch) {
+      if (selectedProduct?.createdAt) {
+        setMfgDate(toDateInput(selectedProduct.createdAt));
+      } else {
+        setMfgDate("");
+      }
+      setExpDate("");
+      setSerialFrom("");
+      setSerialTo("");
+      lastBatchId.current = "";
+      return;
+    }
+    const batchChanged = lastBatchId.current !== selectedBatch.id;
+    lastBatchId.current = selectedBatch.id;
+    setMfgDate(toDateInput(selectedBatch.manufacturedAt));
+    setExpDate(
+      selectedBatch.expiresAt ? toDateInput(selectedBatch.expiresAt) : "",
+    );
+    if (batchChanged) {
+      if (selectedBatch.serialStart != null && selectedBatch.serialEnd != null) {
+        setSerialFrom(String(selectedBatch.serialStart));
+        setSerialTo(String(selectedBatch.serialEnd));
+      } else {
+        setSerialFrom("");
+        setSerialTo("");
+      }
+      setPrintUnits([]);
+    }
+  }, [selectedBatch, selectedProduct?.createdAt]);
 
   useEffect(() => {
     const tpl = templates.find((x) => x.id === templateId);
@@ -162,6 +215,13 @@ export function OwnerTagsPage({ locale }: Props) {
       setPrintHeight(String(tpl.heightMm));
     }
   }, [templateId, templates]);
+
+  const serialCount = useMemo(() => {
+    const from = Number(serialFrom);
+    const to = Number(serialTo);
+    if (!(from > 0) || !(to >= from)) return 0;
+    return to - from + 1;
+  }, [serialFrom, serialTo]);
 
   const liveTag = useMemo(() => {
     if (!selectedProduct) return null;
@@ -187,9 +247,16 @@ export function OwnerTagsPage({ locale }: Props) {
       selectedProduct.description ||
       selectedProduct.nameBn ||
       selectedProduct.name;
+    const sampleSerial = Number(serialFrom) || selectedBatch?.serialStart || 1;
+    const unitSerialCode =
+      selectedBatch && selectedProduct
+        ? `${selectedProduct.sku}-${selectedBatch.batchCode}-${String(sampleSerial).padStart(5, "0")}`
+        : null;
     const qrValue =
       tpl.showQr && company?.slug && selectedBatch
-        ? `${window.location.origin}${window.location.pathname}#/tag/${company.slug}/${encodeURIComponent(selectedProduct.sku)}/${encodeURIComponent(selectedBatch.batchCode)}`
+        ? printMode === "units" && unitSerialCode
+          ? `${window.location.origin}${window.location.pathname}#/unit/${company.slug}/${encodeURIComponent(unitSerialCode)}`
+          : `${window.location.origin}${window.location.pathname}#/tag/${company.slug}/${encodeURIComponent(selectedProduct.sku)}/${encodeURIComponent(selectedBatch.batchCode)}`
         : null;
 
     return {
@@ -202,6 +269,8 @@ export function OwnerTagsPage({ locale }: Props) {
         priceBdt: tpl.showPrice ? selectedProduct.priceBdt : null,
         description: tpl.showDescription ? description : null,
         batchCode: tpl.showBatch ? (selectedBatch?.batchCode ?? null) : null,
+        serialNo: printMode === "units" ? sampleSerial : null,
+        serialCode: printMode === "units" ? unitSerialCode : null,
         manufacturedAt: tpl.showMfgDate && mfgDate ? mfgDate : null,
         expiresAt: tpl.showExpDate && expDate ? expDate : null,
         qrValue,
@@ -217,6 +286,8 @@ export function OwnerTagsPage({ locale }: Props) {
     mfgDate,
     expDate,
     locale,
+    printMode,
+    serialFrom,
   ]);
 
   // Live QR for the current tag fields.
@@ -305,22 +376,91 @@ export function OwnerTagsPage({ locale }: Props) {
   }
 
   const mmToPx = (mm: number) => Math.round((mm / 25.4) * 96);
-  const canPrint = Boolean(liveTag && mfgDate && expDate && productId && batchId);
+  const canPrintSample = Boolean(
+    liveTag && mfgDate && expDate && productId && batchId,
+  );
+  const canPrintUnits = Boolean(
+    canPrintSample &&
+      selectedBatch?.serialStart != null &&
+      serialCount > 0 &&
+      serialCount <= 2000,
+  );
+
+  async function printUnitRange() {
+    if (!batchId || !canPrintUnits) return;
+    const from = Number(serialFrom);
+    const to = Number(serialTo);
+    if (!(from > 0) || !(to >= from)) {
+      setError(t.owner.unitPrintRangeInvalid);
+      return;
+    }
+    setError(null);
+    setOkMsg(null);
+    setPrintingUnits(true);
+    setPrintUnits([]);
+    try {
+      if (saveDates && canWrite) {
+        const ok = await persistDatesToBatch();
+        if (!ok) return;
+      }
+      const chunk = 100;
+      const collected: PrintUnitRow[] = [];
+      let offset = 0;
+      let total = Infinity;
+      while (offset < total && collected.length < to - from + 1) {
+        const res = await api.owner.batchUnits(batchId, {
+          serialFrom: from,
+          serialTo: to,
+          limit: chunk,
+          offset,
+        });
+        total = res.meta.total;
+        if (!res.units.length) break;
+        for (const u of res.units) {
+          const qrDataUrl = await QRCode.toDataURL(u.qrUrl, {
+            margin: 0,
+            width: 128,
+            errorCorrectionLevel: "M",
+          });
+          collected.push({ ...u, qrDataUrl });
+        }
+        offset += res.units.length;
+        if (res.units.length < chunk) break;
+      }
+      if (!collected.length) {
+        setError(t.owner.unitTagsEmpty);
+        return;
+      }
+      setPrintUnits(collected);
+      setOkMsg(
+        t.owner.unitPrintReady.replace("{count}", String(collected.length)),
+      );
+      // Let React paint the print sheet, then open the dialog.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => window.print());
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setPrintingUnits(false);
+    }
+  }
 
   return (
     <div className="owner-page tags-page">
-      <header className="owner-header">
+      <header className="owner-header no-print">
         <div>
           <p className="eyebrow">{t.owner.navTags}</p>
           <h1>{t.owner.tagsTitle}</h1>
           <p className="muted">{t.owner.tagsHint}</p>
+          <p className="muted tiny">{t.owner.unitPrintHint}</p>
         </div>
       </header>
 
       {error ? <p className="error-banner">{error}</p> : null}
       {okMsg ? <p className="ok-banner">{okMsg}</p> : null}
 
-      <div className="tags-layout">
+      <div className="tags-layout no-print">
         <section className="panel-card tags-controls">
           <h2>{t.owner.printPreview}</h2>
           <p className="muted tiny">{t.owner.tagDateHint}</p>
@@ -330,6 +470,23 @@ export function OwnerTagsPage({ locale }: Props) {
             </p>
           ) : null}
           <div className="owner-form compact">
+            <label className="full">
+              {t.owner.tagPrintMode}
+              <select
+                value={printMode}
+                onChange={(e) => {
+                  setPrintMode(e.target.value as PrintMode);
+                  setPrintUnits([]);
+                  const next = new URLSearchParams(searchParams);
+                  next.set("mode", e.target.value);
+                  if (batchId) next.set("batchId", batchId);
+                  setSearchParams(next, { replace: true });
+                }}
+              >
+                <option value="units">{t.owner.tagPrintModeUnits}</option>
+                <option value="sample">{t.owner.tagPrintModeSample}</option>
+              </select>
+            </label>
             <label>
               {t.owner.fieldTemplate}
               <select
@@ -361,7 +518,15 @@ export function OwnerTagsPage({ locale }: Props) {
               {t.owner.fieldBatch}
               <select
                 value={batchId}
-                onChange={(e) => setBatchId(e.target.value)}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setBatchId(id);
+                  const next = new URLSearchParams(searchParams);
+                  if (id) next.set("batchId", id);
+                  else next.delete("batchId");
+                  next.set("mode", printMode);
+                  setSearchParams(next, { replace: true });
+                }}
               >
                 {productBatches.length === 0 ? (
                   <option value="">{t.owner.noBatch}</option>
@@ -369,6 +534,9 @@ export function OwnerTagsPage({ locale }: Props) {
                   productBatches.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.batchCode}
+                      {b.serialStart != null && b.serialEnd != null
+                        ? ` · #${b.serialStart}–${b.serialEnd}`
+                        : ""}
                       {b.expiresAt
                         ? ` · exp ${new Date(b.expiresAt).toLocaleDateString()}`
                         : ""}
@@ -377,6 +545,79 @@ export function OwnerTagsPage({ locale }: Props) {
                 )}
               </select>
             </label>
+            {selectedBatch ? (
+              <p className="muted tiny full">
+                {t.owner.batchSerialRange}:{" "}
+                {selectedBatch.serialStart != null &&
+                selectedBatch.serialEnd != null
+                  ? `#${selectedBatch.serialStart}–${selectedBatch.serialEnd}`
+                  : t.owner.unitTagsEmpty}{" "}
+                · MFG {formatTagDate(toDateInput(selectedBatch.manufacturedAt))}
+                {selectedBatch.expiresAt
+                  ? ` · EXP ${formatTagDate(toDateInput(selectedBatch.expiresAt))}`
+                  : ""}
+              </p>
+            ) : null}
+            {printMode === "units" ? (
+              <>
+                <label>
+                  {t.owner.unitPrintFrom}
+                  <input
+                    type="number"
+                    min={1}
+                    value={serialFrom}
+                    onChange={(e) => setSerialFrom(e.target.value)}
+                  />
+                </label>
+                <label>
+                  {t.owner.unitPrintTo}
+                  <input
+                    type="number"
+                    min={1}
+                    value={serialTo}
+                    onChange={(e) => setSerialTo(e.target.value)}
+                  />
+                </label>
+                <p className="muted tiny full">
+                  {t.owner.unitPrintCount}: {serialCount || 0}
+                  {serialCount > 300
+                    ? ` · ${t.owner.unitPrintLargeHint}`
+                    : ""}
+                </p>
+                <div className="media-actions full">
+                  {(
+                    [
+                      [50, t.owner.unitPrintPreset50],
+                      [100, t.owner.unitPrintPreset100],
+                      [300, t.owner.unitPrintPreset300],
+                    ] as const
+                  ).map(([n, label]) => (
+                    <button
+                      key={n}
+                      type="button"
+                      className="btn ghost compact"
+                      disabled={!selectedBatch?.serialStart}
+                      onClick={() => {
+                        const start =
+                          selectedBatch?.serialStart ??
+                          (Number(serialFrom) || 1);
+                        setSerialFrom(String(start));
+                        setSerialTo(
+                          String(
+                            Math.min(
+                              start + n - 1,
+                              selectedBatch?.serialEnd ?? start + n - 1,
+                            ),
+                          ),
+                        );
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
             <label>
               {t.owner.fieldMfgDate}
               <input
@@ -481,22 +722,38 @@ export function OwnerTagsPage({ locale }: Props) {
                 {savingDates ? "…" : t.owner.saveDatesOnly}
               </button>
             ) : null}
-            <button
-              type="button"
-              className="cta"
-              onClick={() => {
-                void (async () => {
-                  if (saveDates && canWrite) {
-                    const ok = await persistDatesToBatch();
-                    if (!ok) return;
-                  }
-                  window.print();
-                })();
-              }}
-              disabled={!canPrint || savingDates}
-            >
-              {t.owner.printTag}
-            </button>
+            {printMode === "units" ? (
+              <button
+                type="button"
+                className="cta"
+                onClick={() => void printUnitRange()}
+                disabled={!canPrintUnits || savingDates || printingUnits}
+              >
+                {printingUnits
+                  ? "…"
+                  : t.owner.printUnitRange.replace(
+                      "{count}",
+                      String(serialCount || 0),
+                    )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="cta"
+                onClick={() => {
+                  void (async () => {
+                    if (saveDates && canWrite) {
+                      const ok = await persistDatesToBatch();
+                      if (!ok) return;
+                    }
+                    window.print();
+                  })();
+                }}
+                disabled={!canPrintSample || savingDates}
+              >
+                {t.owner.printTag}
+              </button>
+            )}
           </div>
         </section>
 
@@ -504,7 +761,13 @@ export function OwnerTagsPage({ locale }: Props) {
           <h2>{t.owner.previewTag}</h2>
           <p className="muted tiny">{t.owner.tagLiveHint}</p>
           {liveTag ? (
-            <div className="tag-print-area">
+            <div
+              className={
+                printMode === "units"
+                  ? "tag-print-area sample-only"
+                  : "tag-print-area"
+              }
+            >
               <div
                 className="product-tag"
                 style={{
@@ -530,6 +793,14 @@ export function OwnerTagsPage({ locale }: Props) {
                     Batch: {liveTag.fields.batchCode}
                   </p>
                 ) : null}
+                {liveTag.fields.serialNo != null ? (
+                  <p className="tag-row tag-serial">
+                    #{liveTag.fields.serialNo}
+                    {liveTag.fields.serialCode
+                      ? ` · ${liveTag.fields.serialCode}`
+                      : ""}
+                  </p>
+                ) : null}
                 {selectedTemplate?.showMfgDate !== false ? (
                   <p className="tag-row">
                     MFG: {formatTagDate(mfgDate)}
@@ -551,7 +822,7 @@ export function OwnerTagsPage({ locale }: Props) {
         </section>
 
         {canWrite ? (
-          <section className="panel-card tags-template-form">
+          <section className="panel-card tags-template-form no-print">
             <h2>{t.owner.tagTemplateForm}</h2>
             <form className="owner-form compact" onSubmit={onCreateTemplate}>
               <label>
@@ -633,8 +904,8 @@ export function OwnerTagsPage({ locale }: Props) {
         ) : null}
       </div>
 
-      <h2 className="section-title">{t.owner.savedTemplates}</h2>
-      <ul className="plain-list">
+      <h2 className="section-title no-print">{t.owner.savedTemplates}</h2>
+      <ul className="plain-list no-print">
         {templates.map((tpl) => (
           <li key={tpl.id}>
             <span>
@@ -657,6 +928,58 @@ export function OwnerTagsPage({ locale }: Props) {
           </li>
         ))}
       </ul>
+
+      {printUnits.length > 0 ? (
+        <section className="unit-range-print-sheet" aria-hidden>
+          <div className="unit-range-print-grid">
+            {printUnits.map((u) => {
+              const productName =
+                locale === "bn" && u.product?.nameBn
+                  ? u.product.nameBn
+                  : (u.product?.name ?? liveTag?.fields.productName ?? "—");
+              const widthMm = Number(printWidth) || 50;
+              const heightMm = Number(printHeight) || 30;
+              return (
+                <article
+                  key={u.id}
+                  className="product-tag unit-print-tag"
+                  style={{
+                    width: `${widthMm}mm`,
+                    minHeight: `${heightMm}mm`,
+                  }}
+                >
+                  {selectedTemplate?.showCompany !== false && company?.name ? (
+                    <p className="tag-brand">{company.name}</p>
+                  ) : null}
+                  <p className="tag-name">{productName}</p>
+                  {selectedTemplate?.showSku !== false && u.product?.sku ? (
+                    <p className="tag-row">SKU: {u.product.sku}</p>
+                  ) : null}
+                  {selectedTemplate?.showPrice !== false &&
+                  u.product?.priceBdt != null ? (
+                    <p className="tag-price">৳{u.product.priceBdt}</p>
+                  ) : null}
+                  {selectedTemplate?.showBatch !== false ? (
+                    <p className="tag-row">
+                      Batch: {u.batch?.batchCode ?? selectedBatch?.batchCode}
+                    </p>
+                  ) : null}
+                  <p className="tag-row tag-serial">
+                    #{u.serialNo} · {u.serialCode}
+                  </p>
+                  {selectedTemplate?.showMfgDate !== false ? (
+                    <p className="tag-row">MFG: {formatTagDate(mfgDate)}</p>
+                  ) : null}
+                  {selectedTemplate?.showExpDate !== false ? (
+                    <p className="tag-row">EXP: {formatTagDate(expDate)}</p>
+                  ) : null}
+                  <img className="tag-qr" src={u.qrDataUrl} alt={u.serialCode} />
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

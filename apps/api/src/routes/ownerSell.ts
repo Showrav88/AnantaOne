@@ -357,25 +357,57 @@ ownerSellRouter.get(
   async (req, res) => {
     const batch = await prisma.productionBatch.findFirst({
       where: { id: String(req.params.id), tenantId: tid(req) },
+      include: {
+        product: true,
+        _count: { select: { units: true } },
+      },
     });
     if (!batch) {
       res.status(404).json({ ok: false, message: "Batch not found" });
       return;
     }
     const status = req.query.status ? String(req.query.status) : undefined;
-    const units = await prisma.productUnit.findMany({
-      where: {
-        tenantId: tid(req),
-        batchId: batch.id,
-        ...(status ? { status } : {}),
-      },
-      include: {
-        product: { include: { unit: true } },
-        batch: true,
-      },
-      orderBy: { serialNo: "asc" },
-      take: Math.min(Number(req.query.limit) || 500, 2000),
-    });
+    const serialFrom = req.query.serialFrom
+      ? Number(req.query.serialFrom)
+      : undefined;
+    const serialTo = req.query.serialTo
+      ? Number(req.query.serialTo)
+      : undefined;
+    const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 300);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+
+    const where = {
+      tenantId: tid(req),
+      batchId: batch.id,
+      ...(status ? { status } : {}),
+      ...(serialFrom != null || serialTo != null
+        ? {
+            serialNo: {
+              ...(serialFrom != null && Number.isFinite(serialFrom)
+                ? { gte: serialFrom }
+                : {}),
+              ...(serialTo != null && Number.isFinite(serialTo)
+                ? { lte: serialTo }
+                : {}),
+            },
+          }
+        : {}),
+    };
+
+    const [total, units] = await Promise.all([
+      prisma.productUnit.count({ where }),
+      prisma.productUnit.findMany({
+        where,
+        include: {
+          product: { include: { unit: true } },
+          batch: true,
+        },
+        orderBy: { serialNo: "asc" },
+        skip: offset,
+        take: limit,
+      }),
+    ]);
+
     const company = await prisma.company.findUniqueOrThrow({
       where: { id: tid(req) },
       select: { slug: true },
@@ -384,6 +416,15 @@ ownerSellRouter.get(
     res.json({
       ok: true,
       batch: serializeBatch(batch),
+      meta: {
+        total,
+        offset,
+        limit,
+        serialStart: batch.serialStart,
+        serialEnd: batch.serialEnd,
+        manufacturedAt: batch.manufacturedAt,
+        expiresAt: batch.expiresAt,
+      },
       units: units.map((u) => ({
         ...serializeProductUnit(u),
         qrUrl: buildUnitQrUrl({

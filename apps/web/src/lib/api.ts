@@ -1424,14 +1424,35 @@ export const api = {
         { method: "POST", body: JSON.stringify({ reason }) },
         true,
       ),
-    batchUnits: (id: string, opts?: { status?: string; limit?: number }) => {
+    batchUnits: (
+      id: string,
+      opts?: {
+        status?: string;
+        limit?: number;
+        offset?: number;
+        serialFrom?: number;
+        serialTo?: number;
+      },
+    ) => {
       const q = new URLSearchParams();
       if (opts?.status) q.set("status", opts.status);
       if (opts?.limit) q.set("limit", String(opts.limit));
+      if (opts?.offset != null) q.set("offset", String(opts.offset));
+      if (opts?.serialFrom != null) q.set("serialFrom", String(opts.serialFrom));
+      if (opts?.serialTo != null) q.set("serialTo", String(opts.serialTo));
       const qs = q.toString();
       return getJson<{
         ok: boolean;
         batch: ProductionBatch;
+        meta: {
+          total: number;
+          offset: number;
+          limit: number;
+          serialStart: number | null;
+          serialEnd: number | null;
+          manufacturedAt: string;
+          expiresAt: string | null;
+        };
         units: ProductUnitTag[];
       }>(
         `/api/v1/owner/batches/${id}/units${qs ? `?${qs}` : ""}`,

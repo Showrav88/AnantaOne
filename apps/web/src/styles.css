@@ -2559,6 +2559,35 @@ textarea {
   text-decoration: none;
 }
 
+.unit-range-print-sheet {
+  display: none;
+}
+
+.unit-range-print-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.unit-print-tag {
+  break-after: page;
+  page-break-after: always;
+  box-sizing: border-box;
+  border: 1px solid #222;
+  padding: 2mm;
+  color: #111;
+  background: #fff;
+}
+
+.unit-print-tag:last-child {
+  break-after: auto;
+  page-break-after: auto;
+}
+
+.tag-serial {
+  font-weight: 700;
+}
+
 @media print {
   html,
   body {
@@ -2571,21 +2600,30 @@ textarea {
   }
   .invoice-sheet,
   .invoice-sheet *,
-  .tag-print-area,
-  .tag-print-area *,
+  .tag-print-area:not(.sample-only),
+  .tag-print-area:not(.sample-only) *,
   .unit-tags-print-area,
-  .unit-tags-print-area * {
+  .unit-tags-print-area *,
+  .unit-range-print-sheet,
+  .unit-range-print-sheet * {
     visibility: visible;
   }
   .invoice-sheet,
-  .tag-print-area,
-  .unit-tags-print-area {
+  .tag-print-area:not(.sample-only),
+  .unit-tags-print-area,
+  .unit-range-print-sheet {
     position: absolute;
     left: 0;
     top: 0;
     margin: 0;
     border: 0;
     width: 100%;
+  }
+  .unit-range-print-sheet {
+    display: block;
+  }
+  .sample-only {
+    display: none !important;
   }
   .no-print {
     display: none !important;
