@@ -621,7 +621,8 @@ export function buildTagPayload(opts: {
   };
   publicBaseUrl: string;
 }) {
-  const qrValue = `${opts.publicBaseUrl.replace(/\/$/, "")}/#/tag/${opts.company.slug}/${encodeURIComponent(opts.product.sku)}/${encodeURIComponent(opts.batch.batchCode)}`;
+  // Short tag payload (not a URL): SKU/BATCH e.g. MW001/B01
+  const qrValue = `${opts.product.sku}/${opts.batch.batchCode}`;
   const description =
     opts.template.tagDescription?.trim() ||
     opts.product.description ||

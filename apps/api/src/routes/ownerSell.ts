@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import {
-  buildUnitQrUrl,
+  buildUnitQrPayload,
   createBatchUnits,
   serializeProductUnit,
   voidUnusedBatchUnits,
@@ -423,11 +423,6 @@ ownerSellRouter.get(
       }),
     ]);
 
-    const company = await prisma.company.findUniqueOrThrow({
-      where: { id: tid(req) },
-      select: { slug: true },
-    });
-    const base = publicBaseUrl(req);
     res.json({
       ok: true,
       batch: serializeBatch(batch),
@@ -442,11 +437,8 @@ ownerSellRouter.get(
       },
       units: units.map((u) => ({
         ...serializeProductUnit(u),
-        qrUrl: buildUnitQrUrl({
-          publicBaseUrl: base,
-          companySlug: company.slug,
-          serialCode: u.serialCode,
-        }),
+        /** Short unit code in the QR (not a URL), e.g. MW001000001 */
+        qrUrl: buildUnitQrPayload({ serialCode: u.serialCode }),
       })),
     });
   },
