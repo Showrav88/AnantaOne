@@ -47,6 +47,19 @@ model Company {
   address     String?
   tagline     String?
   description String?
+  /// Public shop branding (Cloudinary URLs + theme).
+  logoUrl           String?
+  logoPublicId      String?
+  heroImageUrl      String?
+  heroImagePublicId String?
+  heroVideoUrl      String?
+  heroVideoPublicId String?
+  brandPrimary      String?  @default("#0f6b4c")
+  brandAccent       String?  @default("#f42a41")
+  brandBg           String?  @default("#06281f")
+  brandFont         String?  @default("source-sans")
+  siteHeadline      String?
+  siteSubhead       String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -64,6 +77,32 @@ model Company {
   productionBatches  ProductionBatch[]
   salesOrders        SalesOrder[]
   tagTemplates       TagTemplate[]
+  mediaAssets        MediaAsset[]
+}
+
+/// Tenant media library — images/videos in Cloudinary folder anantaone/{slug}/...
+model MediaAsset {
+  id           String   @id @default(cuid())
+  tenantId     String
+  kind         String // IMAGE | VIDEO
+  url          String
+  publicId     String
+  folder       String
+  format       String?
+  bytes        Int?
+  width        Int?
+  height       Int?
+  durationSec  Float?
+  originalName String?
+  label        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company Company @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, publicId])
+  @@index([tenantId])
+  @@index([tenantId, kind])
 }
 
 model Branch {
@@ -156,6 +195,8 @@ model Product {
   stockQty    Decimal  @default(0) @db.Decimal(12, 2)
   minStock    Decimal  @default(0) @db.Decimal(12, 2)
   description String?
+  imageUrl      String?
+  imagePublicId String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

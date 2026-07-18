@@ -112,12 +112,79 @@ v1Router.get("/products", async (_req, res) => {
         stockQty: Number(p.stockQty),
         minStock: Number(p.minStock),
         description: p.description,
+        imageUrl: p.imageUrl,
         isActive: p.isActive,
       })),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     res.status(500).json({ ok: false, message, products: [] });
+  }
+});
+
+/** Public multi-tenant shop site — branding, hero, catalog. */
+v1Router.get("/shop/:companySlug", async (req, res) => {
+  try {
+    const companySlug = String(req.params.companySlug);
+    const company = await prisma.company.findUnique({
+      where: { slug: companySlug },
+      include: {
+        branches: { orderBy: { createdAt: "asc" }, take: 5 },
+      },
+    });
+    if (!company || !company.isActive) {
+      res.status(404).json({ ok: false, message: "Shop not found" });
+      return;
+    }
+
+    const products = await prisma.product.findMany({
+      where: { tenantId: company.id, isActive: true },
+      include: { unit: true },
+      orderBy: { name: "asc" },
+      take: 48,
+    });
+
+    res.json({
+      ok: true,
+      shop: {
+        name: company.name,
+        slug: company.slug,
+        locale: company.locale,
+        phone: company.phone,
+        address: company.address,
+        tagline: company.tagline,
+        description: company.description,
+        logoUrl: company.logoUrl,
+        heroImageUrl: company.heroImageUrl,
+        heroVideoUrl: company.heroVideoUrl,
+        brandPrimary: company.brandPrimary ?? "#0f6b4c",
+        brandAccent: company.brandAccent ?? "#f42a41",
+        brandBg: company.brandBg ?? "#06281f",
+        brandFont: company.brandFont ?? "source-sans",
+        siteHeadline: company.siteHeadline ?? company.name,
+        siteSubhead:
+          company.siteSubhead ?? company.tagline ?? company.description,
+        branches: company.branches.map((b) => ({
+          id: b.id,
+          name: b.name,
+          address: b.address,
+        })),
+        products: products.map((p) => ({
+          id: p.id,
+          name: p.name,
+          nameBn: p.nameBn,
+          sku: p.sku,
+          category: p.category,
+          unit: p.unit.code,
+          priceBdt: Number(p.priceBdt),
+          description: p.description,
+          imageUrl: p.imageUrl,
+        })),
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    res.status(500).json({ ok: false, message });
   }
 });
 
@@ -165,6 +232,8 @@ v1Router.get("/invoice/:companySlug/:invoiceCode", async (req, res) => {
           phone: company.phone,
           address: company.address,
           tagline: company.tagline,
+          logoUrl: company.logoUrl,
+          brandPrimary: company.brandPrimary,
         },
       },
     });
@@ -217,6 +286,8 @@ v1Router.get("/tag/:companySlug/:sku/:batchCode", async (req, res) => {
           name: company.name,
           phone: company.phone,
           address: company.address,
+          logoUrl: company.logoUrl,
+          brandPrimary: company.brandPrimary,
         },
         product: {
           name: product.name,
@@ -225,6 +296,7 @@ v1Router.get("/tag/:companySlug/:sku/:batchCode", async (req, res) => {
           unit: product.unit.code,
           priceBdt: Number(product.priceBdt),
           description: product.description,
+          imageUrl: product.imageUrl,
         },
         batch: {
           batchCode: batch.batchCode,

@@ -2201,3 +2201,353 @@ textarea {
 .owner-shell.admin .owner-nav {
   background: #06281f;
 }
+
+/* —— Public multi-tenant shop —— */
+.shop-page {
+  min-height: 100vh;
+  background: var(--shop-bg, #06281f);
+  color: #f3faf6;
+  font-family: var(--shop-font, "Source Sans 3", sans-serif);
+}
+
+.shop-loading,
+.shop-error {
+  display: grid;
+  place-content: center;
+  gap: 1rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.shop-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.25rem;
+  background: rgba(0, 0, 0, 0.28);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  backdrop-filter: blur(8px);
+}
+
+.shop-brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-weight: 700;
+  min-width: 0;
+}
+
+.shop-logo-sm {
+  width: 2rem;
+  height: 2rem;
+  object-fit: contain;
+  border-radius: 0.25rem;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.shop-topbar-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.shop-hero {
+  position: relative;
+  min-height: min(88vh, 720px);
+  display: grid;
+  align-items: end;
+  overflow: hidden;
+}
+
+.shop-hero-media,
+.shop-hero-fallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.shop-hero-fallback {
+  background:
+    radial-gradient(ellipse 70% 55% at 80% 20%, color-mix(in srgb, var(--shop-accent, #f42a41) 45%, transparent), transparent 55%),
+    linear-gradient(160deg, var(--shop-bg, #06281f), color-mix(in srgb, var(--shop-primary, #0f6b4c) 70%, #000));
+}
+
+.shop-hero-veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.15) 0%,
+    rgba(0, 0, 0, 0.55) 55%,
+    rgba(0, 0, 0, 0.82) 100%
+  );
+}
+
+.shop-hero-copy {
+  position: relative;
+  z-index: 1;
+  padding: clamp(1.5rem, 5vw, 3.5rem);
+  max-width: 40rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.shop-logo-hero {
+  width: min(10rem, 42vw);
+  height: auto;
+  max-height: 5.5rem;
+  object-fit: contain;
+  justify-self: start;
+  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.35));
+  animation: shop-rise 0.9s ease both;
+}
+
+.shop-brand-name {
+  margin: 0;
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  animation: shop-rise 0.9s ease both;
+}
+
+.shop-hero-copy h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 5vw, 3.2rem);
+  line-height: 1.1;
+  font-weight: 700;
+  animation: shop-rise 1s ease 0.08s both;
+}
+
+.shop-lede {
+  margin: 0;
+  font-size: 1.05rem;
+  opacity: 0.92;
+  max-width: 32rem;
+  animation: shop-rise 1s ease 0.16s both;
+}
+
+.shop-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.35rem;
+  animation: shop-rise 1s ease 0.24s both;
+}
+
+.shop-cta.btn.primary {
+  background: var(--shop-primary, #0f6b4c);
+  border-color: var(--shop-primary, #0f6b4c);
+}
+
+.shop-cta.btn.ghost {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+@keyframes shop-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.shop-catalog {
+  padding: clamp(1.5rem, 4vw, 3rem);
+  background: color-mix(in srgb, var(--shop-bg, #06281f) 88%, #000);
+}
+
+.shop-section-head {
+  margin-bottom: 1.25rem;
+}
+
+.shop-section-head h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.6rem;
+}
+
+.shop-section-head p {
+  margin: 0;
+  opacity: 0.75;
+}
+
+.shop-product-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  gap: 1rem;
+}
+
+.shop-product-grid li {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  display: grid;
+}
+
+.shop-product-media {
+  aspect-ratio: 4 / 3;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.shop-product-media img,
+.shop-product-placeholder {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.shop-product-placeholder {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.06), transparent),
+    color-mix(in srgb, var(--shop-primary, #0f6b4c) 35%, #000);
+}
+
+.shop-product-body {
+  padding: 0.85rem 0.95rem 1rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.shop-product-body h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.shop-product-desc {
+  margin: 0.2rem 0 0;
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+.shop-price {
+  margin: 0.45rem 0 0;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--shop-accent, #f42a41) 80%, #fff);
+}
+
+.shop-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1.5rem clamp(1.25rem, 4vw, 3rem);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.shop-foot p {
+  margin: 0.2rem 0 0;
+}
+
+/* Owner media / site */
+.site-upload-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.site-brand-preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.site-brand-preview img,
+.site-brand-preview video {
+  width: 100%;
+  max-height: 10rem;
+  object-fit: contain;
+  background: var(--ok-bg);
+  border: 1px solid var(--line);
+}
+
+.media-grid {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.75rem;
+}
+
+.media-grid li {
+  border: 1px solid var(--line);
+  background: var(--panel-bg);
+  padding: 0.55rem;
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.media-grid img,
+.media-grid video {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  background: var(--ok-bg);
+}
+
+.media-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.product-thumb-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.product-thumb {
+  width: 2.75rem;
+  height: 2.75rem;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  background: var(--ok-bg);
+  flex: 0 0 auto;
+}
+
+.product-thumb.placeholder {
+  display: inline-block;
+  background: var(--ok-bg);
+}
+
+.tag-public-logo {
+  display: block;
+  max-width: 8rem;
+  max-height: 3.5rem;
+  object-fit: contain;
+  margin-bottom: 0.75rem;
+}
+
+.tag-public-product {
+  width: 100%;
+  max-height: 12rem;
+  object-fit: cover;
+  margin: 0.5rem 0 1rem;
+  border: 1px solid var(--line);
+}
+
+input[type="color"] {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.2rem;
+  border: 1px solid var(--line);
+  background: var(--input-bg);
+  cursor: pointer;
+}

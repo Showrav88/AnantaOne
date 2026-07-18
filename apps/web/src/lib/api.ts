@@ -77,6 +77,8 @@ export type Product = {
   nameBn: string | null;
   sku: string;
   category: string;
+  imageUrl?: string | null;
+  imagePublicId?: string | null;
   unit: string | null;
   unitId?: string;
   priceBdt: number;
@@ -96,8 +98,89 @@ export type CompanyDetails = {
   address: string | null;
   tagline: string | null;
   description: string | null;
+  logoUrl?: string | null;
+  heroImageUrl?: string | null;
+  heroVideoUrl?: string | null;
+  brandPrimary?: string | null;
+  brandAccent?: string | null;
+  brandBg?: string | null;
+  brandFont?: string | null;
+  siteHeadline?: string | null;
+  siteSubhead?: string | null;
   branches: Array<{ id: string; name: string; address: string | null }>;
   counts: { users: number; buyers: number; products: number };
+};
+
+export type MediaAsset = {
+  id: string;
+  kind: "IMAGE" | "VIDEO" | string;
+  url: string;
+  publicId: string;
+  folder: string;
+  format: string | null;
+  bytes: number | null;
+  width: number | null;
+  height: number | null;
+  durationSec: number | null;
+  originalName: string | null;
+  label: string | null;
+  createdAt: string;
+};
+
+export type ShopBranding = {
+  id: string;
+  name: string;
+  slug: string;
+  locale: string;
+  phone: string | null;
+  address: string | null;
+  tagline: string | null;
+  description: string | null;
+  logoUrl: string | null;
+  logoPublicId: string | null;
+  heroImageUrl: string | null;
+  heroImagePublicId: string | null;
+  heroVideoUrl: string | null;
+  heroVideoPublicId: string | null;
+  brandPrimary: string;
+  brandAccent: string;
+  brandBg: string;
+  brandFont: string;
+  siteHeadline: string | null;
+  siteSubhead: string | null;
+  cloudinaryReady: boolean;
+  publicShopPath: string;
+};
+
+export type PublicShop = {
+  name: string;
+  slug: string;
+  locale: string;
+  phone: string | null;
+  address: string | null;
+  tagline: string | null;
+  description: string | null;
+  logoUrl: string | null;
+  heroImageUrl: string | null;
+  heroVideoUrl: string | null;
+  brandPrimary: string;
+  brandAccent: string;
+  brandBg: string;
+  brandFont: string;
+  siteHeadline: string;
+  siteSubhead: string | null;
+  branches: Array<{ id: string; name: string; address: string | null }>;
+  products: Array<{
+    id: string;
+    name: string;
+    nameBn: string | null;
+    sku: string;
+    category: string;
+    unit: string;
+    priceBdt: number;
+    description: string | null;
+    imageUrl: string | null;
+  }>;
 };
 
 export type OwnerDashboard = {
@@ -432,11 +515,38 @@ async function getJson<T>(
   throw lastError instanceof Error ? lastError : new Error("API request failed");
 }
 
+/** Multipart upload — do not set Content-Type (browser sets boundary). */
+async function postForm<T>(path: string, form: FormData): Promise<T> {
+  const headers: Record<string, string> = {};
+  const token = getAccessToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  let res = await rawFetch(path, { method: "POST", headers, body: form });
+  if (res.status === 401) {
+    const ok = await refreshAccessToken();
+    if (ok) {
+      headers.Authorization = `Bearer ${getAccessToken()}`;
+      res = await rawFetch(path, { method: "POST", headers, body: form });
+    }
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as {
+      message?: string;
+    } | null;
+    throw new Error(body?.message ?? `HTTP ${res.status}`);
+  }
+  return (await res.json()) as T;
+}
+
 export const api = {
   baseUrl: apiUrl,
   health: () => getJson<HealthResponse>("/health"),
   healthDb: () => getJson<DbHealthResponse>("/health/db"),
   overview: () => getJson<OverviewResponse>("/api/v1/overview"),
+  publicShop: (companySlug: string) =>
+    getJson<{ ok: boolean; shop: PublicShop }>(
+      `/api/v1/shop/${encodeURIComponent(companySlug)}`,
+    ),
   buyers: () => getJson<BuyersResponse>("/api/v1/buyers"),
   products: () =>
     getJson<{ ok: boolean; products: Product[] }>("/api/v1/products"),
@@ -515,6 +625,51 @@ export const api = {
         { method: "PATCH", body: JSON.stringify(body) },
         true,
       ),
+    branding: () =>
+      getJson<{ ok: boolean; branding: ShopBranding }>(
+        "/api/v1/owner/branding",
+        2,
+        undefined,
+        true,
+      ),
+    updateBranding: (body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; branding: ShopBranding }>(
+        "/api/v1/owner/branding",
+        1,
+        { method: "PATCH", body: JSON.stringify(body) },
+        true,
+      ),
+    media: () =>
+      getJson<{
+        ok: boolean;
+        cloudinaryReady: boolean;
+        assets: MediaAsset[];
+      }>("/api/v1/owner/media", 2, undefined, true),
+    uploadMedia: (file: File, purpose = "assets", label?: string) => {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("purpose", purpose);
+      if (label) form.append("label", label);
+      return postForm<{ ok: boolean; asset: MediaAsset }>(
+        "/api/v1/owner/media",
+        form,
+      );
+    },
+    deleteMedia: (id: string) =>
+      getJson<{ ok: boolean }>(
+        `/api/v1/owner/media/${encodeURIComponent(id)}`,
+        1,
+        { method: "DELETE" },
+        true,
+      ),
+    uploadProductImage: (productId: string, file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      return postForm<{
+        ok: boolean;
+        product: { id: string; imageUrl: string | null; sku: string };
+      }>(`/api/v1/owner/products/${encodeURIComponent(productId)}/image`, form);
+    },
     products: () =>
       getJson<{ ok: boolean; products: Product[] }>(
         "/api/v1/owner/products",

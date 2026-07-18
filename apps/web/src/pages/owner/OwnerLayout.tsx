@@ -87,6 +87,7 @@ export function OwnerLayout({ locale, onLocale }: Props) {
           <NavLink to="/owner/payments">{t.owner.navPayments}</NavLink>
           <NavLink to="/owner/staff">{t.owner.navStaff}</NavLink>
           <NavLink to="/owner/company">{t.owner.navCompany}</NavLink>
+          <NavLink to="/owner/site">{t.owner.navSite}</NavLink>
         </nav>
         <div className="owner-nav-foot">
           <NavLink to="/pulse" onClick={closeMenu}>

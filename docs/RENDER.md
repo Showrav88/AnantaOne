@@ -62,6 +62,7 @@ Dashboard → open service named like **anantaone-api** (type **Web Service**, n
 | `JWT_REFRESH_SECRET` | long random string |
 | `SUPER_ADMIN_EMAIL` | `superadmin@anantaone.local` (or your email) |
 | `SUPER_ADMIN_PASSWORD` | strong password (seeded on deploy) |
+| `CLOUDINARY_URL` | `cloudinary://KEY:SECRET@dtd4hpmjb` — tenant media (see `docs/CLOUDINARY.md`) |
 
 Example (replace password; do not commit):
 

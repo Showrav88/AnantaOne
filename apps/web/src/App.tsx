@@ -17,8 +17,10 @@ import { OwnerSellPage } from "./pages/owner/OwnerSellPage";
 import { OwnerBatchesPage } from "./pages/owner/OwnerBatchesPage";
 import { OwnerTagsPage } from "./pages/owner/OwnerTagsPage";
 import { OwnerSalesHistoryPage } from "./pages/owner/OwnerSalesHistoryPage";
+import { OwnerSitePage } from "./pages/owner/OwnerSitePage";
 import { PublicTagPage } from "./pages/PublicTagPage";
 import { PublicInvoicePage } from "./pages/PublicInvoicePage";
+import { PublicShopPage } from "./pages/PublicShopPage";
 import {
   AdminCompaniesPage,
   AdminDashboardPage,
@@ -57,6 +59,10 @@ export function App() {
           element={<PublicInvoicePage locale={locale} onLocale={toggleLocale} />}
         />
         <Route
+          path="/shop/:companySlug"
+          element={<PublicShopPage locale={locale} onLocale={toggleLocale} />}
+        />
+        <Route
           path="/owner"
           element={
             <RequireAuth roles={["OWNER", "MANAGER", "EMPLOYEE"]}>
@@ -66,6 +72,7 @@ export function App() {
         >
           <Route index element={<OwnerDashboardPage locale={locale} />} />
           <Route path="company" element={<OwnerCompanyPage locale={locale} />} />
+          <Route path="site" element={<OwnerSitePage locale={locale} />} />
           <Route path="sell" element={<OwnerSellPage locale={locale} />} />
           <Route
             path="history"

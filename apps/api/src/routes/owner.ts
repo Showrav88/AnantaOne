@@ -63,6 +63,10 @@ ownerRouter.get("/dashboard", async (req, res) => {
         address: company.address,
         tagline: company.tagline,
         description: company.description,
+        logoUrl: company.logoUrl,
+        brandPrimary: company.brandPrimary,
+        brandAccent: company.brandAccent,
+        brandFont: company.brandFont,
         branches: company.branches,
         counts: company._count,
       },
@@ -100,6 +104,15 @@ ownerRouter.get("/company", async (req, res) => {
       address: company.address,
       tagline: company.tagline,
       description: company.description,
+      logoUrl: company.logoUrl,
+      heroImageUrl: company.heroImageUrl,
+      heroVideoUrl: company.heroVideoUrl,
+      brandPrimary: company.brandPrimary,
+      brandAccent: company.brandAccent,
+      brandBg: company.brandBg,
+      brandFont: company.brandFont,
+      siteHeadline: company.siteHeadline,
+      siteSubhead: company.siteSubhead,
       branches: company.branches,
       counts: company._count,
     },
@@ -142,6 +155,15 @@ ownerRouter.patch("/company", requireOwnerOnly, async (req, res) => {
       address: company.address,
       tagline: company.tagline,
       description: company.description,
+      logoUrl: company.logoUrl,
+      heroImageUrl: company.heroImageUrl,
+      heroVideoUrl: company.heroVideoUrl,
+      brandPrimary: company.brandPrimary,
+      brandAccent: company.brandAccent,
+      brandBg: company.brandBg,
+      brandFont: company.brandFont,
+      siteHeadline: company.siteHeadline,
+      siteSubhead: company.siteSubhead,
       branches: company.branches,
       counts: company._count,
     },
@@ -167,6 +189,8 @@ const productCreateSchema = z.object({
   stockQty: z.coerce.number().nonnegative().default(0),
   minStock: z.coerce.number().nonnegative().default(0),
   description: z.string().max(1000).nullable().optional(),
+  imageUrl: z.string().url().nullable().optional(),
+  imagePublicId: z.string().max(240).nullable().optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -294,6 +318,8 @@ function serializeProduct(product: {
   stockQty: { toString(): string } | number | string;
   minStock: { toString(): string } | number | string;
   description: string | null;
+  imageUrl?: string | null;
+  imagePublicId?: string | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -314,6 +340,8 @@ function serializeProduct(product: {
     stockQty: Number(product.stockQty),
     minStock: Number(product.minStock),
     description: product.description,
+    imageUrl: product.imageUrl ?? null,
+    imagePublicId: product.imagePublicId ?? null,
     isActive: product.isActive,
     createdAt: product.createdAt,
     updatedAt: product.updatedAt,

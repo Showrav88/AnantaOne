@@ -78,6 +78,17 @@ export function OwnerProductsPage({ locale }: Props) {
     }
   }
 
+  async function onProductImage(id: string, file: File | null) {
+    if (!file) return;
+    setError(null);
+    try {
+      await api.owner.uploadProductImage(id, file);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Image upload failed");
+    }
+  }
+
   return (
     <div className="owner-page">
       <header className="owner-header">
@@ -172,6 +183,7 @@ export function OwnerProductsPage({ locale }: Props) {
         <table className="data-table">
           <thead>
             <tr>
+              <th>{t.owner.uploadProductImage}</th>
               <th>{t.owner.fieldProductName}</th>
               <th>SKU</th>
               <th>{t.owner.fieldPrice}</th>
@@ -183,6 +195,31 @@ export function OwnerProductsPage({ locale }: Props) {
           <tbody>
             {products.map((p) => (
               <tr key={p.id} className={p.isActive ? "" : "dim"}>
+                <td>
+                  <div className="product-thumb-cell">
+                    {p.imageUrl ? (
+                      <img className="product-thumb" src={p.imageUrl} alt="" />
+                    ) : (
+                      <span className="product-thumb placeholder" />
+                    )}
+                    {canWrite && p.isActive ? (
+                      <label className="btn ghost compact">
+                        {t.owner.uploadProductImage}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          hidden
+                          onChange={(e) =>
+                            void onProductImage(
+                              p.id,
+                              e.target.files?.[0] ?? null,
+                            )
+                          }
+                        />
+                      </label>
+                    ) : null}
+                  </div>
+                </td>
                 <td>{locale === "bn" && p.nameBn ? p.nameBn : p.name}</td>
                 <td>{p.sku}</td>
                 <td>৳{p.priceBdt}</td>

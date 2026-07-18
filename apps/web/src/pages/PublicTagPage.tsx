@@ -6,7 +6,12 @@ import { api } from "../lib/api";
 type Props = { locale: LocaleCode; onLocale: () => void };
 
 type PublicTag = {
-  company: { name: string; phone: string | null; address: string | null };
+  company: {
+    name: string;
+    phone: string | null;
+    address: string | null;
+    logoUrl?: string | null;
+  };
   product: {
     name: string;
     nameBn: string | null;
@@ -14,6 +19,7 @@ type PublicTag = {
     unit: string;
     priceBdt: number;
     description: string | null;
+    imageUrl?: string | null;
   };
   batch: {
     batchCode: string;
@@ -48,7 +54,22 @@ export function PublicTagPage({ locale, onLocale }: Props) {
         {!tag && !error ? <p className="muted">{t.common.loading}</p> : null}
         {tag ? (
           <>
-            <p className="eyebrow">{tag.company.name}</p>
+            {tag.company.logoUrl ? (
+              <img
+                className="tag-public-logo"
+                src={tag.company.logoUrl}
+                alt={tag.company.name}
+              />
+            ) : (
+              <p className="eyebrow">{tag.company.name}</p>
+            )}
+            {tag.product.imageUrl ? (
+              <img
+                className="tag-public-product"
+                src={tag.product.imageUrl}
+                alt=""
+              />
+            ) : null}
             <h1>
               {locale === "bn" && tag.product.nameBn
                 ? tag.product.nameBn
