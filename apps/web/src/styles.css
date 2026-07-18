@@ -653,9 +653,28 @@ button {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.05rem;
+  color: var(--topbar-fg);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.owner-topbar .lang,
+.owner-topbar .display-btn,
+.owner-topbar .branch-locked {
+  color: var(--topbar-fg);
+  border-color: color-mix(in srgb, var(--topbar-fg) 40%, transparent);
+}
+
+.owner-topbar .lang:hover,
+.owner-topbar .display-btn:hover {
+  border-color: color-mix(in srgb, var(--topbar-fg) 80%, transparent);
+}
+
+.owner-topbar .topbar-branch select {
+  background: color-mix(in srgb, var(--topbar-fg) 12%, var(--topbar-bg));
+  color: var(--topbar-fg);
+  border: 1px solid color-mix(in srgb, var(--topbar-fg) 40%, transparent);
 }
 
 .nav-toggle {
@@ -709,9 +728,12 @@ button {
 }
 
 .owner-nav {
+  --nav-fg: #f3faf6;
+  --nav-muted: rgba(243, 250, 246, 0.78);
+  --nav-line: rgba(243, 250, 246, 0.28);
   grid-row: 2;
-  background: var(--bd-green-deep);
-  color: var(--foam);
+  background: #004833;
+  color: var(--nav-fg);
   padding: 1.25rem 1rem;
   display: flex;
   flex-direction: column;
@@ -723,24 +745,38 @@ button {
   overflow-y: auto;
 }
 
+html[data-theme="dark"] .owner-nav {
+  background: #0b1f18;
+  --nav-fg: #eaf6ef;
+  --nav-muted: rgba(234, 246, 239, 0.8);
+  --nav-line: rgba(234, 246, 239, 0.3);
+}
+
+html[data-theme="night"] .owner-nav {
+  background: #1a1410;
+  --nav-fg: #f2e8d8;
+  --nav-muted: rgba(242, 232, 216, 0.8);
+  --nav-line: rgba(242, 232, 216, 0.3);
+}
 
 .owner-brand {
   margin: 0;
   font-family: var(--font-display);
   font-size: 1.35rem;
   font-weight: 700;
+  color: var(--nav-fg);
 }
 
 .owner-role {
   margin: -0.5rem 0 0.5rem;
-  opacity: 0.75;
+  color: var(--nav-muted);
   font-size: 0.85rem;
 }
 
 .muted-nav {
   margin: 0;
   font-size: 0.78rem;
-  opacity: 0.65;
+  color: var(--nav-muted);
   word-break: break-all;
 }
 
@@ -750,24 +786,54 @@ button {
 }
 
 .owner-nav a {
-  color: rgba(243, 250, 246, 0.85);
+  color: var(--nav-fg);
   text-decoration: none;
   padding: 0.55rem 0.65rem;
   border-left: 2px solid transparent;
-  font-size: 0.92rem;
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 
 .owner-nav a:hover,
 .owner-nav a.active {
   color: #fff;
   border-left-color: var(--bd-red);
-  background: rgba(243, 250, 246, 0.08);
+  background: rgba(243, 250, 246, 0.1);
+}
+
+html[data-theme="night"] .owner-nav a:hover,
+html[data-theme="night"] .owner-nav a.active {
+  color: #fff8ef;
 }
 
 .owner-nav-foot {
   margin-top: auto;
   display: grid;
   gap: 0.5rem;
+}
+
+.owner-nav-foot .lang,
+.owner-nav-foot .display-btn,
+.owner-nav-foot a {
+  color: var(--nav-fg);
+  border-color: var(--nav-line);
+}
+
+.owner-nav .branch-switcher.nav-branch {
+  border-color: var(--nav-line);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--nav-fg);
+}
+
+.owner-nav .branch-switcher.nav-branch .muted.tiny,
+.owner-nav .branch-locked {
+  color: var(--nav-muted);
+}
+
+.owner-nav .branch-switcher.nav-branch select {
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--nav-fg);
+  border: 1px solid var(--nav-line);
 }
 
 .owner-main {
@@ -913,29 +979,62 @@ button {
 
   .nav-toggle {
     display: grid;
-    gap: 4px;
-    width: 2.25rem;
-    height: 2.25rem;
+    gap: 5px;
+    width: 2.5rem;
+    height: 2.5rem;
     place-content: center;
-    background: transparent;
-    border: 1px solid rgba(243, 250, 246, 0.35);
+    background: color-mix(in srgb, var(--topbar-fg) 12%, transparent);
+    border: 1.5px solid color-mix(in srgb, var(--topbar-fg) 65%, transparent);
+    border-radius: 0.35rem;
+    color: var(--topbar-fg);
     cursor: pointer;
-    padding: 0.35rem;
+    padding: 0.4rem;
     flex: 0 0 auto;
+  }
+
+  .nav-toggle:hover,
+  .nav-toggle:focus-visible {
+    background: color-mix(in srgb, var(--topbar-fg) 20%, transparent);
+    border-color: var(--topbar-fg);
+    outline: none;
   }
 
   .nav-toggle span {
     display: block;
-    width: 1.15rem;
-    height: 2px;
-    background: currentColor;
+    width: 1.2rem;
+    height: 2.5px;
+    border-radius: 999px;
+    background: var(--topbar-fg);
+  }
+
+  .owner-shell.nav-open .nav-toggle {
+    background: color-mix(in srgb, var(--topbar-fg) 22%, transparent);
+    border-color: var(--topbar-fg);
+  }
+
+  /* Open state: clear X so the control stays readable */
+  .owner-shell.nav-open .nav-toggle span:nth-child(1) {
+    transform: translateY(7.5px) rotate(45deg);
+  }
+
+  .owner-shell.nav-open .nav-toggle span:nth-child(2) {
+    opacity: 0;
+  }
+
+  .owner-shell.nav-open .nav-toggle span:nth-child(3) {
+    transform: translateY(-7.5px) rotate(-45deg);
+  }
+
+  .nav-toggle span {
+    transition: transform 160ms ease, opacity 160ms ease;
+    transform-origin: center;
   }
 
   .nav-backdrop {
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(10, 28, 18, 0.45);
+    background: rgba(6, 20, 14, 0.55);
     z-index: 45;
     border: 0;
     padding: 0;
@@ -953,15 +1052,17 @@ button {
     min-height: 100vh;
     max-height: 100vh;
     box-shadow: none;
+    padding-top: max(1.25rem, env(safe-area-inset-top));
   }
 
   .owner-shell.nav-open .owner-nav {
     transform: translateX(0);
-    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.25);
+    box-shadow: 8px 0 28px rgba(0, 0, 0, 0.35);
   }
 
   .owner-brand {
-    display: none;
+    display: block;
+    margin-bottom: 0.15rem;
   }
 
   .owner-main {
