@@ -169,6 +169,22 @@ export function OwnerBatchesPage({ locale }: Props) {
     return `${b.serialStart}–${b.serialEnd}`;
   }
 
+  function batchStatus(b: ProductionBatch) {
+    if (b.reversedAt || !b.isActive) {
+      return {
+        key: "soft" as const,
+        label: t.owner.batchStatusSoftDeleted,
+      };
+    }
+    if (b.qtyRemaining < b.qtyProduced) {
+      return {
+        key: "part" as const,
+        label: t.owner.batchStatusPartSold,
+      };
+    }
+    return { key: "active" as const, label: t.owner.batchStatusActive };
+  }
+
   return (
     <div className="owner-page">
       <header className="owner-header no-print">
@@ -179,6 +195,17 @@ export function OwnerBatchesPage({ locale }: Props) {
         </div>
       </header>
 
+      <section className="batch-guide no-print panel-card">
+        <div>
+          <strong>{t.owner.batchesGuideProduction}</strong>
+          <p className="muted tiny">{t.owner.batchesGuideProductionHint}</p>
+        </div>
+        <div>
+          <strong>{t.owner.batchesGuideDelete}</strong>
+          <p className="muted tiny">{t.owner.batchesGuideDeleteHint}</p>
+        </div>
+      </section>
+
       {error ? <p className="error-banner no-print">{error}</p> : null}
       {okMsg ? <p className="ok-banner no-print">{okMsg}</p> : null}
       {loadingTags ? (
@@ -187,6 +214,8 @@ export function OwnerBatchesPage({ locale }: Props) {
 
       {canWrite ? (
         <form className="owner-form compact no-print" onSubmit={onCreate}>
+          <h2 className="full">{t.owner.batchesGuideProduction}</h2>
+          <p className="muted tiny full">{t.owner.batchesGuideProductionHint}</p>
           <label>
             {t.owner.fieldProduct}
             <select
@@ -264,11 +293,13 @@ export function OwnerBatchesPage({ locale }: Props) {
         </form>
       ) : null}
 
+      <h2 className="no-print">{t.owner.batchesListTitle}</h2>
       <div className="owner-table-wrap no-print">
         <table className="owner-table">
           <thead>
             <tr>
               <th>{t.owner.fieldBatchCode}</th>
+              <th>{t.owner.batchStatus}</th>
               <th>{t.owner.fieldProduct}</th>
               <th>{t.owner.fieldMfgDate}</th>
               <th>{t.owner.fieldExpDate}</th>
@@ -280,19 +311,27 @@ export function OwnerBatchesPage({ locale }: Props) {
           <tbody>
             {batches.length === 0 ? (
               <tr>
-                <td colSpan={canWrite ? 7 : 6} className="muted">
+                <td colSpan={canWrite ? 8 : 7} className="muted">
                   {t.owner.batchesEmpty}
                 </td>
               </tr>
             ) : (
               batches.map((b) => {
-                const reversed = Boolean(b.reversedAt) || !b.isActive;
+                const status = batchStatus(b);
+                const softDeleted = status.key === "soft";
+                const canSoftDelete =
+                  !softDeleted && b.qtyRemaining >= b.qtyProduced;
                 return (
-                  <tr key={b.id} className={reversed ? "dim" : ""}>
+                  <tr key={b.id} className={softDeleted ? "dim" : ""}>
                     <td data-label={t.owner.fieldBatchCode}>
                       <strong>{b.batchCode}</strong>
-                      {reversed ? (
-                        <div className="muted tiny">{t.owner.statusReversed}</div>
+                    </td>
+                    <td data-label={t.owner.batchStatus}>
+                      <span className={`batch-status-pill status-${status.key}`}>
+                        {status.label}
+                      </span>
+                      {b.reverseReason ? (
+                        <div className="muted tiny">{b.reverseReason}</div>
                       ) : null}
                     </td>
                     <td data-label={t.owner.fieldProduct}>
@@ -345,13 +384,15 @@ export function OwnerBatchesPage({ locale }: Props) {
                           </button>
                         ) : (
                           <>
-                            <button
-                              type="button"
-                              className="linkish"
-                              onClick={() => startEdit(b)}
-                            >
-                              {t.owner.editBatchDates}
-                            </button>
+                            {!softDeleted ? (
+                              <button
+                                type="button"
+                                className="linkish"
+                                onClick={() => startEdit(b)}
+                              >
+                                {t.owner.editBatchDates}
+                              </button>
+                            ) : null}
                             {b.serialStart != null ? (
                               <button
                                 type="button"
@@ -361,10 +402,10 @@ export function OwnerBatchesPage({ locale }: Props) {
                                 {t.owner.viewUnitTags}
                               </button>
                             ) : null}
-                            {!reversed ? (
+                            {canSoftDelete ? (
                               <button
                                 type="button"
-                                className="linkish"
+                                className="linkish dangerish"
                                 onClick={() => {
                                   setReverseBatch(b);
                                   setReverseReason("");
@@ -372,6 +413,10 @@ export function OwnerBatchesPage({ locale }: Props) {
                               >
                                 {t.owner.reverseBatch}
                               </button>
+                            ) : !softDeleted ? (
+                              <div className="muted tiny">
+                                {t.owner.batchSoftDeleteBlocked}
+                              </div>
                             ) : null}
                           </>
                         )}
@@ -473,13 +518,15 @@ export function OwnerBatchesPage({ locale }: Props) {
                 reverseBatch.batchCode,
               )}
             </p>
+            <p className="muted tiny">{t.owner.batchesGuideDeleteHint}</p>
             <label className="full">
-              {t.owner.reverseReason}
+              {t.owner.batchSoftDeleteReason}
               <textarea
                 required
+                minLength={5}
                 rows={3}
                 value={reverseReason}
-                placeholder={t.owner.reverseReasonHint}
+                placeholder={t.owner.batchSoftDeleteReasonHint}
                 onChange={(e) => setReverseReason(e.target.value)}
               />
             </label>

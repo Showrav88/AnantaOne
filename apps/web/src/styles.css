@@ -1542,6 +1542,56 @@ html[data-theme="night"] .owner-nav a.active {
   min-width: 0;
 }
 
+.batch-guide {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.batch-guide strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.batch-status-pill {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--line);
+}
+
+.batch-status-pill.status-active {
+  color: #166534;
+  background: #dcfce7;
+  border-color: #bbf7d0;
+}
+
+.batch-status-pill.status-part {
+  color: #92400e;
+  background: #ffedd5;
+  border-color: #fed7aa;
+}
+
+.batch-status-pill.status-soft {
+  color: #64748b;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+.linkish.dangerish {
+  color: #b91c1c;
+}
+
+@media (max-width: 720px) {
+  .batch-guide {
+    grid-template-columns: 1fr;
+  }
+}
+
 .data-table,
 .owner-table {
   width: 100%;
