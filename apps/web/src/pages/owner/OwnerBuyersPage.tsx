@@ -1,4 +1,10 @@
-import { useEffect, useState, useTransition, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+  type FormEvent,
+} from "react";
 import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import { api, type BuyerRow } from "../../lib/api";
@@ -12,6 +18,47 @@ const empty = {
   phone: "",
   address: "",
   wardId: "",
+};
+
+type BuyerDetail = {
+  buyer: BuyerRow;
+  analytics: {
+    orderCount: number;
+    totalSpentBdt: number;
+    onlineSpentBdt: number;
+    counterSpentBdt: number;
+    lastOrderAt: string | null;
+    products: Array<{
+      productId: string;
+      name: string;
+      nameBn: string | null;
+      sku: string;
+      qty: number;
+      lineTotalBdt: number;
+      orderCount: number;
+    }>;
+    recentOrders: Array<{
+      id: string;
+      invoiceCode: string;
+      orderedAt: string;
+      totalBdt: number;
+      subtotalBdt: number;
+      source: { code: string; nameEn: string; nameBn: string } | null;
+      status: { code: string; nameEn: string; nameBn: string } | null;
+      lines: Array<{
+        productId: string;
+        qty: number;
+        unitPriceBdt: number;
+        lineTotalBdt: number;
+        product: {
+          id: string;
+          name: string;
+          nameBn: string | null;
+          sku: string;
+        } | null;
+      }>;
+    }>;
+  };
 };
 
 export function OwnerBuyersPage({ locale }: Props) {
@@ -31,6 +78,11 @@ export function OwnerBuyersPage({ locale }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deactivateBuyer, setDeactivateBuyer] = useState<BuyerRow | null>(null);
   const [deactivating, setDeactivating] = useState(false);
+  const [search, setSearch] = useState("");
+  const [showInactive, setShowInactive] = useState(true);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<BuyerDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -39,18 +91,35 @@ export function OwnerBuyersPage({ locale }: Props) {
     const [b, w, a] = await Promise.all([
       api.owner.buyers(),
       api.owner.deliveryWards(),
-      api.owner.buyerAnalytics(),
+      api.owner.buyerAnalytics().catch(() => null),
     ]);
     setBuyers(b.buyers);
     setWards(w.wards);
-    setAnalytics({
-      buyerCount: a.analytics.buyerCount,
-      totalRevenueBdt: a.analytics.totalRevenueBdt,
-      buyers: a.analytics.buyers.map((row) => ({
-        id: row.id,
-        onlineSpentBdt: row.onlineSpentBdt,
-      })),
-    });
+    if (a) {
+      setAnalytics({
+        buyerCount: a.analytics.buyerCount,
+        totalRevenueBdt: a.analytics.totalRevenueBdt,
+        buyers: a.analytics.buyers.map((row) => ({
+          id: row.id,
+          onlineSpentBdt: row.onlineSpentBdt,
+        })),
+      });
+    }
+  }
+
+  async function loadDetail(id: string) {
+    setDetailLoading(true);
+    setError(null);
+    try {
+      const res = await api.owner.buyerDetailAnalytics(id);
+      setDetail({ buyer: res.buyer, analytics: res.analytics });
+      setSelectedId(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+      setDetail(null);
+    } finally {
+      setDetailLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -60,6 +129,22 @@ export function OwnerBuyersPage({ locale }: Props) {
       );
     });
   }, []);
+
+  const filteredBuyers = useMemo(() => {
+    const q = search.trim().toLowerCase().replace(/\s+/g, "");
+    return buyers.filter((b) => {
+      if (!showInactive && !b.isActive) return false;
+      if (!q) return true;
+      const phone = b.phone.toLowerCase().replace(/\s+/g, "");
+      const shop = b.shopName.toLowerCase();
+      const contact = (b.contactName ?? "").toLowerCase();
+      return (
+        phone.includes(q) ||
+        shop.includes(search.trim().toLowerCase()) ||
+        contact.includes(search.trim().toLowerCase())
+      );
+    });
+  }, [buyers, search, showInactive]);
 
   function resetForm() {
     setForm(empty);
@@ -99,6 +184,7 @@ export function OwnerBuyersPage({ locale }: Props) {
       }
       resetForm();
       await load();
+      if (selectedId) await loadDetail(selectedId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     }
@@ -111,12 +197,27 @@ export function OwnerBuyersPage({ locale }: Props) {
     try {
       await api.owner.updateBuyer(deactivateBuyer.id, { isActive: false });
       if (editingId === deactivateBuyer.id) resetForm();
+      setOkMsg(t.owner.buyerDeactivated);
       setDeactivateBuyer(null);
       await load();
+      if (selectedId === deactivateBuyer.id) await loadDetail(deactivateBuyer.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
     } finally {
       setDeactivating(false);
+    }
+  }
+
+  async function reactivateBuyer(b: BuyerRow) {
+    setError(null);
+    setOkMsg(null);
+    try {
+      await api.owner.updateBuyer(b.id, { isActive: true });
+      setOkMsg(t.owner.buyerReactivated);
+      await load();
+      if (selectedId === b.id) await loadDetail(b.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
     }
   }
 
@@ -127,6 +228,7 @@ export function OwnerBuyersPage({ locale }: Props) {
           <p className="eyebrow">{t.owner.navBuyers}</p>
           <h1>{t.owner.buyersTitle}</h1>
           <p className="muted">{t.owner.buyersHint}</p>
+          <p className="muted tiny">{t.owner.selectBuyerHint}</p>
         </div>
         <div className="header-links">
           <Link className="btn ghost" to="/owner/delivery">
@@ -227,73 +329,252 @@ export function OwnerBuyersPage({ locale }: Props) {
         </form>
       ) : null}
 
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>{t.owner.fieldShopName}</th>
-              <th>{t.owner.fieldContactName}</th>
-              <th>{t.owner.fieldPhone}</th>
-              <th>{t.owner.fieldWard}</th>
-              <th>{t.owner.buyerOrders}</th>
-              <th>{t.owner.buyerSpent}</th>
-              <th>{t.owner.buyerOnlineSpent}</th>
-              {canWrite ? <th /> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {buyers.map((b) => {
-              const online =
-                analytics?.buyers.find((row) => row.id === b.id)
-                  ?.onlineSpentBdt ?? 0;
-              return (
-                <tr key={b.id} className={b.isActive ? "" : "dim"}>
-                  <td data-label={t.owner.fieldShopName}>{b.shopName}</td>
-                  <td data-label={t.owner.fieldContactName}>
-                    {b.contactName ?? "—"}
+      <div className="owner-form compact" style={{ marginBottom: "0.75rem" }}>
+        <label className="full">
+          {t.owner.searchBuyers}
+          <input
+            type="search"
+            value={search}
+            placeholder="01XXXXXXXXX"
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </label>
+        <label>
+          <select
+            value={showInactive ? "all" : "active"}
+            onChange={(e) => setShowInactive(e.target.value === "all")}
+          >
+            <option value="active">{t.owner.filterActiveBuyers}</option>
+            <option value="all">{t.owner.filterAllBuyers}</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="buyers-layout">
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>{t.owner.fieldShopName}</th>
+                <th>{t.owner.fieldContactName}</th>
+                <th>{t.owner.fieldPhone}</th>
+                <th>{t.owner.fieldWard}</th>
+                <th>{t.owner.buyerOrders}</th>
+                <th>{t.owner.buyerSpent}</th>
+                <th>{t.owner.buyerOnlineSpent}</th>
+                {canWrite ? <th /> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredBuyers.length === 0 ? (
+                <tr>
+                  <td colSpan={canWrite ? 8 : 7} className="muted">
+                    {t.owner.analyticsEmpty}
                   </td>
-                  <td data-label={t.owner.fieldPhone}>{b.phone}</td>
-                  <td data-label={t.owner.fieldWard}>
-                    {b.ward
-                      ? locale === "bn" && b.ward.nameBn
-                        ? b.ward.nameBn
-                        : b.ward.name
-                      : "—"}
-                  </td>
-                  <td data-label={t.owner.buyerOrders}>{b.orderCount}</td>
-                  <td data-label={t.owner.buyerSpent}>
-                    ৳{b.totalSpentBdt.toLocaleString()}
-                  </td>
-                  <td data-label={t.owner.buyerOnlineSpent}>
-                    ৳{online.toLocaleString()}
-                  </td>
-                  {canWrite ? (
-                    <td className="cell-actions" data-label="">
-                      {b.isActive ? (
-                        <>
-                          <button
-                            type="button"
-                            className="btn ghost compact"
-                            onClick={() => startEdit(b)}
-                          >
-                            {t.common.edit}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn ghost compact dark"
-                            onClick={() => setDeactivateBuyer(b)}
-                          >
-                            {t.owner.deactivate}
-                          </button>
-                        </>
-                      ) : null}
-                    </td>
-                  ) : null}
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              ) : (
+                filteredBuyers.map((b) => {
+                  const online =
+                    analytics?.buyers.find((row) => row.id === b.id)
+                      ?.onlineSpentBdt ?? 0;
+                  const selected = selectedId === b.id;
+                  return (
+                    <tr
+                      key={b.id}
+                      className={`${b.isActive ? "" : "dim"}${selected ? " selected-row" : ""}`}
+                      style={{ cursor: "pointer" }}
+                      onClick={() => void loadDetail(b.id)}
+                    >
+                      <td data-label={t.owner.fieldShopName}>
+                        {b.shopName}
+                        {!b.isActive ? (
+                          <div className="muted tiny">
+                            {t.owner.buyerInactive}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td data-label={t.owner.fieldContactName}>
+                        {b.contactName ?? "—"}
+                      </td>
+                      <td data-label={t.owner.fieldPhone}>{b.phone}</td>
+                      <td data-label={t.owner.fieldWard}>
+                        {b.ward
+                          ? locale === "bn" && b.ward.nameBn
+                            ? b.ward.nameBn
+                            : b.ward.name
+                          : "—"}
+                      </td>
+                      <td data-label={t.owner.buyerOrders}>{b.orderCount}</td>
+                      <td data-label={t.owner.buyerSpent}>
+                        ৳{b.totalSpentBdt.toLocaleString()}
+                      </td>
+                      <td data-label={t.owner.buyerOnlineSpent}>
+                        ৳{online.toLocaleString()}
+                      </td>
+                      {canWrite ? (
+                        <td
+                          className="cell-actions"
+                          data-label=""
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {b.isActive ? (
+                            <>
+                              <button
+                                type="button"
+                                className="btn ghost compact"
+                                onClick={() => startEdit(b)}
+                              >
+                                {t.common.edit}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn ghost compact dark"
+                                onClick={() => setDeactivateBuyer(b)}
+                              >
+                                {t.owner.deactivate}
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn ghost compact"
+                              onClick={() => void reactivateBuyer(b)}
+                            >
+                              {t.owner.reactivate}
+                            </button>
+                          )}
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <aside className="panel-card buyer-detail">
+          <div className="buyer-detail-head">
+            <h2>{t.owner.buyerDetailTitle}</h2>
+            {detail ? (
+              <button
+                type="button"
+                className="linkish"
+                onClick={() => {
+                  setDetail(null);
+                  setSelectedId(null);
+                }}
+              >
+                {t.owner.closeBuyerDetail}
+              </button>
+            ) : null}
+          </div>
+          {detailLoading ? <p className="muted">{t.common.loading}</p> : null}
+          {!detailLoading && !detail ? (
+            <p className="muted tiny">{t.owner.selectBuyerHint}</p>
+          ) : null}
+          {detail ? (
+            <>
+              <p>
+                <strong>{detail.buyer.shopName}</strong>
+                <span className="muted tiny">
+                  {" "}
+                  · {detail.buyer.phone}
+                  {detail.buyer.contactName
+                    ? ` · ${detail.buyer.contactName}`
+                    : ""}
+                  {detail.buyer.isActive
+                    ? ` · ${t.owner.buyerActive}`
+                    : ` · ${t.owner.buyerInactive}`}
+                </span>
+              </p>
+              <section className="stat-grid compact">
+                <article>
+                  <p>{t.owner.buyerOrders}</p>
+                  <strong>{detail.analytics.orderCount}</strong>
+                </article>
+                <article>
+                  <p>{t.owner.buyerSpent}</p>
+                  <strong>
+                    ৳{detail.analytics.totalSpentBdt.toLocaleString()}
+                  </strong>
+                </article>
+                <article>
+                  <p>{t.owner.buyerOnlineSpent}</p>
+                  <strong>
+                    ৳{detail.analytics.onlineSpentBdt.toLocaleString()}
+                  </strong>
+                </article>
+                <article>
+                  <p>{t.owner.buyerCounterSpent}</p>
+                  <strong>
+                    ৳{detail.analytics.counterSpentBdt.toLocaleString()}
+                  </strong>
+                </article>
+              </section>
+              {detail.analytics.lastOrderAt ? (
+                <p className="muted tiny">
+                  {t.owner.buyerLastOrder}:{" "}
+                  {new Date(detail.analytics.lastOrderAt).toLocaleString()}
+                </p>
+              ) : null}
+
+              <h3>{t.owner.buyerProductsBought}</h3>
+              {detail.analytics.products.length === 0 ? (
+                <p className="muted tiny">{t.owner.buyerNoProducts}</p>
+              ) : (
+                <ul className="plain-list">
+                  {detail.analytics.products.map((p) => (
+                    <li key={p.productId}>
+                      <span>
+                        {locale === "bn" && p.nameBn ? p.nameBn : p.name}
+                        <div className="muted tiny">
+                          {p.sku} · {p.qty} × · {p.orderCount}{" "}
+                          {t.owner.buyerOrders.toLowerCase()}
+                        </div>
+                      </span>
+                      <span>৳{p.lineTotalBdt.toLocaleString()}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <h3>{t.owner.buyerRecentOrders}</h3>
+              {detail.analytics.recentOrders.length === 0 ? (
+                <p className="muted tiny">{t.owner.buyerNoOrders}</p>
+              ) : (
+                <ul className="plain-list">
+                  {detail.analytics.recentOrders.map((o) => (
+                    <li key={o.id}>
+                      <span>
+                        <Link to={`/owner/history?order=${o.id}`}>
+                          {o.invoiceCode}
+                        </Link>
+                        <div className="muted tiny">
+                          {new Date(o.orderedAt).toLocaleString()}
+                          {o.source
+                            ? ` · ${locale === "bn" ? o.source.nameBn : o.source.nameEn}`
+                            : ""}
+                          {" · "}
+                          {o.lines
+                            .map((l) => {
+                              const name =
+                                locale === "bn" && l.product?.nameBn
+                                  ? l.product.nameBn
+                                  : (l.product?.name ?? "");
+                              return `${l.qty}× ${name}`;
+                            })
+                            .join(", ")}
+                        </div>
+                      </span>
+                      <span>৳{o.totalBdt.toLocaleString()}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          ) : null}
+        </aside>
       </div>
 
       {deactivateBuyer ? (

@@ -70,7 +70,11 @@ export function OwnerSellPage({ locale }: Props) {
     ]);
     setProducts(prod.products.filter((p) => p.isActive));
     setBatches(batchRes.batches);
-    setBuyers(buyerRes.buyers);
+    setBuyers(
+      buyerRes.buyers
+        .filter((b) => b.isActive)
+        .map((b) => ({ id: b.id, shopName: b.shopName, phone: b.phone })),
+    );
     setOrders(orderRes.orders.slice(0, 12));
     if (!pickProductId && prod.products[0]) {
       setPickProductId(prod.products[0].id);

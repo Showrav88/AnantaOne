@@ -991,6 +991,53 @@ export const api = {
           }>;
         };
       }>("/api/v1/owner/buyers/analytics", 2, undefined, true),
+    buyerDetailAnalytics: (id: string) =>
+      getJson<{
+        ok: boolean;
+        buyer: BuyerRow;
+        analytics: {
+          orderCount: number;
+          totalSpentBdt: number;
+          onlineSpentBdt: number;
+          counterSpentBdt: number;
+          lastOrderAt: string | null;
+          products: Array<{
+            productId: string;
+            name: string;
+            nameBn: string | null;
+            sku: string;
+            qty: number;
+            lineTotalBdt: number;
+            orderCount: number;
+          }>;
+          recentOrders: Array<{
+            id: string;
+            invoiceCode: string;
+            orderedAt: string;
+            totalBdt: number;
+            subtotalBdt: number;
+            source: { code: string; nameEn: string; nameBn: string } | null;
+            status: { code: string; nameEn: string; nameBn: string } | null;
+            lines: Array<{
+              productId: string;
+              qty: number;
+              unitPriceBdt: number;
+              lineTotalBdt: number;
+              product: {
+                id: string;
+                name: string;
+                nameBn: string | null;
+                sku: string;
+              } | null;
+            }>;
+          }>;
+        };
+      }>(
+        `/api/v1/owner/buyers/${encodeURIComponent(id)}/analytics`,
+        2,
+        undefined,
+        true,
+      ),
     deliveryWards: (branchId?: string) =>
       getJson<{
         ok: boolean;
