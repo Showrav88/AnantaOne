@@ -139,6 +139,27 @@ export function OwnerCompanyPage({ locale }: Props) {
 
   async function onLogoUpload(file: File | null) {
     if (!file || !canWrite) return;
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: company?.id },
+          { label: t.owner.fieldName, value: company?.name },
+          { label: t.owner.uploadLogo, value: file.name },
+          {
+            label: t.owner.fieldStatus,
+            value: `${Math.max(1, Math.round(file.size / 1024))} KB`,
+          },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     setUploading(true);
     setError(null);
     try {
@@ -155,6 +176,23 @@ export function OwnerCompanyPage({ locale }: Props) {
 
   async function clearLogo() {
     if (!canWrite || !company?.logoUrl) return;
+    const decision = await confirm({
+      title: t.common.confirmDeleteTitle,
+      message: t.common.confirmDeleteMessage,
+      tone: "danger",
+      confirmLabel: t.owner.clearLogo,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: company.id },
+          { label: t.owner.fieldName, value: company.name },
+          { label: t.owner.uploadLogo, value: company.logoUrl },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     setError(null);
     try {
       await api.owner.updateBranding({ clearLogo: true });

@@ -236,6 +236,29 @@ export function OwnerStaffPage({ locale }: Props) {
 
   async function onStaffImage(id: string, file: File | null, label: string) {
     if (!file || !isOwner) return;
+    const member = staff.find((s) => s.id === id);
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: id },
+          { label: t.owner.fieldStaffName, value: member?.name ?? label },
+          { label: t.owner.fieldEmployeeCode, value: member?.employeeCode },
+          { label: t.owner.fieldStaffPhoto, value: file.name },
+          {
+            label: t.owner.fieldStatus,
+            value: `${Math.max(1, Math.round(file.size / 1024))} KB`,
+          },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     setError(null);
     setOkMsg(null);
     setUploading(true);
@@ -257,6 +280,30 @@ export function OwnerStaffPage({ locale }: Props) {
   }
 
   async function onBranchChange(staffId: string, branchId: string) {
+    const member = staff.find((s) => s.id === staffId);
+    const nextBranch =
+      branches.find((b) => b.id === branchId)?.name ?? t.owner.noBranch;
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: staffId },
+          { label: t.owner.fieldStaffName, value: member?.name },
+          { label: t.owner.fieldEmployeeCode, value: member?.employeeCode },
+          {
+            label: t.owner.fieldBranch,
+            value: `${member?.branch?.name ?? t.owner.noBranch} → ${nextBranch}`,
+          },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     setError(null);
     try {
       await api.owner.updateStaff(staffId, {

@@ -142,6 +142,27 @@ export function OwnerSitePage({ locale }: Props) {
     purpose: "assets" | "logo" | "hero" | "products",
   ) {
     if (!file || !canWrite) return;
+    const decision = await confirm({
+      title: t.common.confirmCreateTitle,
+      message: t.common.confirmCreateMessage,
+      tone: "create",
+      confirmLabel: t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.owner.mediaLibrary, value: file.name },
+          { label: t.owner.fieldCategory, value: purpose },
+          {
+            label: t.owner.fieldStatus,
+            value: `${Math.max(1, Math.round(file.size / 1024))} KB · ${file.type || "file"}`,
+          },
+          { label: t.owner.fieldName, value: branding?.name },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     setUploading(true);
     setError(null);
     setOkMsg(null);

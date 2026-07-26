@@ -180,6 +180,26 @@ export function OwnerProductsPage({ locale }: Props) {
   async function onAddUnit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    const decision = await confirm({
+      title: t.common.confirmCreateTitle,
+      message: t.common.confirmCreateMessage,
+      tone: "create",
+      confirmLabel: t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          {
+            label: t.owner.fieldUnitCode,
+            value: newUnit.code.trim().toUpperCase(),
+          },
+          { label: t.owner.fieldProductName, value: newUnit.nameEn.trim() },
+          { label: t.owner.fieldProductNameBn, value: newUnit.nameBn.trim() },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       const created = await api.owner.createUnit({
         code: newUnit.code.trim().toUpperCase(),
@@ -349,6 +369,29 @@ export function OwnerProductsPage({ locale }: Props) {
 
   async function onProductImage(id: string, file: File | null, sku: string) {
     if (!file) return;
+    const product = products.find((p) => p.id === id);
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: id },
+          { label: t.owner.fieldSku, value: sku },
+          { label: t.owner.fieldProductName, value: product?.name },
+          { label: t.owner.fieldProductImage, value: file.name },
+          {
+            label: t.owner.fieldStatus,
+            value: `${Math.max(1, Math.round(file.size / 1024))} KB`,
+          },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     setError(null);
     setOkMsg(null);
     setUploading(true);
