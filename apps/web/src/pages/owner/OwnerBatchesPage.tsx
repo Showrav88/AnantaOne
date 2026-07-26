@@ -6,6 +6,10 @@ import {
   type Product,
   type ProductionBatch,
 } from "../../lib/api";
+import {
+  confirmDetails,
+  useConfirmAction,
+} from "../../components/ConfirmActionDialog";
 import { getStoredUser } from "../../lib/session";
 
 type Props = { locale: LocaleCode };
@@ -22,6 +26,7 @@ const empty = {
 
 export function OwnerBatchesPage({ locale }: Props) {
   const t = getMessages(locale);
+  const { confirm } = useConfirmAction();
   const user = getStoredUser();
   const [searchParams] = useSearchParams();
   const canWrite =
@@ -40,12 +45,6 @@ export function OwnerBatchesPage({ locale }: Props) {
     searchParams.get("batchId"),
   );
   const [scanQuery, setScanQuery] = useState("");
-
-  const [reverseBatch, setReverseBatch] = useState<ProductionBatch | null>(
-    null,
-  );
-  const [reverseReason, setReverseReason] = useState("");
-  const [reversing, setReversing] = useState(false);
 
   async function load() {
     const [prod, batchRes] = await Promise.all([
@@ -109,11 +108,46 @@ export function OwnerBatchesPage({ locale }: Props) {
     );
   }
 
-  async function saveEdit(id: string) {
+  function productLabel(productId: string) {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return productId;
+    const name = locale === "bn" && product.nameBn ? product.nameBn : product.name;
+    return `${name} (${product.sku})`;
+  }
+
+  function batchProductLabel(b: ProductionBatch) {
+    const name =
+      locale === "bn" && b.product?.nameBn
+        ? b.product.nameBn
+        : (b.product?.name ?? b.productId);
+    return b.product?.sku ? `${name} (${b.product.sku})` : name;
+  }
+
+  async function saveEdit(b: ProductionBatch) {
     setError(null);
     setOkMsg(null);
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: b.id },
+          { label: t.owner.fieldBatchCode, value: b.batchCode },
+          { label: t.owner.fieldProduct, value: batchProductLabel(b) },
+          { label: t.owner.fieldQtyProduced, value: b.qtyProduced },
+          { label: t.owner.fieldMfgDate, value: editMfg },
+          { label: t.owner.fieldExpDate, value: editExp },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
-      await api.owner.updateBatch(id, {
+      await api.owner.updateBatch(b.id, {
         manufacturedAt: editMfg,
         expiresAt: editExp || null,
       });
@@ -128,6 +162,30 @@ export function OwnerBatchesPage({ locale }: Props) {
   async function onCreate(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    const decision = await confirm({
+      title: t.common.confirmCreateTitle,
+      message: t.common.confirmCreateMessage,
+      tone: "create",
+      confirmLabel: t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.owner.fieldProduct, value: productLabel(form.productId) },
+          {
+            label: t.owner.fieldBatchCode,
+            value: form.batchCode.trim() || t.common.autoAssigned,
+          },
+          { label: t.owner.fieldMfgDate, value: form.manufacturedAt },
+          { label: t.owner.fieldExpDate, value: form.expiresAt },
+          { label: t.owner.fieldQtyProduced, value: form.qtyProduced },
+          { label: t.owner.generateUnitTags, value: form.generateUnitTags ? "yes" : "no" },
+          { label: t.owner.fieldNote, value: form.note },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       await api.owner.createBatch({
         productId: form.productId,
@@ -153,20 +211,37 @@ export function OwnerBatchesPage({ locale }: Props) {
     }
   }
 
-  async function confirmReverse() {
-    if (!reverseBatch || !reverseReason.trim()) return;
-    setReversing(true);
+  async function confirmReverse(b: ProductionBatch) {
     setError(null);
+    setOkMsg(null);
+    const decision = await confirm({
+      title: t.owner.reverseBatchTitle,
+      message: t.owner.reverseBatchHint.replace("{code}", b.batchCode),
+      tone: "danger",
+      confirmLabel: t.owner.confirmReverseBatch,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: b.id },
+          { label: t.owner.fieldBatchCode, value: b.batchCode },
+          { label: t.owner.fieldProduct, value: batchProductLabel(b) },
+          { label: t.owner.fieldQtyProduced, value: b.qtyProduced },
+          { label: t.owner.fieldQtyLeft, value: `${b.qtyRemaining} / ${b.qtyProduced}` },
+        ],
+        { skipEmpty: true },
+      ),
+      reasonLabel: t.owner.batchSoftDeleteReason,
+      reasonPlaceholder: t.owner.batchSoftDeleteReasonHint,
+      reasonMinLength: 5,
+    });
+    if (!decision.ok) return;
+
     try {
-      await api.owner.reverseBatch(reverseBatch.id, reverseReason.trim());
+      await api.owner.reverseBatch(b.id, decision.reason ?? "");
       setOkMsg(t.owner.batchReversed);
-      setReverseBatch(null);
-      setReverseReason("");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
-    } finally {
-      setReversing(false);
     }
   }
 
@@ -408,7 +483,7 @@ export function OwnerBatchesPage({ locale }: Props) {
                             <button
                               type="button"
                               className="btn primary compact"
-                              onClick={() => void saveEdit(b.id)}
+                              onClick={() => void saveEdit(b)}
                             >
                               {t.owner.saved}
                             </button>
@@ -445,10 +520,7 @@ export function OwnerBatchesPage({ locale }: Props) {
                               <button
                                 type="button"
                                 className="btn ghost compact dark batch-soft-delete"
-                                onClick={() => {
-                                  setReverseBatch(b);
-                                  setReverseReason("");
-                                }}
+                                onClick={() => void confirmReverse(b)}
                               >
                                 {t.owner.reverseBatch}
                               </button>
@@ -469,59 +541,6 @@ export function OwnerBatchesPage({ locale }: Props) {
         </table>
       </div>
 
-      {reverseBatch ? (
-        <div
-          className="owner-dialog-backdrop no-print"
-          role="presentation"
-          onClick={() => (!reversing ? setReverseBatch(null) : null)}
-        >
-          <div
-            className="owner-dialog confirm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="batch-reverse-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 id="batch-reverse-title">{t.owner.reverseBatchTitle}</h2>
-            <p>
-              {t.owner.reverseBatchHint.replace(
-                "{code}",
-                reverseBatch.batchCode,
-              )}
-            </p>
-            <p className="muted tiny">{t.owner.batchesGuideDeleteHint}</p>
-            <label className="full">
-              {t.owner.batchSoftDeleteReason}
-              <textarea
-                required
-                minLength={5}
-                rows={3}
-                value={reverseReason}
-                placeholder={t.owner.batchSoftDeleteReasonHint}
-                onChange={(e) => setReverseReason(e.target.value)}
-              />
-            </label>
-            <div className="form-actions">
-              <button
-                type="button"
-                className="btn primary"
-                disabled={reversing || !reverseReason.trim()}
-                onClick={() => void confirmReverse()}
-              >
-                {t.owner.confirmReverseBatch}
-              </button>
-              <button
-                type="button"
-                className="btn ghost"
-                disabled={reversing}
-                onClick={() => setReverseBatch(null)}
-              >
-                {t.common.cancel}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

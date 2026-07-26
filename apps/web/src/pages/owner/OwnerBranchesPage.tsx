@@ -1,6 +1,10 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import {
+  confirmDetails,
+  useConfirmAction,
+} from "../../components/ConfirmActionDialog";
 import { api, type BranchRow, type StaffMember } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
 
@@ -16,6 +20,7 @@ const emptyForm = {
 
 export function OwnerBranchesPage({ locale }: Props) {
   const t = getMessages(locale);
+  const { confirm } = useConfirmAction();
   const user = getStoredUser();
   const isOwner = user?.role.code === "OWNER";
   const canView =
@@ -79,6 +84,28 @@ export function OwnerBranchesPage({ locale }: Props) {
     });
   }
 
+  function staffLabel(id: string) {
+    const member = staff.find((s) => s.id === id);
+    return member ? `${member.name} (${member.role.code})` : id;
+  }
+
+  function branchDetails(branch: BranchRow) {
+    return confirmDetails(
+      [
+        { label: t.common.fieldId, value: branch.id },
+        { label: t.owner.fieldBranchName, value: branch.name },
+        { label: t.owner.fieldAddress, value: branch.address },
+        { label: t.owner.fieldPhone, value: branch.phone },
+        { label: t.owner.fieldBranchManager, value: branch.manager?.name ?? branch.managerId },
+        {
+          label: t.owner.fieldBranchStaff,
+          value: branch.staff.map((s) => `${s.name} (${s.role.code})`).join(", "),
+        },
+      ],
+      { skipEmpty: true },
+    );
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!isOwner) return;
@@ -94,6 +121,37 @@ export function OwnerBranchesPage({ locale }: Props) {
       managerId: form.managerId,
       employeeIds: form.employeeIds.filter((id) => id !== form.managerId),
     };
+    const decision = await confirm({
+      title: editingId
+        ? t.common.confirmUpdateTitle
+        : t.common.confirmCreateTitle,
+      message: editingId
+        ? t.common.confirmUpdateMessage
+        : t.common.confirmCreateMessage,
+      tone: editingId ? "update" : "create",
+      confirmLabel: editingId
+        ? t.common.confirmUpdate
+        : t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          ...(editingId
+            ? [{ label: t.common.fieldId, value: editingId }]
+            : []),
+          { label: t.owner.fieldBranchName, value: body.name },
+          { label: t.owner.fieldAddress, value: body.address },
+          { label: t.owner.fieldPhone, value: body.phone },
+          { label: t.owner.fieldBranchManager, value: staffLabel(body.managerId) },
+          {
+            label: t.owner.fieldBranchEmployees,
+            value: body.employeeIds.map(staffLabel).join(", "),
+          },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       if (editingId) {
         await api.owner.updateBranch(editingId, body);
@@ -107,11 +165,21 @@ export function OwnerBranchesPage({ locale }: Props) {
     }
   }
 
-  async function deactivate(id: string) {
+  async function deactivate(branch: BranchRow) {
     setError(null);
+    const decision = await confirm({
+      title: t.common.confirmDeleteTitle,
+      message: t.common.confirmDeleteMessage,
+      tone: "danger",
+      confirmLabel: t.common.confirmDelete,
+      cancelLabel: t.common.cancel,
+      details: branchDetails(branch),
+    });
+    if (!decision.ok) return;
+
     try {
-      await api.owner.deactivateBranch(id);
-      if (editingId === id) resetForm();
+      await api.owner.deactivateBranch(branch.id);
+      if (editingId === branch.id) resetForm();
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
@@ -306,7 +374,7 @@ export function OwnerBranchesPage({ locale }: Props) {
                         <button
                           type="button"
                           className="linkish"
-                          onClick={() => void deactivate(b.id)}
+                          onClick={() => void deactivate(b)}
                         >
                           {t.owner.deactivate}
                         </button>

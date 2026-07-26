@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import {
+  confirmDetails,
+  useConfirmAction,
+} from "../../components/ConfirmActionDialog";
 import { SalesInvoiceView } from "../../components/SalesInvoiceView";
 import {
   api,
@@ -28,6 +32,7 @@ type CartLine = {
 
 export function OwnerSellPage({ locale }: Props) {
   const t = getMessages(locale);
+  const { confirm } = useConfirmAction();
   const user = getStoredUser();
   const [searchParams, setSearchParams] = useSearchParams();
   const onlineOrderId = searchParams.get("onlineOrderId");
@@ -58,7 +63,6 @@ export function OwnerSellPage({ locale }: Props) {
   const [pickBatchId, setPickBatchId] = useState("");
   const [lines, setLines] = useState<CartLine[]>([]);
   const [invoice, setInvoice] = useState<SalesInvoice | null>(null);
-  const [cancelReason, setCancelReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [scanQuery, setScanQuery] = useState("");
@@ -209,6 +213,30 @@ export function OwnerSellPage({ locale }: Props) {
     0,
   );
 
+  function sourceLabel(code: typeof sourceCode) {
+    if (code === "COUNTER") return t.owner.sourceCounter;
+    if (code === "PHONE") return t.owner.sourcePhone;
+    if (code === "ONLINE") return t.owner.sourceOnline;
+    if (code === "WALK_IN") return t.owner.sourceWalkIn;
+    return code;
+  }
+
+  function buyerLabel() {
+    if (!buyerId) return t.owner.walkInBuyer;
+    const buyer = buyers.find((b) => b.id === buyerId);
+    return buyer ? `${buyer.shopName} (${buyer.phone})` : buyerId;
+  }
+
+  function lineSummary() {
+    return lines
+      .map((l) => {
+        const batch = l.batchCode ?? batches.find((b) => b.id === l.batchId)?.batchCode ?? l.batchId;
+        const lineTotal = Number(l.qty || 0) * Number(l.unitPriceBdt || 0);
+        return `${l.productLabel} (${l.sku}) · ${t.owner.fieldBatch}: ${batch} · ${t.owner.fieldQty}: ${l.qty} · ৳${Number(l.unitPriceBdt || 0).toLocaleString()} = ৳${lineTotal.toLocaleString()}`;
+      })
+      .join("\n");
+  }
+
   function addLine(opts?: {
     productId?: string;
     batchId?: string;
@@ -357,6 +385,32 @@ export function OwnerSellPage({ locale }: Props) {
         return;
       }
     }
+    const decision = await confirm({
+      title: t.common.confirmActionTitle,
+      message: onlineMeta
+        ? t.owner.onlineSellConfirmHint
+        : t.common.confirmActionMessage,
+      tone: "info",
+      confirmLabel: onlineMeta
+        ? t.owner.onlineConfirmSellAction
+        : t.owner.confirmSell,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.owner.fieldOrderSource, value: onlineMeta ? t.owner.sourceOnline : sourceLabel(sourceCode) },
+          { label: t.owner.fieldBuyerShop, value: onlineMeta?.shopName ?? buyerLabel() },
+          { label: t.owner.fieldContactName, value: onlineMeta?.clientName },
+          { label: t.owner.fieldPhone, value: onlineMeta?.phone },
+          { label: t.owner.fieldNote, value: note },
+          { label: t.owner.invoiceLabel, value: onlineMeta?.invoiceCode },
+          { label: t.owner.fieldLineTotal, value: lineSummary() },
+          { label: t.owner.invoiceTotal, value: `৳${total.toLocaleString()}` },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       if (onlineMeta) {
         const res = await api.owner.acceptOnlineOrder(onlineMeta.id, {
@@ -372,7 +426,6 @@ export function OwnerSellPage({ locale }: Props) {
         const orderId = String((res.order as { id: string }).id);
         const inv = await api.owner.orderInvoice(orderId);
         setInvoice(inv.invoice);
-        setCancelReason("");
         setOkMsg(
           `${t.owner.onlineSellConfirmed} ৳${Number((res.order as { totalBdt: number }).totalBdt).toLocaleString()}`,
         );
@@ -398,7 +451,6 @@ export function OwnerSellPage({ locale }: Props) {
       });
       const inv = await api.owner.orderInvoice(res.order.id);
       setInvoice(inv.invoice);
-      setCancelReason("");
       setOkMsg(
         `${t.owner.sellConfirmed} ৳${res.order.totalBdt.toLocaleString()}`,
       );
@@ -410,18 +462,37 @@ export function OwnerSellPage({ locale }: Props) {
     }
   }
 
-  async function onCancelSale(e: FormEvent) {
-    e.preventDefault();
+  async function onCancelSale() {
     if (!invoice || invoice.isReversed) return;
     setError(null);
     setOkMsg(null);
+    const decision = await confirm({
+      title: t.common.confirmDeleteTitle,
+      message: t.owner.cancelSaleHint,
+      tone: "danger",
+      confirmLabel: t.owner.confirmCancelSale,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: invoice.id },
+          { label: t.owner.invoiceLabel, value: invoice.invoiceCode ?? invoice.invoiceNo },
+          { label: t.owner.billTo, value: invoice.buyerName ?? t.owner.walkInBuyer },
+          { label: t.owner.invoiceTotal, value: `৳${invoice.totalBdt.toLocaleString()}` },
+        ],
+        { skipEmpty: true },
+      ),
+      reasonLabel: t.owner.reverseReason,
+      reasonPlaceholder: t.owner.reverseReasonHint,
+      reasonMinLength: 5,
+    });
+    if (!decision.ok) return;
+
     try {
-      const res = await api.owner.reverseOrder(invoice.id, cancelReason);
+      const res = await api.owner.reverseOrder(invoice.id, decision.reason ?? "");
       const restockQty = (res.restocked ?? []).reduce((s, r) => s + r.qty, 0);
       setOkMsg(
         `${t.owner.reverseDone} · ${t.owner.cashDebited}: ৳${(res.cashDebitedBdt ?? invoice.totalBdt).toLocaleString()}${restockQty > 0 ? ` · +${restockQty} stock` : ""}`,
       );
-      setCancelReason("");
       const inv = await api.owner.orderInvoice(invoice.id);
       setInvoice(inv.invoice);
       await load();
@@ -508,7 +579,6 @@ export function OwnerSellPage({ locale }: Props) {
               className="linkish"
               onClick={() => {
                 setInvoice(null);
-                setCancelReason("");
               }}
             >
               {t.owner.newSale}
@@ -516,27 +586,17 @@ export function OwnerSellPage({ locale }: Props) {
           </div>
           <SalesInvoiceView locale={locale} invoice={invoice} />
           {canSell && !invoice.isReversed ? (
-            <form
-              className="owner-form compact reverse-form no-print"
-              onSubmit={onCancelSale}
-            >
+            <section className="owner-form compact reverse-form no-print">
               <h2>{t.owner.cancelSale}</h2>
               <p className="muted tiny">{t.owner.cancelSaleHint}</p>
-              <label className="full">
-                {t.owner.reverseReason}
-                <textarea
-                  required
-                  minLength={5}
-                  rows={3}
-                  value={cancelReason}
-                  onChange={(e) => setCancelReason(e.target.value)}
-                  placeholder={t.owner.reverseReasonHint}
-                />
-              </label>
-              <button type="submit" className="cta danger">
+              <button
+                type="button"
+                className="cta danger"
+                onClick={() => void onCancelSale()}
+              >
                 {t.owner.confirmCancelSale}
               </button>
-            </form>
+            </section>
           ) : null}
         </div>
       ) : null}

@@ -1,5 +1,9 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import {
+  confirmDetails,
+  useConfirmAction,
+} from "../../components/ConfirmActionDialog";
 import { api } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
 
@@ -7,6 +11,7 @@ type Props = { locale: LocaleCode };
 
 export function OwnerDeliveryPage({ locale }: Props) {
   const t = getMessages(locale);
+  const { confirm } = useConfirmAction();
   const user = getStoredUser();
   const canWrite = user?.role.code === "OWNER" || user?.role.code === "MANAGER";
   const [branches, setBranches] = useState<
@@ -109,8 +114,37 @@ export function OwnerDeliveryPage({ locale }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function branchLabel(id: string) {
+    if (!id) return t.owner.allBranches;
+    return branches.find((b) => b.id === id)?.name ?? id;
+  }
+
+  function wardLabel(id: string) {
+    const ward = wards.find((w) => w.id === id);
+    if (!ward) return id;
+    return locale === "bn" && ward.nameBn ? ward.nameBn : ward.name;
+  }
+
   async function seedWards() {
     setError(null);
+    const decision = await confirm({
+      title: t.common.confirmCreateTitle,
+      message: t.common.confirmCreateMessage,
+      tone: "create",
+      confirmLabel: t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.owner.fieldBranch, value: branchLabel(branchId) },
+          { label: t.owner.wardCount, value: Number(settings.defaultWardCount) || 15 },
+          { label: t.shop.freeDelivery, value: Number(settings.freeWardCount) || 5 },
+          { label: t.owner.fieldUpazila, value: locationLabel },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       await api.owner.seedDeliveryArea({
         branchId: branchId || null,
@@ -127,6 +161,25 @@ export function OwnerDeliveryPage({ locale }: Props) {
   async function saveSettings(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.owner.outsideAreaCharge, value: `৳${Number(settings.outsideAreaChargeBdt).toLocaleString()}` },
+          { label: t.owner.sameDistrictCharge, value: `৳${Number(settings.sameDistrictChargeBdt).toLocaleString()}` },
+          { label: t.owner.otherDistrictCharge, value: `৳${Number(settings.otherDistrictChargeBdt).toLocaleString()}` },
+          { label: t.owner.wardCount, value: settings.defaultWardCount },
+          { label: t.shop.freeDelivery, value: settings.freeWardCount },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       await api.owner.updateDeliverySettings({
         outsideAreaChargeBdt: Number(settings.outsideAreaChargeBdt),
@@ -143,6 +196,23 @@ export function OwnerDeliveryPage({ locale }: Props) {
   }
 
   async function toggleFree(id: string, freeDelivery: boolean) {
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: id },
+          { label: t.owner.fieldWard, value: wardLabel(id) },
+          { label: t.shop.freeDelivery, value: freeDelivery ? "yes" : "no" },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       await api.owner.updateDeliveryWard(id, { freeDelivery });
       await load();
@@ -152,6 +222,23 @@ export function OwnerDeliveryPage({ locale }: Props) {
   }
 
   async function saveBaseCharge(id: string, baseChargeBdt: number) {
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: id },
+          { label: t.owner.fieldWard, value: wardLabel(id) },
+          { label: t.owner.baseDeliveryCharge, value: `৳${baseChargeBdt.toLocaleString()}` },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       await api.owner.updateDeliveryWard(id, { baseChargeBdt });
       await load();
@@ -162,6 +249,23 @@ export function OwnerDeliveryPage({ locale }: Props) {
 
   async function saveRate(e: FormEvent) {
     e.preventDefault();
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.owner.fieldCategory, value: categoryLabel(rateForm.category) },
+          { label: t.owner.chargePerUnit, value: `৳${Number(rateForm.chargePerUnitBdt).toLocaleString()}` },
+          { label: t.owner.fieldNote, value: rateForm.note },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       await api.owner.upsertDeliveryRate({
         category: rateForm.category,
@@ -177,6 +281,24 @@ export function OwnerDeliveryPage({ locale }: Props) {
 
   async function saveCoupon(e: FormEvent) {
     e.preventDefault();
+    const decision = await confirm({
+      title: t.common.confirmCreateTitle,
+      message: t.common.confirmCreateMessage,
+      tone: "create",
+      confirmLabel: t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.shop.fieldCoupon, value: couponForm.code },
+          { label: t.owner.discountType, value: couponForm.discountType },
+          { label: t.owner.discountValue, value: couponForm.discountValue },
+          { label: t.owner.minOrder, value: couponForm.minOrderBdt ? `৳${Number(couponForm.minOrderBdt).toLocaleString()}` : undefined },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       await api.owner.createCoupon({
         code: couponForm.code,

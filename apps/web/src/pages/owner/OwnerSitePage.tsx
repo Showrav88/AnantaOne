@@ -2,6 +2,10 @@ import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import {
+  confirmDetails,
+  useConfirmAction,
+} from "../../components/ConfirmActionDialog";
+import {
   api,
   type MediaAsset,
   type ShopBranding,
@@ -45,6 +49,7 @@ const emptyBranding = (slug = "shop"): ShopBranding => ({
 
 export function OwnerSitePage({ locale }: Props) {
   const t = getMessages(locale);
+  const { confirm } = useConfirmAction();
   const user = getStoredUser();
   const canWrite = user?.role.code === "OWNER" || user?.role.code === "MANAGER";
   const [branding, setBranding] = useState<ShopBranding | null>(null);
@@ -95,6 +100,27 @@ export function OwnerSitePage({ locale }: Props) {
     if (!branding || !canWrite || !branding.id) return;
     setError(null);
     setOkMsg(null);
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: branding.id },
+          { label: t.owner.fieldBrandPrimary, value: branding.brandPrimary },
+          { label: t.owner.fieldBrandAccent, value: branding.brandAccent },
+          { label: t.owner.fieldBrandBg, value: branding.brandBg },
+          { label: t.owner.fieldBrandFont, value: branding.brandFont },
+          { label: t.owner.fieldSiteHeadline, value: branding.siteHeadline },
+          { label: t.owner.fieldSiteSubhead, value: branding.siteSubhead },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       const res = await api.owner.updateBranding({
         brandPrimary: branding.brandPrimary,
@@ -116,6 +142,27 @@ export function OwnerSitePage({ locale }: Props) {
     purpose: "assets" | "logo" | "hero" | "products",
   ) {
     if (!file || !canWrite) return;
+    const decision = await confirm({
+      title: t.common.confirmCreateTitle,
+      message: t.common.confirmCreateMessage,
+      tone: "create",
+      confirmLabel: t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.owner.mediaLibrary, value: file.name },
+          { label: t.owner.fieldCategory, value: purpose },
+          {
+            label: t.owner.fieldStatus,
+            value: `${Math.max(1, Math.round(file.size / 1024))} KB · ${file.type || "file"}`,
+          },
+          { label: t.owner.fieldName, value: branding?.name },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     setUploading(true);
     setError(null);
     setOkMsg(null);
@@ -133,6 +180,23 @@ export function OwnerSitePage({ locale }: Props) {
   async function assign(asset: MediaAsset, slot: "logo" | "heroImage" | "heroVideo") {
     if (!canWrite) return;
     setError(null);
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: asset.id },
+          { label: t.owner.mediaLibrary, value: asset.originalName ?? asset.label ?? asset.url },
+          { label: t.owner.fieldStatus, value: slotLabel(slot) },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       const body =
         slot === "logo"
@@ -152,6 +216,22 @@ export function OwnerSitePage({ locale }: Props) {
     if (!canWrite) return;
     setError(null);
     setOkMsg(null);
+    const decision = await confirm({
+      title: t.common.confirmDeleteTitle,
+      message: t.common.confirmDeleteMessage,
+      tone: "danger",
+      confirmLabel: t.common.confirmDelete,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.owner.fieldStatus, value: slotLabel(slot) },
+          { label: t.owner.mediaLibrary, value: currentSlotUrl(slot) },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       const body =
         slot === "logo"
@@ -181,18 +261,45 @@ export function OwnerSitePage({ locale }: Props) {
     return slots;
   }
 
+  function slotLabel(slot: "logo" | "heroImage" | "heroVideo") {
+    if (slot === "logo") return t.owner.slotLogo;
+    if (slot === "heroImage") return t.owner.slotHeroImage;
+    return t.owner.slotHeroVideo;
+  }
+
+  function currentSlotUrl(slot: "logo" | "heroImage" | "heroVideo") {
+    if (!branding) return undefined;
+    if (slot === "logo") return branding.logoUrl;
+    if (slot === "heroImage") return branding.heroImageUrl;
+    return branding.heroVideoUrl;
+  }
+
   async function removeAsset(asset: MediaAsset) {
     if (!canWrite) return;
     const slots = assetUsage(asset);
-    const confirmed =
+    const message =
       slots.length > 1
-        ? window.confirm(t.owner.deleteMediaConfirmShared)
+        ? t.owner.deleteMediaConfirmShared
         : slots.length === 1
-          ? window.confirm(
-              t.owner.deleteMediaConfirmInUse.replace("{slot}", slots[0]!),
-            )
-          : window.confirm(t.owner.deleteMediaConfirm);
-    if (!confirmed) return;
+          ? t.owner.deleteMediaConfirmInUse.replace("{slot}", slots[0]!)
+          : t.owner.deleteMediaConfirm;
+    const decision = await confirm({
+      title: t.common.confirmDeleteTitle,
+      message,
+      tone: "danger",
+      confirmLabel: t.common.confirmDelete,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: asset.id },
+          { label: t.owner.mediaLibrary, value: asset.originalName ?? asset.label ?? asset.url },
+          { label: t.owner.fieldStatus, value: slots.join(", ") },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     setError(null);
     try {
       await api.owner.deleteMedia(asset.id);
