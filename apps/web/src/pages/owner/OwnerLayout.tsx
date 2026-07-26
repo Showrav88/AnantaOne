@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import { ConfirmActionProvider } from "../../components/ConfirmActionDialog";
@@ -19,6 +19,8 @@ function isDesktopWidth() {
   return typeof window !== "undefined" && window.innerWidth > 900;
 }
 
+const WALLET_PEEK_MS = 5000;
+
 export function OwnerLayout({ locale, onLocale }: Props) {
   const t = getMessages(locale);
   const navigate = useNavigate();
@@ -31,6 +33,10 @@ export function OwnerLayout({ locale, onLocale }: Props) {
   const [menuOpen, setMenuOpen] = useState(isDesktopWidth);
   const [branches, setBranches] = useState<BranchRow[]>([]);
   const [activeBranch, setActiveBranch] = useState(getActiveBranchId());
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [walletShown, setWalletShown] = useState(false);
+  const [walletLoading, setWalletLoading] = useState(false);
+  const walletHideTimer = useRef<number | null>(null);
   const roleLabel =
     user?.role.code === "MANAGER"
       ? t.owner.roleManager
@@ -98,6 +104,67 @@ export function OwnerLayout({ locale, onLocale }: Props) {
       window.removeEventListener("anantaone:branch-change", onBranchChange);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (walletHideTimer.current != null) {
+        window.clearTimeout(walletHideTimer.current);
+      }
+    };
+  }, []);
+
+  // Refresh cached balance after leaving wallet/payments (debits may have happened).
+  useEffect(() => {
+    if (!isOwner) return;
+    if (
+      location.pathname.startsWith("/owner/wallet") ||
+      location.pathname.startsWith("/owner/payments") ||
+      location.pathname.startsWith("/owner/sell")
+    ) {
+      setWalletBalance(null);
+      setWalletShown(false);
+    }
+  }, [isOwner, location.pathname]);
+
+  async function loadWalletBalance() {
+    setWalletLoading(true);
+    try {
+      const res = await api.owner.wallet();
+      setWalletBalance(res.wallet.balanceBdt);
+    } catch {
+      setWalletBalance(null);
+    } finally {
+      setWalletLoading(false);
+    }
+  }
+
+  function hideWalletBalance() {
+    setWalletShown(false);
+    if (walletHideTimer.current != null) {
+      window.clearTimeout(walletHideTimer.current);
+      walletHideTimer.current = null;
+    }
+  }
+
+  function revealWalletBalance() {
+    void loadWalletBalance();
+    setWalletShown(true);
+    if (walletHideTimer.current != null) {
+      window.clearTimeout(walletHideTimer.current);
+    }
+    walletHideTimer.current = window.setTimeout(() => {
+      setWalletShown(false);
+      walletHideTimer.current = null;
+    }, WALLET_PEEK_MS);
+  }
+
+  function toggleWalletPeek() {
+    if (walletShown) {
+      hideWalletBalance();
+      return;
+    }
+    revealWalletBalance();
+  }
+
   function closeMenu() {
     setMenuOpen(false);
   }
@@ -139,6 +206,35 @@ export function OwnerLayout({ locale, onLocale }: Props) {
           <span />
         </button>
         <p className="owner-topbar-brand">{t.app.name}</p>
+        {isOwner ? (
+          <button
+            type="button"
+            className={`wallet-peek${walletShown ? " is-open" : ""}`}
+            onClick={toggleWalletPeek}
+            aria-pressed={walletShown}
+            aria-label={
+              walletShown
+                ? t.owner.walletPeekHide
+                : t.owner.walletPeekShow
+            }
+            title={
+              walletShown
+                ? t.owner.walletPeekHide
+                : t.owner.walletPeekShow
+            }
+          >
+            <span className="wallet-peek-label">{t.owner.cashBalance}</span>
+            <span className="wallet-peek-amount">
+              {walletShown
+                ? walletLoading && walletBalance == null
+                  ? t.common.loading
+                  : walletBalance == null
+                    ? "৳—"
+                    : `৳${walletBalance.toLocaleString()}`
+                : "৳••••••"}
+            </span>
+          </button>
+        ) : null}
         <div className="branch-switcher topbar-branch">
           {isOwner ? (
             <label>

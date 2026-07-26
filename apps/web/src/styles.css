@@ -758,6 +758,59 @@ button {
   text-overflow: ellipsis;
 }
 
+/* Banking-style wallet peek — click to show, auto-hides */
+.wallet-peek {
+  appearance: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 0.05rem;
+  justify-items: start;
+  margin: 0;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--topbar-fg) 35%, transparent);
+  border-radius: 0.4rem;
+  background: color-mix(in srgb, var(--topbar-fg) 10%, transparent);
+  color: var(--topbar-fg);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.wallet-peek:hover,
+.wallet-peek:focus-visible {
+  border-color: color-mix(in srgb, var(--topbar-fg) 70%, transparent);
+  background: color-mix(in srgb, var(--topbar-fg) 16%, transparent);
+  outline: none;
+}
+
+.wallet-peek.is-open {
+  border-color: color-mix(in srgb, var(--tone-wallet, #6ee7b7) 70%, var(--topbar-fg));
+  background: color-mix(in srgb, var(--tone-wallet, #6ee7b7) 18%, transparent);
+}
+
+.wallet-peek-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  opacity: 0.82;
+  white-space: nowrap;
+}
+
+.wallet-peek-amount {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-theme="night"] .wallet-peek.is-open {
+  border-color: color-mix(in srgb, var(--tone-wallet, #d4b896) 70%, var(--topbar-fg));
+  background: color-mix(in srgb, var(--tone-wallet, #d4b896) 18%, transparent);
+}
+
 .owner-topbar .lang,
 .owner-topbar .display-btn,
 .owner-topbar .branch-locked {
@@ -1209,6 +1262,19 @@ html[data-theme="night"] .owner-nav a.nav-cash-utility:hover {
     flex: 1 1 0;
     min-width: 0;
     font-size: 0.95rem;
+  }
+
+  .wallet-peek {
+    padding: 0.22rem 0.45rem;
+    max-width: 42%;
+  }
+
+  .wallet-peek-label {
+    font-size: 0.62rem;
+  }
+
+  .wallet-peek-amount {
+    font-size: 0.86rem;
   }
 
   .topbar-branch {
