@@ -1,6 +1,10 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import {
+  confirmDetails,
+  useConfirmAction,
+} from "../../components/ConfirmActionDialog";
 import { api, type CompanyDetails, type GeoPlace } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
 import { uploadTenantMedia } from "../../lib/tenantUpload";
@@ -9,6 +13,7 @@ type Props = { locale: LocaleCode };
 
 export function OwnerCompanyPage({ locale }: Props) {
   const t = getMessages(locale);
+  const { confirm } = useConfirmAction();
   const user = getStoredUser();
   const canWrite = user?.role.code === "OWNER" || user?.role.code === "MANAGER";
   const [company, setCompany] = useState<CompanyDetails>();
@@ -84,21 +89,47 @@ export function OwnerCompanyPage({ locale }: Props) {
     if (!company) return;
     setSaved(false);
     setError(null);
+    const body = {
+      name: company.name,
+      phone: company.phone,
+      address: company.address,
+      divisionId: company.divisionId ?? null,
+      districtId: company.districtId ?? null,
+      upazilaId: company.upazilaId ?? null,
+      setupDeliveryAreas: setupAreas && Boolean(company.upazilaId),
+      wardCount: Number(wardCount) || 15,
+      freeWardCount: 5,
+      tagline: company.tagline,
+      description: company.description,
+      locale: company.locale as "bn" | "en",
+    };
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: company.id },
+          { label: t.owner.fieldName, value: body.name },
+          { label: t.owner.fieldPhone, value: body.phone },
+          { label: t.owner.fieldAddress, value: body.address },
+          { label: t.owner.fieldDivision, value: body.divisionId },
+          { label: t.owner.fieldDistrict, value: body.districtId },
+          { label: t.owner.fieldUpazila, value: body.upazilaId },
+          { label: t.owner.setupDeliveryAreas, value: body.setupDeliveryAreas ? "yes" : "no" },
+          { label: t.owner.wardCount, value: body.wardCount },
+          { label: t.owner.fieldTagline, value: body.tagline },
+          { label: t.owner.fieldDescription, value: body.description },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
-      const res = await api.owner.updateCompany({
-        name: company.name,
-        phone: company.phone,
-        address: company.address,
-        divisionId: company.divisionId ?? null,
-        districtId: company.districtId ?? null,
-        upazilaId: company.upazilaId ?? null,
-        setupDeliveryAreas: setupAreas && Boolean(company.upazilaId),
-        wardCount: Number(wardCount) || 15,
-        freeWardCount: 5,
-        tagline: company.tagline,
-        description: company.description,
-        locale: company.locale as "bn" | "en",
-      });
+      const res = await api.owner.updateCompany(body);
       setCompany(res.company);
       setSaved(true);
     } catch (err) {

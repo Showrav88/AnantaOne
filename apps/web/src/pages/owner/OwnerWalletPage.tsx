@@ -15,6 +15,10 @@ import {
   type WalletAnalytics,
   type WalletSummary,
 } from "../../lib/api";
+import {
+  confirmDetails,
+  useConfirmAction,
+} from "../../components/ConfirmActionDialog";
 import { getStoredUser } from "../../lib/session";
 
 type Props = { locale: LocaleCode };
@@ -102,6 +106,7 @@ function CollapsePanel({
 
 export function OwnerWalletPage({ locale }: Props) {
   const t = getMessages(locale);
+  const { confirm } = useConfirmAction();
   const user = getStoredUser();
   const canWrite =
     user?.role.code === "OWNER" || user?.role.code === "MANAGER";
@@ -130,11 +135,6 @@ export function OwnerWalletPage({ locale }: Props) {
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(
     null,
   );
-  const [reversePurchaseId, setReversePurchaseId] = useState<string | null>(
-    null,
-  );
-  const [reverseReason, setReverseReason] = useState("");
-
   const [material, setMaterial] = useState({
     materialName: "",
     kindCode: "RAW_MATERIAL",
@@ -216,6 +216,27 @@ export function OwnerWalletPage({ locale }: Props) {
     );
   }
 
+  function unitLabel(code: string) {
+    const unit = units.find((u) => u.code === code);
+    if (!unit) return code;
+    return `${locale === "bn" ? unit.nameBn : unit.nameEn} (${unit.code})`;
+  }
+
+  function kindLabel(code: string) {
+    const kind = kinds.find((k) => k.code === code);
+    if (!kind) return code;
+    return labelKind(kind);
+  }
+
+  function txnTypeLabel(code: typeof adjust.typeCode) {
+    if (code === "OPENING") return t.owner.txnOpening;
+    if (code === "ADJUSTMENT_IN") return t.owner.txnAdjIn;
+    if (code === "ADJUSTMENT_OUT") return t.owner.txnAdjOut;
+    if (code === "OTHER_IN") return t.owner.txnOtherIn;
+    if (code === "OTHER_OUT") return t.owner.txnOtherOut;
+    return code;
+  }
+
   async function load() {
     const [walletRes, catRes, metaRes, purchaseRes] = await Promise.all([
       api.owner.wallet(),
@@ -282,6 +303,40 @@ export function OwnerWalletPage({ locale }: Props) {
       supplierPhone: material.supplierPhone || null,
       note: material.note || null,
     };
+    const decision = await confirm({
+      title: editingPurchaseId
+        ? t.common.confirmUpdateTitle
+        : t.common.confirmCreateTitle,
+      message: editingPurchaseId
+        ? t.common.confirmUpdateMessage
+        : t.common.confirmCreateMessage,
+      tone: editingPurchaseId ? "update" : "create",
+      confirmLabel: editingPurchaseId
+        ? t.common.confirmUpdate
+        : t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          ...(editingPurchaseId
+            ? [{ label: t.common.fieldId, value: editingPurchaseId }]
+            : []),
+          { label: t.owner.fieldMaterial, value: body.materialName },
+          { label: t.owner.fieldSupplyKind, value: kindLabel(body.kindCode) },
+          { label: t.owner.fieldQty, value: `${body.qty} ${unitLabel(body.unitCode)}` },
+          { label: t.owner.costGoods, value: `৳${body.goodsAmountBdt.toLocaleString()}` },
+          { label: t.owner.costTransport, value: `৳${body.transportBdt.toLocaleString()}` },
+          { label: t.owner.costDriver, value: `৳${body.driverBdt.toLocaleString()}` },
+          { label: t.owner.costTravel, value: `৳${body.travelBdt.toLocaleString()}` },
+          { label: t.owner.costTotal, value: `৳${materialTotal.toLocaleString()}` },
+          { label: t.owner.fieldSupplier, value: body.supplierName },
+          { label: t.owner.fieldSupplierPhone, value: body.supplierPhone },
+          { label: t.owner.fieldNote, value: body.note },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       if (editingPurchaseId) {
         await api.owner.updateMaterial(editingPurchaseId, body);
@@ -300,17 +355,41 @@ export function OwnerWalletPage({ locale }: Props) {
     }
   }
 
-  async function onReverseMaterial(e: FormEvent) {
-    e.preventDefault();
-    if (!reversePurchaseId) return;
+  async function onReverseMaterial(p: SupplyPurchase) {
     setError(null);
     setOkMsg(null);
+    const decision = await confirm({
+      title: t.common.confirmDeleteTitle,
+      message: t.owner.reverseSupplyHint,
+      tone: "danger",
+      confirmLabel: t.owner.confirmReverseSupply,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: p.id },
+          { label: t.owner.fieldMaterial, value: p.materialName },
+          {
+            label: t.owner.fieldSupplyKind,
+            value: p.kind ? (locale === "bn" ? p.kind.nameBn : p.kind.nameEn) : undefined,
+          },
+          {
+            label: t.owner.fieldQty,
+            value: `${p.qty} ${p.unit ? (locale === "bn" ? p.unit.nameBn : p.unit.nameEn) : ""}`,
+          },
+          { label: t.owner.costTotal, value: `৳${p.amountBdt.toLocaleString()}` },
+          { label: t.owner.fieldSupplier, value: p.supplierName },
+        ],
+        { skipEmpty: true },
+      ),
+      reasonLabel: t.owner.reverseSupplyReason,
+      reasonMinLength: 5,
+    });
+    if (!decision.ok) return;
+
     try {
-      await api.owner.reverseMaterial(reversePurchaseId, reverseReason);
-      setReversePurchaseId(null);
-      setReverseReason("");
+      await api.owner.reverseMaterial(p.id, decision.reason ?? "");
       setOkMsg(t.owner.supplyReversed);
-      if (editingPurchaseId === reversePurchaseId) {
+      if (editingPurchaseId === p.id) {
         setEditingPurchaseId(null);
         setMaterial(blankMaterial(material.kindCode, material.unitCode));
       }
@@ -324,7 +403,6 @@ export function OwnerWalletPage({ locale }: Props) {
   function startEditPurchase(p: SupplyPurchase) {
     if (p.isReversed) return;
     setEditingPurchaseId(p.id);
-    setReversePurchaseId(null);
     fillMaterialFromPurchase(p);
     setTab("supply");
     setError(null);
@@ -335,6 +413,31 @@ export function OwnerWalletPage({ locale }: Props) {
     e.preventDefault();
     setError(null);
     setOkMsg(null);
+    const amount = Number(expense.amountBdt);
+    const category = categories.find((c) => c.code === expense.categoryCode);
+    const decision = await confirm({
+      title: t.common.confirmCreateTitle,
+      message: t.common.confirmCreateMessage,
+      tone: "create",
+      confirmLabel: t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          {
+            label: t.owner.fieldExpenseCategory,
+            value: category ? (locale === "bn" ? category.nameBn : category.nameEn) : expense.categoryCode,
+          },
+          { label: t.owner.fieldExpenseTitle, value: expense.title },
+          { label: t.owner.fieldAmount, value: `৳${amount.toLocaleString()}` },
+          { label: t.owner.fieldContactName, value: expense.contactName },
+          { label: t.owner.fieldContactPhone, value: expense.contactPhone },
+          { label: t.owner.fieldNote, value: expense.note },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       await api.owner.recordExpense({
         categoryCode: expense.categoryCode,
@@ -363,6 +466,24 @@ export function OwnerWalletPage({ locale }: Props) {
     e.preventDefault();
     setError(null);
     setOkMsg(null);
+    const amount = Number(adjust.amountBdt);
+    const decision = await confirm({
+      title: t.common.confirmActionTitle,
+      message: t.common.confirmActionMessage,
+      tone: "info",
+      confirmLabel: t.common.confirmProceed,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.owner.fieldTxnType, value: txnTypeLabel(adjust.typeCode) },
+          { label: t.owner.fieldAmount, value: `৳${amount.toLocaleString()}` },
+          { label: t.owner.fieldNote, value: adjust.note },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       await api.owner.adjustWallet({
         typeCode: adjust.typeCode,
@@ -452,45 +573,11 @@ export function OwnerWalletPage({ locale }: Props) {
             <button
               type="button"
               className="btn ghost compact dark"
-              onClick={() => {
-                setReversePurchaseId(p.id);
-                setReverseReason("");
-                setEditingPurchaseId(null);
-              }}
+              onClick={() => void onReverseMaterial(p)}
             >
               {t.owner.reverseSupply}
             </button>
           </div>
-        ) : null}
-        {showActions && reversePurchaseId === p.id ? (
-          <form className="owner-form compact" onSubmit={onReverseMaterial}>
-            <p className="muted tiny full">{t.owner.reverseSupplyHint}</p>
-            <label className="full">
-              {t.owner.reverseSupplyReason}
-              <textarea
-                required
-                minLength={5}
-                rows={2}
-                value={reverseReason}
-                onChange={(e) => setReverseReason(e.target.value)}
-              />
-            </label>
-            <div className="media-actions">
-              <button type="submit" className="btn primary compact">
-                {t.owner.confirmReverseSupply}
-              </button>
-              <button
-                type="button"
-                className="btn ghost compact"
-                onClick={() => {
-                  setReversePurchaseId(null);
-                  setReverseReason("");
-                }}
-              >
-                {t.common.cancel}
-              </button>
-            </div>
-          </form>
         ) : null}
       </div>
     );

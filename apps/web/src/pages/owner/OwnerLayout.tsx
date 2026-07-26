@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import { ConfirmActionProvider } from "../../components/ConfirmActionDialog";
 import { DisplayControls } from "../../components/DisplayControls";
 import { api, type BranchRow } from "../../lib/api";
 import {
@@ -312,7 +313,9 @@ export function OwnerLayout({ locale, onLocale }: Props) {
         </div>
       </aside>
       <main className="owner-main">
-        <Outlet />
+        <ConfirmActionProvider>
+          <Outlet />
+        </ConfirmActionProvider>
       </main>
     </div>
   );

@@ -25,7 +25,22 @@
     "themeToggle": "Theme",
     "themeLight": "Light",
     "themeDark": "Dark",
-    "themeNight": "Night"
+    "themeNight": "Night",
+    "confirm": "Confirm",
+    "confirmCreateTitle": "Confirm create",
+    "confirmUpdateTitle": "Confirm update",
+    "confirmDeleteTitle": "Confirm delete",
+    "confirmActionTitle": "Confirm action",
+    "confirmCreateMessage": "Review the exact values that will be saved.",
+    "confirmUpdateMessage": "Review the exact values that will change.",
+    "confirmDeleteMessage": "Review the exact values that will be removed or reversed.",
+    "confirmActionMessage": "Review the exact values before continuing.",
+    "confirmProceed": "Yes, continue",
+    "confirmCreate": "Yes, create",
+    "confirmUpdate": "Yes, save changes",
+    "confirmDelete": "Yes, delete",
+    "fieldId": "ID",
+    "autoAssigned": "Auto-assigned"
   },
   "shop": {
     "catalog": "Products",

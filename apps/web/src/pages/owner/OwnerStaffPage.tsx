@@ -1,6 +1,10 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import {
+  confirmDetails,
+  useConfirmAction,
+} from "../../components/ConfirmActionDialog";
 import { api, type BranchRow, type StaffMember } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
 import { uploadTenantMedia } from "../../lib/tenantUpload";
@@ -27,6 +31,7 @@ function joiningDateInput(value: string | null | undefined) {
 
 export function OwnerStaffPage({ locale }: Props) {
   const t = getMessages(locale);
+  const { confirm } = useConfirmAction();
   const user = getStoredUser();
   const isOwner = user?.role.code === "OWNER";
   const canView =
@@ -44,9 +49,6 @@ export function OwnerStaffPage({ locale }: Props) {
   const [uploading, setUploading] = useState(false);
   const [pending, startTransition] = useTransition();
   const [detailMember, setDetailMember] = useState<StaffMember | null>(null);
-  const [deactivateMember, setDeactivateMember] =
-    useState<StaffMember | null>(null);
-  const [deactivating, setDeactivating] = useState(false);
 
   async function load() {
     const [s, b] = await Promise.all([
@@ -110,11 +112,58 @@ export function OwnerStaffPage({ locale }: Props) {
     setClearExistingImage(false);
   }
 
+  function formRoleLabel() {
+    return form.roleCode === "MANAGER"
+      ? t.owner.staffRoleManager
+      : t.owner.staffRoleEmployee;
+  }
+
+  function branchLabel(id: string) {
+    if (!id) return t.owner.noBranch;
+    return branches.find((b) => b.id === id)?.name ?? id;
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!isOwner) return;
     setError(null);
     setOkMsg(null);
+    const decision = await confirm({
+      title: editingId
+        ? t.common.confirmUpdateTitle
+        : t.common.confirmCreateTitle,
+      message: editingId
+        ? t.common.confirmUpdateMessage
+        : t.common.confirmCreateMessage,
+      tone: editingId ? "update" : "create",
+      confirmLabel: editingId
+        ? t.common.confirmUpdate
+        : t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          ...(editingId
+            ? [{ label: t.common.fieldId, value: editingId }]
+            : []),
+          { label: t.owner.fieldStaffName, value: form.name.trim() },
+          { label: t.auth.email, value: form.email.trim() },
+          { label: t.auth.phone, value: form.phone.trim() },
+          { label: t.owner.fieldRole, value: formRoleLabel() },
+          { label: t.owner.fieldBranch, value: branchLabel(form.branchId) },
+          { label: t.owner.fieldEmployeeCode, value: form.employeeCode.trim() },
+          { label: t.owner.fieldDesignation, value: form.designation.trim() },
+          { label: t.owner.fieldJoiningDate, value: form.joiningDate },
+          {
+            label: t.owner.fieldSalary,
+            value: form.salaryBdt === "" ? undefined : `৳${Number(form.salaryBdt).toLocaleString()}`,
+          },
+          { label: t.owner.fieldStaffPhoto, value: imageFile?.name },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     setUploading(true);
     try {
       let imageUrl: string | null | undefined;
@@ -219,21 +268,36 @@ export function OwnerStaffPage({ locale }: Props) {
     }
   }
 
-  async function confirmDeactivate() {
-    if (!deactivateMember) return;
+  async function confirmDeactivate(member: StaffMember) {
     setError(null);
-    setDeactivating(true);
+    const decision = await confirm({
+      title: t.owner.deactivateStaffTitle,
+      message: t.owner.deactivateStaffHint.replace("{name}", member.name),
+      tone: "danger",
+      confirmLabel: t.owner.confirmDeactivateStaff,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: member.id },
+          { label: t.owner.fieldStaffName, value: member.name },
+          { label: t.owner.fieldEmployeeCode, value: member.employeeCode },
+          { label: t.owner.fieldRole, value: roleLabel(member) },
+          { label: t.auth.email, value: member.email },
+          { label: t.auth.phone, value: member.phone },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
-      await api.owner.deactivateStaff(deactivateMember.id);
-      if (editingId === deactivateMember.id) resetForm();
-      if (detailMember?.id === deactivateMember.id) setDetailMember(null);
-      setDeactivateMember(null);
+      await api.owner.deactivateStaff(member.id);
+      if (editingId === member.id) resetForm();
+      if (detailMember?.id === member.id) setDetailMember(null);
       setOkMsg(t.owner.staffDeactivated);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
-    } finally {
-      setDeactivating(false);
     }
   }
 
@@ -580,7 +644,7 @@ export function OwnerStaffPage({ locale }: Props) {
                         <button
                           type="button"
                           className="linkish"
-                          onClick={() => setDeactivateMember(s)}
+                          onClick={() => void confirmDeactivate(s)}
                         >
                           {t.owner.deactivate}
                         </button>
@@ -695,7 +759,7 @@ export function OwnerStaffPage({ locale }: Props) {
                       type="button"
                       className="btn ghost"
                       onClick={() => {
-                        setDeactivateMember(detailMember);
+                        void confirmDeactivate(detailMember);
                         setDetailMember(null);
                       }}
                     >
@@ -710,62 +774,6 @@ export function OwnerStaffPage({ locale }: Props) {
                 onClick={() => setDetailMember(null)}
               >
                 {t.common.close}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {deactivateMember ? (
-        <div
-          className="owner-dialog-backdrop"
-          role="presentation"
-          onClick={() => (!deactivating ? setDeactivateMember(null) : null)}
-        >
-          <div
-            className="owner-dialog confirm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="staff-deactivate-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 id="staff-deactivate-title">{t.owner.deactivateStaffTitle}</h2>
-            <p>
-              {t.owner.deactivateStaffHint.replace(
-                "{name}",
-                deactivateMember.name,
-              )}
-            </p>
-            <ul className="staff-deactivate-summary">
-              <li>
-                <span className="muted">{t.owner.fieldEmployeeCode}</span>{" "}
-                {deactivateMember.employeeCode || "—"}
-              </li>
-              <li>
-                <span className="muted">{t.owner.fieldRole}</span>{" "}
-                {roleLabel(deactivateMember)}
-              </li>
-              <li>
-                <span className="muted">{t.auth.email}</span>{" "}
-                {deactivateMember.email}
-              </li>
-            </ul>
-            <div className="form-actions">
-              <button
-                type="button"
-                className="cta danger"
-                disabled={deactivating}
-                onClick={() => void confirmDeactivate()}
-              >
-                {t.owner.confirmDeactivateStaff}
-              </button>
-              <button
-                type="button"
-                className="btn ghost"
-                disabled={deactivating}
-                onClick={() => setDeactivateMember(null)}
-              >
-                {t.common.cancel}
               </button>
             </div>
           </div>

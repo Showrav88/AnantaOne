@@ -25,7 +25,22 @@
     "themeToggle": "থিম",
     "themeLight": "লাইট",
     "themeDark": "ডার্ক",
-    "themeNight": "নাইট"
+    "themeNight": "নাইট",
+    "confirm": "নিশ্চিত",
+    "confirmCreateTitle": "তৈরি নিশ্চিত করুন",
+    "confirmUpdateTitle": "আপডেট নিশ্চিত করুন",
+    "confirmDeleteTitle": "মুছে ফেলা নিশ্চিত করুন",
+    "confirmActionTitle": "অ্যাকশন নিশ্চিত করুন",
+    "confirmCreateMessage": "যে মানগুলো সেভ হবে সেগুলো দেখে নিন।",
+    "confirmUpdateMessage": "যে মানগুলো বদলাবে সেগুলো দেখে নিন।",
+    "confirmDeleteMessage": "যে মানগুলো মুছে/রিভার্স হবে সেগুলো দেখে নিন।",
+    "confirmActionMessage": "এগোানোর আগে সঠিক মানগুলো দেখে নিন।",
+    "confirmProceed": "হ্যাঁ, চালিয়ে যান",
+    "confirmCreate": "হ্যাঁ, তৈরি করুন",
+    "confirmUpdate": "হ্যাঁ, পরিবর্তন সংরক্ষণ",
+    "confirmDelete": "হ্যাঁ, মুছুন",
+    "fieldId": "আইডি",
+    "autoAssigned": "স্বয়ংক্রিয়"
   },
   "shop": {
     "catalog": "পণ্য",
