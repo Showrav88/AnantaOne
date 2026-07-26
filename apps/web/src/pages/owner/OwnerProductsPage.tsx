@@ -1,6 +1,10 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import {
+  confirmDetails,
+  useConfirmAction,
+} from "../../components/ConfirmActionDialog";
 import { api, type Product, type ProductionBatch } from "../../lib/api";
 import { PRODUCT_PRESETS } from "../../lib/productPresets";
 import { getStoredUser } from "../../lib/session";
@@ -44,6 +48,7 @@ const PRODUCT_CATEGORIES = [
 
 export function OwnerProductsPage({ locale }: Props) {
   const t = getMessages(locale);
+  const { confirm } = useConfirmAction();
   const user = getStoredUser();
   const canWrite = user?.role.code === "OWNER";
   const [products, setProducts] = useState<Product[]>([]);
@@ -175,6 +180,26 @@ export function OwnerProductsPage({ locale }: Props) {
   async function onAddUnit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    const decision = await confirm({
+      title: t.common.confirmCreateTitle,
+      message: t.common.confirmCreateMessage,
+      tone: "create",
+      confirmLabel: t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          {
+            label: t.owner.fieldUnitCode,
+            value: newUnit.code.trim().toUpperCase(),
+          },
+          { label: t.owner.fieldProductName, value: newUnit.nameEn.trim() },
+          { label: t.owner.fieldProductNameBn, value: newUnit.nameBn.trim() },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       const created = await api.owner.createUnit({
         code: newUnit.code.trim().toUpperCase(),
@@ -195,6 +220,58 @@ export function OwnerProductsPage({ locale }: Props) {
     e.preventDefault();
     setError(null);
     setOkMsg(null);
+    const skuPreview =
+      editingId || form.sku.trim().length >= 2
+        ? (editingId ? form.sku : form.sku.trim().toUpperCase())
+        : t.common.autoAssigned;
+    const decision = await confirm({
+      title: editingId
+        ? t.common.confirmUpdateTitle
+        : t.common.confirmCreateTitle,
+      message: editingId
+        ? t.common.confirmUpdateMessage
+        : t.common.confirmCreateMessage,
+      tone: editingId ? "update" : "create",
+      confirmLabel: editingId
+        ? t.common.confirmUpdate
+        : t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          ...(editingId
+            ? [{ label: t.common.fieldId, value: editingId }]
+            : []),
+          { label: t.owner.fieldSku, value: skuPreview },
+          { label: t.owner.fieldProductName, value: form.name },
+          { label: t.owner.fieldProductNameBn, value: form.nameBn },
+          { label: t.owner.fieldCategory, value: form.category },
+          {
+            label: t.owner.fieldSize,
+            value:
+              form.size === ""
+                ? "—"
+                : `${form.size} ${form.unitCode}`,
+          },
+          { label: t.owner.fieldPrice, value: `৳${Number(form.priceBdt || 0)}` },
+          {
+            label: t.owner.fieldStock,
+            value: form.stockQty === "" ? "0" : form.stockQty,
+          },
+          {
+            label: t.owner.fieldMinStock,
+            value: form.minStock === "" ? "0" : form.minStock,
+          },
+          { label: t.owner.fieldDescription, value: form.description },
+          {
+            label: t.owner.fieldProductImage,
+            value: imageFile ? imageFile.name : undefined,
+          },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     setUploading(true);
     try {
       let imageUrl: string | null | undefined;
@@ -253,6 +330,33 @@ export function OwnerProductsPage({ locale }: Props) {
   }
 
   async function deactivate(id: string) {
+    const product = products.find((p) => p.id === id);
+    const decision = await confirm({
+      title: t.common.confirmDeleteTitle,
+      message: t.common.confirmDeleteMessage,
+      tone: "danger",
+      confirmLabel: t.common.confirmDelete,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: id },
+          { label: t.owner.fieldSku, value: product?.sku },
+          { label: t.owner.fieldProductName, value: product?.name },
+          {
+            label: t.owner.fieldPrice,
+            value:
+              product != null ? `৳${product.priceBdt.toLocaleString()}` : undefined,
+          },
+          {
+            label: t.owner.fieldStock,
+            value: product?.stockQty,
+          },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     setError(null);
     try {
       await api.owner.deactivateProduct(id);
@@ -265,6 +369,29 @@ export function OwnerProductsPage({ locale }: Props) {
 
   async function onProductImage(id: string, file: File | null, sku: string) {
     if (!file) return;
+    const product = products.find((p) => p.id === id);
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: id },
+          { label: t.owner.fieldSku, value: sku },
+          { label: t.owner.fieldProductName, value: product?.name },
+          { label: t.owner.fieldProductImage, value: file.name },
+          {
+            label: t.owner.fieldStatus,
+            value: `${Math.max(1, Math.round(file.size / 1024))} KB`,
+          },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     setError(null);
     setOkMsg(null);
     setUploading(true);

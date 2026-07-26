@@ -1,6 +1,10 @@
 import { useEffect, useState, useTransition } from "react";
 import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import {
+  confirmDetails,
+  useConfirmAction,
+} from "../../components/ConfirmActionDialog";
 import { api } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
 
@@ -30,6 +34,7 @@ type OnlineOrder = {
 
 export function OwnerOnlineOrdersPage({ locale }: Props) {
   const t = getMessages(locale);
+  const { confirm } = useConfirmAction();
   const user = getStoredUser();
   const canWrite = user?.role.code === "OWNER" || user?.role.code === "MANAGER";
   const [orders, setOrders] = useState<OnlineOrder[]>([]);
@@ -55,20 +60,67 @@ export function OwnerOnlineOrdersPage({ locale }: Props) {
     return () => window.removeEventListener("anantaone:branch-change", refresh);
   }, [filter]);
 
-  async function accept(id: string) {
+  function statusLabel(order: OnlineOrder) {
+    if (!order.status) return "—";
+    return locale === "bn" ? order.status.nameBn : order.status.nameEn;
+  }
+
+  function orderDetails(order: OnlineOrder, nextStatus?: string) {
+    return confirmDetails(
+      [
+        { label: t.common.fieldId, value: order.id },
+        { label: t.owner.invoiceLabel, value: order.invoiceCode },
+        { label: t.owner.fieldShopName, value: order.shopName },
+        { label: t.owner.fieldContactName, value: order.clientName },
+        { label: t.owner.fieldPhone, value: order.phone },
+        { label: t.owner.fieldStatus, value: nextStatus ? `${statusLabel(order)} -> ${nextStatus}` : statusLabel(order) },
+        { label: t.shop.subtotal, value: `৳${order.subtotalBdt.toLocaleString()}` },
+        { label: t.shop.delivery, value: `৳${order.deliveryBdt.toLocaleString()}` },
+        { label: t.shop.discount, value: `৳${order.discountBdt.toLocaleString()}` },
+        { label: t.shop.total, value: `৳${order.totalBdt.toLocaleString()}` },
+      ],
+      { skipEmpty: true },
+    );
+  }
+
+  async function accept(order: OnlineOrder) {
     setError(null);
+    const decision = await confirm({
+      title: t.common.confirmActionTitle,
+      message: t.owner.onlineSellConfirmHint,
+      tone: "info",
+      confirmLabel: t.owner.onlineQuickAccept,
+      cancelLabel: t.common.cancel,
+      details: orderDetails(order),
+    });
+    if (!decision.ok) return;
+
     try {
-      await api.owner.acceptOnlineOrder(id);
+      await api.owner.acceptOnlineOrder(order.id);
       await load(filter);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Accept failed");
     }
   }
 
-  async function setStatus(id: string, statusCode: string) {
+  async function setStatus(order: OnlineOrder, statusCode: string) {
     setError(null);
+    const decision = await confirm({
+      title: statusCode === "CANCELLED"
+        ? t.common.confirmDeleteTitle
+        : t.common.confirmActionTitle,
+      message: t.common.confirmActionMessage,
+      tone: statusCode === "CANCELLED" ? "danger" : "info",
+      confirmLabel: statusCode === "CANCELLED"
+        ? t.common.confirmDelete
+        : t.common.confirmProceed,
+      cancelLabel: t.common.cancel,
+      details: orderDetails(order, statusCode),
+    });
+    if (!decision.ok) return;
+
     try {
-      await api.owner.setOnlineOrderStatus(id, statusCode);
+      await api.owner.setOnlineOrderStatus(order.id, statusCode);
       await load(filter);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Update failed");
@@ -165,14 +217,14 @@ export function OwnerOnlineOrdersPage({ locale }: Props) {
                     <button
                       type="button"
                       className="btn ghost compact"
-                      onClick={() => void accept(o.id)}
+                      onClick={() => void accept(o)}
                     >
                       {t.owner.onlineQuickAccept}
                     </button>
                     <button
                       type="button"
                       className="btn ghost compact dark"
-                      onClick={() => void setStatus(o.id, "CANCELLED")}
+                      onClick={() => void setStatus(o, "CANCELLED")}
                     >
                       {t.common.cancel}
                     </button>
@@ -182,7 +234,7 @@ export function OwnerOnlineOrdersPage({ locale }: Props) {
                   <button
                     type="button"
                     className="btn ghost compact"
-                    onClick={() => void setStatus(o.id, "OUT_FOR_DELIVERY")}
+                    onClick={() => void setStatus(o, "OUT_FOR_DELIVERY")}
                   >
                     {t.owner.markOutForDelivery}
                   </button>
@@ -191,7 +243,7 @@ export function OwnerOnlineOrdersPage({ locale }: Props) {
                   <button
                     type="button"
                     className="btn ghost compact"
-                    onClick={() => void setStatus(o.id, "DELIVERED")}
+                    onClick={() => void setStatus(o, "DELIVERED")}
                   >
                     {t.owner.markDelivered}
                   </button>

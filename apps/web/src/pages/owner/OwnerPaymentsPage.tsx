@@ -1,6 +1,10 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import {
+  confirmDetails,
+  useConfirmAction,
+} from "../../components/ConfirmActionDialog";
+import {
   api,
   type SalaryPaymentRow,
   type StaffMember,
@@ -11,6 +15,7 @@ type Props = { locale: LocaleCode };
 
 export function OwnerPaymentsPage({ locale }: Props) {
   const t = getMessages(locale);
+  const { confirm } = useConfirmAction();
   const user = getStoredUser();
   const isOwner = user?.role.code === "OWNER";
   const canView =
@@ -24,8 +29,6 @@ export function OwnerPaymentsPage({ locale }: Props) {
     periodLabel: "",
     note: "",
   });
-  const [reverseId, setReverseId] = useState<string | null>(null);
-  const [reverseReason, setReverseReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -70,14 +73,41 @@ export function OwnerPaymentsPage({ locale }: Props) {
     });
   }
 
+  function staffLabel(userId: string) {
+    const member = staff.find((s) => s.id === userId);
+    return member ? `${member.name} (${member.role.code})` : userId;
+  }
+
   async function onPay(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setOkMsg(null);
+    const amount = form.amountBdt === "" ? undefined : Number(form.amountBdt);
+    const decision = await confirm({
+      title: t.common.confirmCreateTitle,
+      message: t.common.confirmCreateMessage,
+      tone: "create",
+      confirmLabel: t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.owner.fieldStaff, value: staffLabel(form.userId) },
+          {
+            label: t.owner.fieldAmount,
+            value: amount == null ? t.common.autoAssigned : `৳${amount.toLocaleString()}`,
+          },
+          { label: t.owner.fieldPeriod, value: form.periodLabel },
+          { label: t.owner.fieldNote, value: form.note },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       await api.owner.paySalary({
         userId: form.userId,
-        amountBdt: form.amountBdt === "" ? undefined : Number(form.amountBdt),
+        amountBdt: amount,
         periodLabel: form.periodLabel || null,
         note: form.note || null,
       });
@@ -89,18 +119,36 @@ export function OwnerPaymentsPage({ locale }: Props) {
     }
   }
 
-  async function onReverse(e: FormEvent) {
-    e.preventDefault();
-    if (!reverseId) return;
+  async function onReverse(payment: SalaryPaymentRow) {
     setError(null);
     setOkMsg(null);
+    const decision = await confirm({
+      title: t.common.confirmDeleteTitle,
+      message: t.owner.salaryReverseFormHint,
+      tone: "danger",
+      confirmLabel: t.owner.confirmSalaryReverse,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: payment.id },
+          { label: t.owner.fieldStaff, value: `${payment.staff.name} (${payment.staff.role})` },
+          { label: t.owner.fieldAmount, value: `৳${payment.amountBdt.toLocaleString()}` },
+          { label: t.owner.fieldPeriod, value: payment.periodLabel },
+          { label: t.owner.fieldNote, value: payment.note },
+        ],
+        { skipEmpty: true },
+      ),
+      reasonLabel: t.owner.reverseReason,
+      reasonPlaceholder: t.owner.salaryReverseReasonHint,
+      reasonMinLength: 5,
+    });
+    if (!decision.ok) return;
+
     try {
-      const res = await api.owner.reverseSalary(reverseId, reverseReason);
+      const res = await api.owner.reverseSalary(payment.id, decision.reason ?? "");
       setOkMsg(
         `${t.owner.salaryReverseDone} · ${t.owner.cashCredited}: ৳${(res.cashCreditedBdt ?? res.payment.amountBdt).toLocaleString()}`,
       );
-      setReverseId(null);
-      setReverseReason("");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Reverse failed");
@@ -238,12 +286,7 @@ export function OwnerPaymentsPage({ locale }: Props) {
                         <button
                           type="button"
                           className="linkish"
-                          onClick={() => {
-                            setReverseId(p.id);
-                            setReverseReason("");
-                            setError(null);
-                            setOkMsg(null);
-                          }}
+                          onClick={() => void onReverse(p)}
                         >
                           {t.owner.reverseSalary}
                         </button>
@@ -258,42 +301,6 @@ export function OwnerPaymentsPage({ locale }: Props) {
           </tbody>
         </table>
       </div>
-
-      {isOwner && reverseId ? (
-        <form
-          className="owner-form compact reverse-form"
-          onSubmit={onReverse}
-        >
-          <h2>{t.owner.reverseSalary}</h2>
-          <p className="muted tiny">{t.owner.salaryReverseFormHint}</p>
-          <label className="full">
-            {t.owner.reverseReason}
-            <textarea
-              required
-              minLength={5}
-              rows={3}
-              value={reverseReason}
-              onChange={(e) => setReverseReason(e.target.value)}
-              placeholder={t.owner.salaryReverseReasonHint}
-            />
-          </label>
-          <div className="form-actions">
-            <button type="submit" className="cta danger" disabled={pending}>
-              {t.owner.confirmSalaryReverse}
-            </button>
-            <button
-              type="button"
-              className="linkish"
-              onClick={() => {
-                setReverseId(null);
-                setReverseReason("");
-              }}
-            >
-              {t.common.cancel}
-            </button>
-          </div>
-        </form>
-      ) : null}
     </div>
   );
 }

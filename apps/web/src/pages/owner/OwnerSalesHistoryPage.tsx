@@ -2,6 +2,10 @@ import { useEffect, useRef, useState, useTransition, type FormEvent } from "reac
 import { Link, useSearchParams } from "react-router-dom";
 import { Html5Qrcode } from "html5-qrcode";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import {
+  confirmDetails,
+  useConfirmAction,
+} from "../../components/ConfirmActionDialog";
 import { SalesInvoiceView } from "../../components/SalesInvoiceView";
 import { api, type SalesInvoice, type SalesOrder } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
@@ -10,6 +14,7 @@ type Props = { locale: LocaleCode };
 
 export function OwnerSalesHistoryPage({ locale }: Props) {
   const t = getMessages(locale);
+  const { confirm } = useConfirmAction();
   const user = getStoredUser();
   const canReverse =
     user?.role.code === "OWNER" || user?.role.code === "MANAGER";
@@ -19,7 +24,6 @@ export function OwnerSalesHistoryPage({ locale }: Props) {
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [invoice, setInvoice] = useState<SalesInvoice | null>(null);
   const [query, setQuery] = useState("");
-  const [reason, setReason] = useState("");
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
@@ -127,14 +131,33 @@ export function OwnerSalesHistoryPage({ locale }: Props) {
     }
   }
 
-  async function onReverse(e: FormEvent) {
-    e.preventDefault();
+  async function onReverse() {
     if (!invoice || invoice.isReversed) return;
     setError(null);
     setOkMsg(null);
+    const decision = await confirm({
+      title: t.common.confirmDeleteTitle,
+      message: t.owner.reverseHint,
+      tone: "danger",
+      confirmLabel: t.owner.confirmReverse,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: invoice.id },
+          { label: t.owner.invoiceLabel, value: invoice.invoiceCode ?? invoice.invoiceNo },
+          { label: t.owner.billTo, value: invoice.buyerName ?? t.owner.walkInBuyer },
+          { label: t.owner.invoiceTotal, value: `৳${invoice.totalBdt.toLocaleString()}` },
+        ],
+        { skipEmpty: true },
+      ),
+      reasonLabel: t.owner.reverseReason,
+      reasonPlaceholder: t.owner.reverseReasonHint,
+      reasonMinLength: 5,
+    });
+    if (!decision.ok) return;
+
     try {
-      const res = await api.owner.reverseOrder(invoice.id, reason);
-      setReason("");
+      const res = await api.owner.reverseOrder(invoice.id, decision.reason ?? "");
       setOkMsg(
         `${t.owner.reverseDone} · ${t.owner.cashDebited}: ৳${(res.cashDebitedBdt ?? invoice.totalBdt).toLocaleString()}`,
       );
@@ -247,27 +270,17 @@ export function OwnerSalesHistoryPage({ locale }: Props) {
             <>
               <SalesInvoiceView locale={locale} invoice={invoice} />
               {canReverse && !invoice.isReversed ? (
-                <form
-                  className="owner-form compact reverse-form no-print"
-                  onSubmit={onReverse}
-                >
+                <section className="owner-form compact reverse-form no-print">
                   <h2>{t.owner.reverseSale}</h2>
                   <p className="muted tiny">{t.owner.reverseHint}</p>
-                  <label className="full">
-                    {t.owner.reverseReason}
-                    <textarea
-                      required
-                      minLength={5}
-                      rows={3}
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
-                      placeholder={t.owner.reverseReasonHint}
-                    />
-                  </label>
-                  <button type="submit" className="cta danger">
+                  <button
+                    type="button"
+                    className="cta danger"
+                    onClick={() => void onReverse()}
+                  >
                     {t.owner.confirmReverse}
                   </button>
-                </form>
+                </section>
               ) : null}
             </>
           ) : (

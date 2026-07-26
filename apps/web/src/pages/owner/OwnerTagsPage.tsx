@@ -10,6 +10,10 @@ import { useSearchParams } from "react-router-dom";
 import QRCode from "qrcode";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import {
+  confirmDetails,
+  useConfirmAction,
+} from "../../components/ConfirmActionDialog";
+import {
   api,
   type Product,
   type ProductionBatch,
@@ -63,6 +67,7 @@ function formatTagDate(value: string) {
 
 export function OwnerTagsPage({ locale }: Props) {
   const t = getMessages(locale);
+  const { confirm } = useConfirmAction();
   const user = getStoredUser();
   const [searchParams, setSearchParams] = useSearchParams();
   const canWrite =
@@ -314,6 +319,31 @@ export function OwnerTagsPage({ locale }: Props) {
   async function onCreateTemplate(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    const decision = await confirm({
+      title: t.common.confirmCreateTitle,
+      message: t.common.confirmCreateMessage,
+      tone: "create",
+      confirmLabel: t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.owner.fieldTemplateName, value: form.name },
+          { label: t.owner.fieldWidthMm, value: form.widthMm },
+          { label: t.owner.fieldHeightMm, value: form.heightMm },
+          { label: t.owner.fieldTagDescription, value: form.tagDescription },
+          { label: t.owner.tagFieldSku, value: form.showSku ? "yes" : "no" },
+          { label: t.owner.tagFieldPrice, value: form.showPrice ? "yes" : "no" },
+          { label: t.owner.tagFieldMfg, value: form.showMfgDate ? "yes" : "no" },
+          { label: t.owner.tagFieldExp, value: form.showExpDate ? "yes" : "no" },
+          { label: t.owner.tagFieldBatch, value: form.showBatch ? "yes" : "no" },
+          { label: t.owner.tagFieldQr, value: form.showQr ? "yes" : "no" },
+          { label: t.owner.fieldDefault, value: form.isDefault ? "yes" : "no" },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
     try {
       await api.owner.createTagTemplate({
         name: form.name,
@@ -351,6 +381,25 @@ export function OwnerTagsPage({ locale }: Props) {
       return false;
     }
     if (!assertMfgForward(mfgDate)) return false;
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: batchId },
+          { label: t.owner.fieldProduct, value: selectedProduct?.sku },
+          { label: t.owner.fieldBatchCode, value: selectedBatch?.batchCode },
+          { label: t.owner.fieldMfgDate, value: mfgDate },
+          { label: t.owner.fieldExpDate, value: expDate },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return false;
+
     setSavingDates(true);
     setError(null);
     try {

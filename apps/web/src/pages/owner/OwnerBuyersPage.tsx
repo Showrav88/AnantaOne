@@ -7,6 +7,10 @@ import {
 } from "react";
 import { Link } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import {
+  confirmDetails,
+  useConfirmAction,
+} from "../../components/ConfirmActionDialog";
 import { api, type BuyerRow } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
 
@@ -63,6 +67,7 @@ type BuyerDetail = {
 
 export function OwnerBuyersPage({ locale }: Props) {
   const t = getMessages(locale);
+  const { confirm } = useConfirmAction();
   const user = getStoredUser();
   const canWrite = user?.role.code === "OWNER" || user?.role.code === "MANAGER";
   const [buyers, setBuyers] = useState<BuyerRow[]>([]);
@@ -76,8 +81,6 @@ export function OwnerBuyersPage({ locale }: Props) {
   } | null>(null);
   const [form, setForm] = useState(empty);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [deactivateBuyer, setDeactivateBuyer] = useState<BuyerRow | null>(null);
-  const [deactivating, setDeactivating] = useState(false);
   const [search, setSearch] = useState("");
   const [showInactive, setShowInactive] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -164,6 +167,33 @@ export function OwnerBuyersPage({ locale }: Props) {
     setOkMsg(null);
   }
 
+  function wardLabel(id: string | null | undefined) {
+    if (!id) return "—";
+    const ward = wards.find((w) => w.id === id);
+    if (!ward) return id;
+    return locale === "bn" && ward.nameBn ? ward.nameBn : ward.name;
+  }
+
+  function buyerDetails(b: BuyerRow) {
+    return confirmDetails(
+      [
+        { label: t.common.fieldId, value: b.id },
+        { label: t.owner.fieldShopName, value: b.shopName },
+        { label: t.owner.fieldContactName, value: b.contactName },
+        { label: t.owner.fieldPhone, value: b.phone },
+        {
+          label: t.owner.fieldWard,
+          value: b.ward
+            ? locale === "bn" && b.ward.nameBn
+              ? b.ward.nameBn
+              : b.ward.name
+            : b.wardId,
+        },
+      ],
+      { skipEmpty: true },
+    );
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -176,6 +206,34 @@ export function OwnerBuyersPage({ locale }: Props) {
         address: form.address || null,
         wardId: form.wardId || null,
       };
+      const decision = await confirm({
+        title: editingId
+          ? t.common.confirmUpdateTitle
+          : t.common.confirmCreateTitle,
+        message: editingId
+          ? t.common.confirmUpdateMessage
+          : t.common.confirmCreateMessage,
+        tone: editingId ? "update" : "create",
+        confirmLabel: editingId
+          ? t.common.confirmUpdate
+          : t.common.confirmCreate,
+        cancelLabel: t.common.cancel,
+        details: confirmDetails(
+          [
+            ...(editingId
+              ? [{ label: t.common.fieldId, value: editingId }]
+              : []),
+            { label: t.owner.fieldShopName, value: body.shopName },
+            { label: t.owner.fieldContactName, value: body.contactName },
+            { label: t.owner.fieldPhone, value: body.phone },
+            { label: t.owner.fieldAddress, value: body.address },
+            { label: t.owner.fieldWard, value: wardLabel(body.wardId) },
+          ],
+          { skipEmpty: true },
+        ),
+      });
+      if (!decision.ok) return;
+
       if (editingId) {
         await api.owner.updateBuyer(editingId, body);
         setOkMsg(t.owner.buyerUpdated);
@@ -190,27 +248,42 @@ export function OwnerBuyersPage({ locale }: Props) {
     }
   }
 
-  async function confirmDeactivate() {
-    if (!deactivateBuyer) return;
-    setDeactivating(true);
+  async function confirmDeactivate(b: BuyerRow) {
     setError(null);
+    const decision = await confirm({
+      title: t.owner.deactivateBuyerTitle,
+      message: t.owner.deactivateBuyerHint.replace("{name}", b.shopName),
+      tone: "danger",
+      confirmLabel: t.owner.confirmDeactivateBuyer,
+      cancelLabel: t.common.cancel,
+      details: buyerDetails(b),
+    });
+    if (!decision.ok) return;
+
     try {
-      await api.owner.updateBuyer(deactivateBuyer.id, { isActive: false });
-      if (editingId === deactivateBuyer.id) resetForm();
+      await api.owner.updateBuyer(b.id, { isActive: false });
+      if (editingId === b.id) resetForm();
       setOkMsg(t.owner.buyerDeactivated);
-      setDeactivateBuyer(null);
       await load();
-      if (selectedId === deactivateBuyer.id) await loadDetail(deactivateBuyer.id);
+      if (selectedId === b.id) await loadDetail(b.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
-    } finally {
-      setDeactivating(false);
     }
   }
 
   async function reactivateBuyer(b: BuyerRow) {
     setError(null);
     setOkMsg(null);
+    const decision = await confirm({
+      title: t.common.confirmActionTitle,
+      message: t.common.confirmActionMessage,
+      tone: "info",
+      confirmLabel: t.common.confirmProceed,
+      cancelLabel: t.common.cancel,
+      details: buyerDetails(b),
+    });
+    if (!decision.ok) return;
+
     try {
       await api.owner.updateBuyer(b.id, { isActive: true });
       setOkMsg(t.owner.buyerReactivated);
@@ -429,7 +502,7 @@ export function OwnerBuyersPage({ locale }: Props) {
                               <button
                                 type="button"
                                 className="btn ghost compact dark"
-                                onClick={() => setDeactivateBuyer(b)}
+                                onClick={() => void confirmDeactivate(b)}
                               >
                                 {t.owner.deactivate}
                               </button>
@@ -577,47 +650,6 @@ export function OwnerBuyersPage({ locale }: Props) {
         </aside>
       </div>
 
-      {deactivateBuyer ? (
-        <div
-          className="owner-dialog-backdrop"
-          role="presentation"
-          onClick={() => (!deactivating ? setDeactivateBuyer(null) : null)}
-        >
-          <div
-            className="owner-dialog confirm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="buyer-deactivate-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 id="buyer-deactivate-title">{t.owner.deactivateBuyerTitle}</h2>
-            <p>
-              {t.owner.deactivateBuyerHint.replace(
-                "{name}",
-                deactivateBuyer.shopName,
-              )}
-            </p>
-            <div className="form-actions">
-              <button
-                type="button"
-                className="btn primary"
-                disabled={deactivating}
-                onClick={() => void confirmDeactivate()}
-              >
-                {t.owner.confirmDeactivateBuyer}
-              </button>
-              <button
-                type="button"
-                className="btn ghost"
-                disabled={deactivating}
-                onClick={() => setDeactivateBuyer(null)}
-              >
-                {t.common.cancel}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
