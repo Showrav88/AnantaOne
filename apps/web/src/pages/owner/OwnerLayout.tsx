@@ -233,7 +233,56 @@ export function OwnerLayout({ locale, onLocale }: Props) {
             <NavLink to="/owner/branches">{t.owner.navBranches}</NavLink>
           ) : null}
           {isOwner ? (
-            <NavLink to="/owner/wallet">{t.owner.navWallet}</NavLink>
+            <>
+              <NavLink
+                to="/owner/wallet"
+                className={({ isActive }) => {
+                  const tab = new URLSearchParams(location.search).get("tab");
+                  const onHome =
+                    isActive &&
+                    (!tab || tab === "ledger" || tab === "analytics");
+                  return [
+                    "nav-cash",
+                    "nav-cash-wallet",
+                    onHome ? "active" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
+                }}
+              >
+                {t.owner.navWallet}
+              </NavLink>
+              <NavLink
+                to="/owner/wallet?tab=supply"
+                className={({ isActive }) => {
+                  const tab = new URLSearchParams(location.search).get("tab");
+                  return [
+                    "nav-cash",
+                    "nav-cash-supply",
+                    isActive && tab === "supply" ? "active" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
+                }}
+              >
+                {t.owner.navSupplier}
+              </NavLink>
+              <NavLink
+                to="/owner/wallet?tab=utility"
+                className={({ isActive }) => {
+                  const tab = new URLSearchParams(location.search).get("tab");
+                  return [
+                    "nav-cash",
+                    "nav-cash-utility",
+                    isActive && tab === "utility" ? "active" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
+                }}
+              >
+                {t.owner.navUtilities}
+              </NavLink>
+            </>
           ) : null}
           {isOwner ? (
             <NavLink to="/owner/payments">{t.owner.navPayments}</NavLink>

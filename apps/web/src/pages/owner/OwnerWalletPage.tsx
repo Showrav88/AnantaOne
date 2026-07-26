@@ -6,7 +6,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import {
   api,
@@ -35,8 +35,8 @@ type SupplyKind = {
 
 type UnitOpt = { code: string; nameEn: string; nameBn: string };
 
-type Tab = "record" | "ledger" | "analytics";
-type RecordPanel = "supply" | "expense" | "adjust" | null;
+type Tab = "supply" | "utility" | "ledger" | "analytics";
+type Tone = "wallet" | "supply" | "utility" | "analytics";
 type AnalyticsPanel =
   | "summary"
   | "kinds"
@@ -45,12 +45,21 @@ type AnalyticsPanel =
   | "txns"
   | null;
 
+function parseWalletTab(raw: string | null): Tab {
+  if (raw === "supply" || raw === "utility" || raw === "ledger" || raw === "analytics") {
+    return raw;
+  }
+  if (raw === "record") return "supply";
+  return "ledger";
+}
+
 function CollapsePanel({
   id,
   title,
   summary,
   open,
   onToggle,
+  tone,
   children,
 }: {
   id: string;
@@ -58,10 +67,13 @@ function CollapsePanel({
   summary?: string;
   open: boolean;
   onToggle: () => void;
+  tone?: Tone;
   children: ReactNode;
 }) {
   return (
-    <section className={`collapse-panel${open ? " open" : ""}`}>
+    <section
+      className={`collapse-panel${open ? " open" : ""}${tone ? ` tone-${tone}` : ""}`}
+    >
       <button
         type="button"
         className="collapse-head"
@@ -95,7 +107,11 @@ export function OwnerWalletPage({ locale }: Props) {
     user?.role.code === "OWNER" || user?.role.code === "MANAGER";
   const isOwner = user?.role.code === "OWNER";
 
-  const [tab, setTab] = useState<Tab>("record");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = parseWalletTab(searchParams.get("tab"));
+  function setTab(next: Tab) {
+    setSearchParams(next === "ledger" ? {} : { tab: next }, { replace: true });
+  }
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
   const [txns, setTxns] = useState<CashTransaction[]>([]);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
@@ -103,7 +119,7 @@ export function OwnerWalletPage({ locale }: Props) {
   const [units, setUnits] = useState<UnitOpt[]>([]);
   const [analytics, setAnalytics] = useState<WalletAnalytics | null>(null);
   const [expandedTxn, setExpandedTxn] = useState<string | null>(null);
-  const [openRecord, setOpenRecord] = useState<RecordPanel>(null);
+  const [adjustOpen, setAdjustOpen] = useState(false);
   const [openAnalytics, setOpenAnalytics] =
     useState<AnalyticsPanel>("summary");
   const [tripOpen, setTripOpen] = useState(false);
@@ -310,8 +326,7 @@ export function OwnerWalletPage({ locale }: Props) {
     setEditingPurchaseId(p.id);
     setReversePurchaseId(null);
     fillMaterialFromPurchase(p);
-    setOpenRecord("supply");
-    setTab("record");
+    setTab("supply");
     setError(null);
     setOkMsg(null);
   }
@@ -487,12 +502,14 @@ export function OwnerWalletPage({ locale }: Props) {
         <div>
           <p className="eyebrow">{t.owner.navWallet}</p>
           <h1>{t.owner.walletTitle}</h1>
+          <p className="muted tiny">{t.owner.walletHint}</p>
+          <p className="wallet-areas-guide">{t.owner.walletAreasGuide}</p>
           <p className="muted tiny">
             {t.owner.walletSaleNote}{" "}
             <Link to="/owner/sell">{t.owner.navSell}</Link>
           </p>
         </div>
-        <div className="wallet-balance">
+        <div className="wallet-balance tone-wallet">
           <p className="eyebrow">{t.owner.cashBalance}</p>
           <p className="wallet-amount">
             ৳{(wallet?.balanceBdt ?? 0).toLocaleString()}
@@ -503,17 +520,24 @@ export function OwnerWalletPage({ locale }: Props) {
       <div className="wallet-tabs" role="tablist">
         {(
           [
-            ["record", t.owner.walletTabRecord],
-            ["ledger", t.owner.walletTabLedger],
-            ["analytics", t.owner.walletTabAnalytics],
+            ["supply", t.owner.walletTabSupply, "supply"],
+            ["utility", t.owner.walletTabUtility, "utility"],
+            ["ledger", t.owner.walletTabLedger, "wallet"],
+            ["analytics", t.owner.walletTabAnalytics, "analytics"],
           ] as const
-        ).map(([id, label]) => (
+        ).map(([id, label, tone]) => (
           <button
             key={id}
             type="button"
             role="tab"
             aria-selected={tab === id}
-            className={tab === id ? "wallet-tab active" : "wallet-tab"}
+            className={[
+              "wallet-tab",
+              `tone-${tone}`,
+              tab === id ? "active" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
             onClick={() => setTab(id)}
           >
             {label}
@@ -524,18 +548,11 @@ export function OwnerWalletPage({ locale }: Props) {
       {error ? <p className="error-banner">{error}</p> : null}
       {okMsg ? <p className="ok-banner">{okMsg}</p> : null}
 
-      {tab === "record" ? (
+      {tab === "supply" ? (
         canWrite ? (
-          <div className="wallet-accordion">
-            <CollapsePanel
-              id="supply"
-              title={t.owner.materialDebit}
-              summary={t.owner.collapseSupplyHint}
-              open={openRecord === "supply"}
-              onToggle={() =>
-                setOpenRecord((v) => (v === "supply" ? null : "supply"))
-              }
-            >
+          <section className="wallet-section tone-supply">
+            <h2 className="section-title">{t.owner.materialDebit}</h2>
+            <p className="muted tiny">{t.owner.collapseSupplyHint}</p>
               <form className="owner-form compact" onSubmit={onMaterial}>
                 <p className="muted tiny full">{t.owner.materialDebitHint}</p>
                 {editingPurchaseId ? (
@@ -791,17 +808,17 @@ export function OwnerWalletPage({ locale }: Props) {
                   ))
                 )}
               </div>
-            </CollapsePanel>
+          </section>
+        ) : (
+          <p className="muted">{t.owner.readOnlyHint}</p>
+        )
+      ) : null}
 
-            <CollapsePanel
-              id="expense"
-              title={t.owner.expenseDebit}
-              summary={t.owner.collapseExpenseHint}
-              open={openRecord === "expense"}
-              onToggle={() =>
-                setOpenRecord((v) => (v === "expense" ? null : "expense"))
-              }
-            >
+      {tab === "utility" ? (
+        canWrite ? (
+          <section className="wallet-section tone-utility">
+            <h2 className="section-title">{t.owner.expenseDebit}</h2>
+            <p className="muted tiny">{t.owner.collapseExpenseHint}</p>
               <form className="owner-form compact" onSubmit={onExpense}>
                 <p className="muted tiny full">{t.owner.expenseDebitHint}</p>
                 <label>
@@ -900,76 +917,71 @@ export function OwnerWalletPage({ locale }: Props) {
                   {t.owner.addExpense}
                 </button>
               </form>
-            </CollapsePanel>
-
-            {isOwner ? (
-              <CollapsePanel
-                id="adjust"
-                title={t.owner.adjustCash}
-                summary={t.owner.collapseAdjustHint}
-                open={openRecord === "adjust"}
-                onToggle={() =>
-                  setOpenRecord((v) => (v === "adjust" ? null : "adjust"))
-                }
-              >
-                <form className="owner-form compact" onSubmit={onAdjust}>
-                  <label>
-                    {t.owner.fieldTxnType}
-                    <select
-                      value={adjust.typeCode}
-                      onChange={(e) =>
-                        setAdjust({
-                          ...adjust,
-                          typeCode: e.target.value as typeof adjust.typeCode,
-                        })
-                      }
-                    >
-                      <option value="OPENING">{t.owner.txnOpening}</option>
-                      <option value="ADJUSTMENT_IN">{t.owner.txnAdjIn}</option>
-                      <option value="ADJUSTMENT_OUT">
-                        {t.owner.txnAdjOut}
-                      </option>
-                      <option value="OTHER_IN">{t.owner.txnOtherIn}</option>
-                      <option value="OTHER_OUT">{t.owner.txnOtherOut}</option>
-                    </select>
-                  </label>
-                  <label>
-                    {t.owner.fieldAmount}
-                    <input
-                      required
-                      type="number"
-                      min={0.01}
-                      step="0.01"
-                      value={adjust.amountBdt}
-                      onChange={(e) =>
-                        setAdjust({ ...adjust, amountBdt: e.target.value })
-                      }
-                    />
-                  </label>
-                  <label className="full">
-                    {t.owner.fieldNote}
-                    <input
-                      value={adjust.note}
-                      onChange={(e) =>
-                        setAdjust({ ...adjust, note: e.target.value })
-                      }
-                    />
-                  </label>
-                  <button type="submit" className="cta" disabled={pending}>
-                    {t.owner.applyAdjust}
-                  </button>
-                </form>
-              </CollapsePanel>
-            ) : null}
-          </div>
+          </section>
         ) : (
           <p className="muted">{t.owner.readOnlyHint}</p>
         )
       ) : null}
 
       {tab === "ledger" ? (
-        <>
+        <section className="wallet-section tone-wallet">
           <h2 className="section-title">{t.owner.ledgerTitle}</h2>
+          {isOwner ? (
+            <CollapsePanel
+              id="adjust"
+              title={t.owner.adjustCash}
+              summary={t.owner.collapseAdjustHint}
+              open={adjustOpen}
+              onToggle={() => setAdjustOpen((v) => !v)}
+              tone="wallet"
+            >
+              <form className="owner-form compact" onSubmit={onAdjust}>
+                <label>
+                  {t.owner.fieldTxnType}
+                  <select
+                    value={adjust.typeCode}
+                    onChange={(e) =>
+                      setAdjust({
+                        ...adjust,
+                        typeCode: e.target.value as typeof adjust.typeCode,
+                      })
+                    }
+                  >
+                    <option value="OPENING">{t.owner.txnOpening}</option>
+                    <option value="ADJUSTMENT_IN">{t.owner.txnAdjIn}</option>
+                    <option value="ADJUSTMENT_OUT">{t.owner.txnAdjOut}</option>
+                    <option value="OTHER_IN">{t.owner.txnOtherIn}</option>
+                    <option value="OTHER_OUT">{t.owner.txnOtherOut}</option>
+                  </select>
+                </label>
+                <label>
+                  {t.owner.fieldAmount}
+                  <input
+                    required
+                    type="number"
+                    min={0.01}
+                    step="0.01"
+                    value={adjust.amountBdt}
+                    onChange={(e) =>
+                      setAdjust({ ...adjust, amountBdt: e.target.value })
+                    }
+                  />
+                </label>
+                <label className="full">
+                  {t.owner.fieldNote}
+                  <input
+                    value={adjust.note}
+                    onChange={(e) =>
+                      setAdjust({ ...adjust, note: e.target.value })
+                    }
+                  />
+                </label>
+                <button type="submit" className="cta" disabled={pending}>
+                  {t.owner.applyAdjust}
+                </button>
+              </form>
+            </CollapsePanel>
+          ) : null}
           <div className="owner-table-wrap">
             <table className="owner-table">
               <thead>
@@ -1025,11 +1037,11 @@ export function OwnerWalletPage({ locale }: Props) {
               </tbody>
             </table>
           </div>
-        </>
+        </section>
       ) : null}
 
       {tab === "analytics" && analytics ? (
-        <div className="wallet-analytics wallet-accordion">
+        <div className="wallet-analytics wallet-accordion wallet-section tone-analytics">
           <p className="muted tiny">
             {t.owner.analyticsHint} ({analytics.days} {t.owner.days})
           </p>
@@ -1042,6 +1054,7 @@ export function OwnerWalletPage({ locale }: Props) {
             onToggle={() =>
               setOpenAnalytics((v) => (v === "summary" ? null : "summary"))
             }
+            tone="analytics"
           >
             <div className="stat-grid analytics-stats">
               <article>
