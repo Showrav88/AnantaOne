@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db.js";
 import { hashPassword } from "../lib/auth.js";
 import {
+  editManualDebitTxn,
   ensureCashWallet,
   recordWalletTxn,
   serializeTxn,
@@ -825,7 +826,6 @@ ownerFinanceRouter.patch(
       }
 
       const oldTotal = Number(existing.amountBdt);
-      const delta = Math.round((totalBdt - oldTotal) * 100) / 100;
       const purchasedAt = parsed.data.purchasedAt
         ? new Date(parsed.data.purchasedAt)
         : existing.purchasedAt;
@@ -844,26 +844,15 @@ ownerFinanceRouter.patch(
             : "");
 
       const result = await prisma.$transaction(async (tx) => {
-        const wallet = await ensureCashWallet(tid(req), tx);
-        if (delta !== 0) {
-          const next = Number(wallet.balanceBdt) - delta;
-          if (next < 0) {
-            throw new Error("Insufficient cash drawer balance");
-          }
-          await tx.cashWallet.update({
-            where: { id: wallet.id },
-            data: { balanceBdt: next },
-          });
-        }
-
-        // Keep the original MATERIAL_BUY ledger row in sync with the edit.
-        await tx.cashTransaction.update({
-          where: { id: existing.cashTransactionId },
-          data: {
-            amountBdt: totalBdt,
-            note: ledgerNote,
-            updatedBy: req.auth!.id,
-          },
+        const walletEdit = await editManualDebitTxn({
+          tenantId: tid(req),
+          cashTransactionId: existing.cashTransactionId,
+          newAmountBdt: totalBdt,
+          note: ledgerNote,
+          typeCode: "MATERIAL_BUY",
+          occurredAt: purchasedAt,
+          updatedBy: req.auth!.id,
+          tx,
         });
 
         const purchase = await tx.materialPurchase.update({
@@ -887,16 +876,18 @@ ownerFinanceRouter.patch(
           include: { kind: true, unit: true },
         });
 
-        const freshWallet = await tx.cashWallet.findUniqueOrThrow({
-          where: { id: wallet.id },
-        });
-        return { purchase, wallet: freshWallet };
+        return {
+          purchase,
+          wallet: walletEdit.wallet,
+          walletDeltaBdt: walletEdit.walletDeltaBdt,
+          oldTotal,
+        };
       });
 
       res.json({
         ok: true,
         purchase: serializePurchase(result.purchase),
-        walletDeltaBdt: delta,
+        walletDeltaBdt: result.walletDeltaBdt,
         wallet: {
           id: result.wallet.id,
           balanceBdt: Number(result.wallet.balanceBdt),
@@ -1007,6 +998,38 @@ const expenseSchema = z.object({
   occurredAt: z.string().datetime().optional(),
 });
 
+function expenseWalletTypeCode(categoryCode: string) {
+  if (categoryCode === "UTILITY") return "UTILITY";
+  if (categoryCode === "TRANSPORT") return "TRANSPORT";
+  return "EXPENSE";
+}
+
+function serializeExpense(expense: {
+  id: string;
+  title: string;
+  amountBdt: { toString(): string } | number | string;
+  contactName: string | null;
+  contactPhone: string | null;
+  note: string | null;
+  occurredAt: Date;
+  category: { code: string; nameEn: string; nameBn: string };
+}) {
+  return {
+    id: expense.id,
+    title: expense.title,
+    amountBdt: Number(expense.amountBdt),
+    contactName: expense.contactName,
+    contactPhone: expense.contactPhone,
+    note: expense.note,
+    occurredAt: expense.occurredAt,
+    category: {
+      code: expense.category.code,
+      nameEn: expense.category.nameEn,
+      nameBn: expense.category.nameBn,
+    },
+  };
+}
+
 ownerFinanceRouter.get("/wallet/expense-categories", async (_req, res) => {
   const categories = await prisma.expenseCategoryLookup.findMany({
     where: { isActive: true },
@@ -1043,12 +1066,7 @@ ownerFinanceRouter.post(
       const occurredAt = parsed.data.occurredAt
         ? new Date(parsed.data.occurredAt)
         : new Date();
-      const typeCode =
-        parsed.data.categoryCode === "UTILITY"
-          ? "UTILITY"
-          : parsed.data.categoryCode === "TRANSPORT"
-            ? "TRANSPORT"
-            : "EXPENSE";
+      const typeCode = expenseWalletTypeCode(parsed.data.categoryCode);
       const contactBits = [parsed.data.contactName, parsed.data.contactPhone]
         .filter(Boolean)
         .join(" · ");
@@ -1079,24 +1097,110 @@ ownerFinanceRouter.post(
       });
       res.status(201).json({
         ok: true,
-        expense: {
-          id: expense.id,
-          title: expense.title,
-          amountBdt: Number(expense.amountBdt),
-          contactName: expense.contactName,
-          contactPhone: expense.contactPhone,
-          occurredAt: expense.occurredAt,
-          category: {
-            code: expense.category.code,
-            nameEn: expense.category.nameEn,
-            nameBn: expense.category.nameBn,
-          },
-        },
+        expense: serializeExpense(expense),
         wallet: {
           id: result.wallet.id,
           balanceBdt: Number(result.wallet.balanceBdt),
         },
         transaction: serializeTxn(result.transaction),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed";
+      res.status(400).json({ ok: false, message });
+    }
+  },
+);
+
+ownerFinanceRouter.get(
+  "/wallet/expenses",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const expenses = await prisma.cashExpense.findMany({
+      where: { tenantId: tid(req) },
+      include: { category: true },
+      orderBy: { occurredAt: "desc" },
+      take: 100,
+    });
+    res.json({
+      ok: true,
+      expenses: expenses.map(serializeExpense),
+    });
+  },
+);
+
+ownerFinanceRouter.patch(
+  "/wallet/expenses/:id",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const parsed = expenseSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: parsed.error.message });
+      return;
+    }
+
+    const existing = await prisma.cashExpense.findFirst({
+      where: { id: String(req.params.id), tenantId: tid(req) },
+      include: { category: true },
+    });
+    if (!existing) {
+      res.status(404).json({ ok: false, message: "Expense not found" });
+      return;
+    }
+
+    try {
+      const category = await prisma.expenseCategoryLookup.findUnique({
+        where: { code: parsed.data.categoryCode },
+      });
+      if (!category || !category.isActive) {
+        res.status(400).json({ ok: false, message: "Unknown expense category" });
+        return;
+      }
+      const occurredAt = parsed.data.occurredAt
+        ? new Date(parsed.data.occurredAt)
+        : existing.occurredAt;
+      const typeCode = expenseWalletTypeCode(parsed.data.categoryCode);
+      const contactBits = [parsed.data.contactName, parsed.data.contactPhone]
+        .filter(Boolean)
+        .join(" · ");
+      const ledgerNote =
+        parsed.data.note ??
+        `${category.nameEn}: ${parsed.data.title}${contactBits ? ` — ${contactBits}` : ""}`;
+
+      const result = await prisma.$transaction(async (tx) => {
+        const walletEdit = await editManualDebitTxn({
+          tenantId: tid(req),
+          cashTransactionId: existing.cashTransactionId,
+          newAmountBdt: parsed.data.amountBdt,
+          note: ledgerNote,
+          typeCode,
+          occurredAt,
+          updatedBy: req.auth!.id,
+          tx,
+        });
+        const expense = await tx.cashExpense.update({
+          where: { id: existing.id },
+          data: {
+            categoryId: category.id,
+            title: parsed.data.title,
+            amountBdt: parsed.data.amountBdt,
+            contactName: parsed.data.contactName ?? null,
+            contactPhone: parsed.data.contactPhone ?? null,
+            note: parsed.data.note ?? null,
+            occurredAt,
+          },
+          include: { category: true },
+        });
+        return { expense, walletEdit };
+      });
+
+      res.json({
+        ok: true,
+        expense: serializeExpense(result.expense),
+        walletDeltaBdt: result.walletEdit.walletDeltaBdt,
+        wallet: {
+          id: result.walletEdit.wallet.id,
+          balanceBdt: Number(result.walletEdit.wallet.balanceBdt),
+        },
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed";
@@ -1446,6 +1550,107 @@ ownerFinanceRouter.post("/payments", requireOwnerOnly, async (req, res) => {
 const reversePaySchema = z.object({
   reason: z.string().min(5).max(500),
 });
+
+const editPaySchema = z.object({
+  amountBdt: z.coerce.number().positive(),
+  periodLabel: z.string().max(64).nullable().optional(),
+  note: z.string().max(500).nullable().optional(),
+  paidAt: z.string().datetime().optional(),
+});
+
+ownerFinanceRouter.patch(
+  "/payments/:id",
+  requireOwnerOnly,
+  async (req, res) => {
+    const parsed = editPaySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: parsed.error.message });
+      return;
+    }
+
+    const existing = await prisma.salaryPayment.findFirst({
+      where: { id: String(req.params.id), tenantId: tid(req) },
+      include: {
+        user: { include: { role: true } },
+        cashTransaction: { include: { type: true } },
+      },
+    });
+    if (!existing) {
+      res.status(404).json({ ok: false, message: "Salary payment not found" });
+      return;
+    }
+    if (existing.reversedAt) {
+      res.status(400).json({
+        ok: false,
+        message: "Reversed salary payment cannot be edited",
+      });
+      return;
+    }
+
+    try {
+      const paidAt = parsed.data.paidAt
+        ? new Date(parsed.data.paidAt)
+        : existing.paidAt;
+      const periodLabel =
+        parsed.data.periodLabel === undefined
+          ? existing.periodLabel
+          : parsed.data.periodLabel;
+      const note =
+        parsed.data.note === undefined ? existing.note : parsed.data.note;
+      const ledgerNote =
+        note ??
+        `Salary — ${existing.user.name}${periodLabel ? ` (${periodLabel})` : ""}`;
+
+      const result = await prisma.$transaction(async (tx) => {
+        const walletEdit = await editManualDebitTxn({
+          tenantId: tid(req),
+          cashTransactionId: existing.cashTransactionId,
+          newAmountBdt: parsed.data.amountBdt,
+          note: ledgerNote,
+          typeCode: "SALARY",
+          occurredAt: paidAt,
+          updatedBy: req.auth!.id,
+          tx,
+        });
+        const payment = await tx.salaryPayment.update({
+          where: { id: existing.id },
+          data: {
+            amountBdt: parsed.data.amountBdt,
+            periodLabel,
+            note,
+            paidAt,
+          },
+          include: {
+            user: { include: { role: true } },
+            cashTransaction: { include: { type: true } },
+          },
+        });
+        return { payment, walletEdit };
+      });
+
+      res.json({
+        ok: true,
+        payment: {
+          id: result.payment.id,
+          amountBdt: Number(result.payment.amountBdt),
+          periodLabel: result.payment.periodLabel,
+          note: result.payment.note,
+          paidAt: result.payment.paidAt,
+          isReversed: false,
+          staff: serializeStaff(result.payment.user),
+        },
+        walletDeltaBdt: result.walletEdit.walletDeltaBdt,
+        wallet: {
+          id: result.walletEdit.wallet.id,
+          balanceBdt: Number(result.walletEdit.wallet.balanceBdt),
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed";
+      res.status(400).json({ ok: false, message });
+    }
+  },
+);
 
 ownerFinanceRouter.post(
   "/payments/:id/reverse",

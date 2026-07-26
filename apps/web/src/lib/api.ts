@@ -376,6 +376,27 @@ export type SupplyPurchase = {
   };
 };
 
+export type CashExpenseRow = {
+  id: string;
+  title: string;
+  amountBdt: number;
+  contactName: string | null;
+  contactPhone: string | null;
+  note: string | null;
+  occurredAt: string;
+  category: { code: string; nameEn: string; nameBn: string };
+};
+
+export type CashExpenseInput = {
+  categoryCode: string;
+  title: string;
+  amountBdt: number;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  note?: string | null;
+  occurredAt?: string;
+};
+
 export type WalletAnalytics = {
   ok: boolean;
   days: number;
@@ -435,6 +456,21 @@ export type SalaryPaymentRow = {
     role: string;
     salaryBdt: number | null;
   };
+};
+
+export type SalaryPaymentInput = {
+  userId: string;
+  amountBdt?: number;
+  periodLabel?: string | null;
+  note?: string | null;
+  paidAt?: string;
+};
+
+export type SalaryPaymentUpdateInput = {
+  amountBdt: number;
+  periodLabel?: string | null;
+  note?: string | null;
+  paidAt?: string;
 };
 
 export type ProductionBatch = {
@@ -1370,11 +1406,30 @@ export const api = {
           description: string | null;
         }>;
       }>("/api/v1/owner/wallet/expense-categories", 2, undefined, true),
-    recordExpense: (body: Record<string, unknown>) =>
-      getJson<{ ok: boolean; wallet: WalletSummary }>(
+    listExpenses: () =>
+      getJson<{ ok: boolean; expenses: CashExpenseRow[] }>(
+        "/api/v1/owner/wallet/expenses",
+        2,
+        undefined,
+        true,
+      ),
+    recordExpense: (body: CashExpenseInput) =>
+      getJson<{ ok: boolean; wallet: WalletSummary; expense: CashExpenseRow }>(
         "/api/v1/owner/wallet/expenses",
         1,
         { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
+    updateExpense: (id: string, body: CashExpenseInput) =>
+      getJson<{
+        ok: boolean;
+        wallet: WalletSummary;
+        expense: CashExpenseRow;
+        walletDeltaBdt: number;
+      }>(
+        `/api/v1/owner/wallet/expenses/${encodeURIComponent(id)}`,
+        1,
+        { method: "PATCH", body: JSON.stringify(body) },
         true,
       ),
     payments: () =>
@@ -1384,11 +1439,23 @@ export const api = {
         undefined,
         true,
       ),
-    paySalary: (body: Record<string, unknown>) =>
+    paySalary: (body: SalaryPaymentInput) =>
       getJson<{ ok: boolean; wallet: WalletSummary }>(
         "/api/v1/owner/payments",
         1,
         { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
+    updateSalary: (id: string, body: SalaryPaymentUpdateInput) =>
+      getJson<{
+        ok: boolean;
+        wallet: WalletSummary;
+        payment: SalaryPaymentRow;
+        walletDeltaBdt: number;
+      }>(
+        `/api/v1/owner/payments/${encodeURIComponent(id)}`,
+        1,
+        { method: "PATCH", body: JSON.stringify(body) },
         true,
       ),
     reverseSalary: (id: string, reason: string) =>

@@ -13,6 +13,17 @@ import { getStoredUser } from "../../lib/session";
 
 type Props = { locale: LocaleCode };
 
+function toDateTimeLocalValue(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function fromDateTimeLocalValue(value: string) {
+  return value ? new Date(value).toISOString() : undefined;
+}
+
 export function OwnerPaymentsPage({ locale }: Props) {
   const t = getMessages(locale);
   const { confirm } = useConfirmAction();
@@ -27,8 +38,10 @@ export function OwnerPaymentsPage({ locale }: Props) {
     userId: "",
     amountBdt: "",
     periodLabel: "",
+    paidAt: "",
     note: "",
   });
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -78,25 +91,65 @@ export function OwnerPaymentsPage({ locale }: Props) {
     return member ? `${member.name} (${member.role.code})` : userId;
   }
 
+  function startEditPayment(payment: SalaryPaymentRow) {
+    if (payment.isReversed) return;
+    setEditingPaymentId(payment.id);
+    setForm({
+      userId: payment.staff.id,
+      amountBdt: String(payment.amountBdt),
+      periodLabel: payment.periodLabel ?? "",
+      paidAt: toDateTimeLocalValue(payment.paidAt),
+      note: payment.note ?? "",
+    });
+    setError(null);
+    setOkMsg(null);
+  }
+
+  function cancelEditPayment() {
+    setEditingPaymentId(null);
+    const selected = staff.find((s) => s.id === form.userId) ?? staff[0];
+    setForm({
+      userId: selected?.id ?? "",
+      amountBdt: selected?.salaryBdt != null ? String(selected.salaryBdt) : "",
+      periodLabel: "",
+      paidAt: "",
+      note: "",
+    });
+  }
+
   async function onPay(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setOkMsg(null);
     const amount = form.amountBdt === "" ? undefined : Number(form.amountBdt);
+    if (editingPaymentId && amount == null) {
+      setError(t.owner.fieldAmount);
+      return;
+    }
     const decision = await confirm({
-      title: t.common.confirmCreateTitle,
-      message: t.common.confirmCreateMessage,
-      tone: "create",
-      confirmLabel: t.common.confirmCreate,
+      title: editingPaymentId
+        ? t.common.confirmUpdateTitle
+        : t.common.confirmCreateTitle,
+      message: editingPaymentId
+        ? t.common.confirmUpdateMessage
+        : t.common.confirmCreateMessage,
+      tone: editingPaymentId ? "update" : "create",
+      confirmLabel: editingPaymentId
+        ? t.common.confirmUpdate
+        : t.common.confirmCreate,
       cancelLabel: t.common.cancel,
       details: confirmDetails(
         [
+          ...(editingPaymentId
+            ? [{ label: t.common.fieldId, value: editingPaymentId }]
+            : []),
           { label: t.owner.fieldStaff, value: staffLabel(form.userId) },
           {
             label: t.owner.fieldAmount,
             value: amount == null ? t.common.autoAssigned : `৳${amount.toLocaleString()}`,
           },
           { label: t.owner.fieldPeriod, value: form.periodLabel },
+          { label: t.owner.fieldDate, value: form.paidAt },
           { label: t.owner.fieldNote, value: form.note },
         ],
         { skipEmpty: true },
@@ -105,14 +158,27 @@ export function OwnerPaymentsPage({ locale }: Props) {
     if (!decision.ok) return;
 
     try {
-      await api.owner.paySalary({
-        userId: form.userId,
-        amountBdt: amount,
-        periodLabel: form.periodLabel || null,
-        note: form.note || null,
-      });
-      setForm({ ...form, amountBdt: "", periodLabel: "", note: "" });
-      setOkMsg(t.owner.paySalaryDone);
+      const paidAt = fromDateTimeLocalValue(form.paidAt);
+      if (editingPaymentId) {
+        await api.owner.updateSalary(editingPaymentId, {
+          amountBdt: amount!,
+          periodLabel: form.periodLabel || null,
+          note: form.note || null,
+          ...(paidAt ? { paidAt } : {}),
+        });
+        setEditingPaymentId(null);
+        setOkMsg(t.owner.salaryUpdated);
+      } else {
+        await api.owner.paySalary({
+          userId: form.userId,
+          amountBdt: amount,
+          periodLabel: form.periodLabel || null,
+          note: form.note || null,
+          ...(paidAt ? { paidAt } : {}),
+        });
+        setOkMsg(t.owner.paySalaryDone);
+      }
+      setForm({ ...form, amountBdt: "", periodLabel: "", paidAt: "", note: "" });
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
@@ -149,6 +215,9 @@ export function OwnerPaymentsPage({ locale }: Props) {
       setOkMsg(
         `${t.owner.salaryReverseDone} · ${t.owner.cashCredited}: ৳${(res.cashCreditedBdt ?? res.payment.amountBdt).toLocaleString()}`,
       );
+      if (editingPaymentId === payment.id) {
+        cancelEditPayment();
+      }
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Reverse failed");
@@ -179,10 +248,14 @@ export function OwnerPaymentsPage({ locale }: Props) {
 
       {isOwner ? (
         <form className="owner-form compact" onSubmit={onPay}>
+          {editingPaymentId ? (
+            <p className="ok-banner tiny full">{t.owner.editSalary}</p>
+          ) : null}
           <label>
             {t.owner.fieldStaff}
             <select
               required
+              disabled={Boolean(editingPaymentId)}
               value={form.userId}
               onChange={(e) => onStaffChange(e.target.value)}
             >
@@ -216,6 +289,14 @@ export function OwnerPaymentsPage({ locale }: Props) {
               }
             />
           </label>
+          <label>
+            {t.owner.fieldDate}
+            <input
+              type="datetime-local"
+              value={form.paidAt}
+              onChange={(e) => setForm({ ...form, paidAt: e.target.value })}
+            />
+          </label>
           <label className="full">
             {t.owner.fieldNote}
             <input
@@ -223,13 +304,24 @@ export function OwnerPaymentsPage({ locale }: Props) {
               onChange={(e) => setForm({ ...form, note: e.target.value })}
             />
           </label>
-          <button
-            type="submit"
-            className="cta"
-            disabled={pending || !form.userId}
-          >
-            {t.owner.paySalary}
-          </button>
+          <div className="media-actions full">
+            <button
+              type="submit"
+              className="cta"
+              disabled={pending || !form.userId}
+            >
+              {editingPaymentId ? t.common.save : t.owner.paySalary}
+            </button>
+            {editingPaymentId ? (
+              <button
+                type="button"
+                className="btn ghost compact"
+                onClick={cancelEditPayment}
+              >
+                {t.owner.cancelEditSalary}
+              </button>
+            ) : null}
+          </div>
         </form>
       ) : (
         <p className="muted">{t.owner.paymentsOwnerOnly}</p>
@@ -283,13 +375,22 @@ export function OwnerPaymentsPage({ locale }: Props) {
                   {isOwner ? (
                     <td className="cell-actions" data-label="">
                       {!p.isReversed ? (
-                        <button
-                          type="button"
-                          className="linkish"
-                          onClick={() => void onReverse(p)}
-                        >
-                          {t.owner.reverseSalary}
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            className="linkish"
+                            onClick={() => startEditPayment(p)}
+                          >
+                            {t.owner.editSalary}
+                          </button>
+                          <button
+                            type="button"
+                            className="linkish"
+                            onClick={() => void onReverse(p)}
+                          >
+                            {t.owner.reverseSalary}
+                          </button>
+                        </>
                       ) : (
                         <span className="muted tiny">—</span>
                       )}

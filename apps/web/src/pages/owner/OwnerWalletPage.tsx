@@ -10,6 +10,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import {
   api,
+  type CashExpenseRow,
   type CashTransaction,
   type SupplyPurchase,
   type WalletAnalytics,
@@ -135,6 +136,8 @@ export function OwnerWalletPage({ locale }: Props) {
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(
     null,
   );
+  const [expenses, setExpenses] = useState<CashExpenseRow[]>([]);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [material, setMaterial] = useState({
     materialName: "",
     kindCode: "RAW_MATERIAL",
@@ -197,6 +200,17 @@ export function OwnerWalletPage({ locale }: Props) {
     };
   }
 
+  function blankExpense(categoryCode?: string) {
+    return {
+      categoryCode: categoryCode ?? "UTILITY",
+      title: "",
+      amountBdt: "",
+      contactName: "",
+      contactPhone: "",
+      note: "",
+    };
+  }
+
   function fillMaterialFromPurchase(p: SupplyPurchase) {
     setMaterial({
       materialName: p.materialName,
@@ -214,6 +228,17 @@ export function OwnerWalletPage({ locale }: Props) {
     setTripOpen(
       p.transportBdt > 0 || p.driverBdt > 0 || p.travelBdt > 0,
     );
+  }
+
+  function fillExpenseFromRow(row: CashExpenseRow) {
+    setExpense({
+      categoryCode: row.category.code,
+      title: row.title,
+      amountBdt: String(row.amountBdt),
+      contactName: row.contactName ?? "",
+      contactPhone: row.contactPhone ?? "",
+      note: row.note ?? "",
+    });
   }
 
   function unitLabel(code: string) {
@@ -238,7 +263,7 @@ export function OwnerWalletPage({ locale }: Props) {
   }
 
   async function load() {
-    const [walletRes, catRes, metaRes, purchaseRes] = await Promise.all([
+    const [walletRes, catRes, metaRes, purchaseRes, expenseRes] = await Promise.all([
       api.owner.wallet(),
       api.owner
         .expenseCategories()
@@ -248,6 +273,7 @@ export function OwnerWalletPage({ locale }: Props) {
         units: [] as UnitOpt[],
       })),
       api.owner.supplyPurchases().catch(() => ({ purchases: [] as SupplyPurchase[] })),
+      api.owner.listExpenses().catch(() => ({ expenses: [] as CashExpenseRow[] })),
     ]);
     setWallet(walletRes.wallet);
     setTxns(walletRes.transactions);
@@ -255,6 +281,7 @@ export function OwnerWalletPage({ locale }: Props) {
     setKinds(metaRes.kinds);
     setUnits(metaRes.units);
     setPurchases(purchaseRes.purchases);
+    setExpenses(expenseRes.expenses);
     if (metaRes.kinds[0]) {
       setMaterial((m) =>
         metaRes.kinds.some((k) => k.code === m.kindCode)
@@ -409,29 +436,63 @@ export function OwnerWalletPage({ locale }: Props) {
     setOkMsg(null);
   }
 
+  function startEditExpense(row: CashExpenseRow) {
+    setEditingExpenseId(row.id);
+    fillExpenseFromRow(row);
+    setTab("utility");
+    setError(null);
+    setOkMsg(null);
+  }
+
+  function cancelEditExpense() {
+    setEditingExpenseId(null);
+    setExpense(blankExpense(expense.categoryCode));
+  }
+
   async function onExpense(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setOkMsg(null);
     const amount = Number(expense.amountBdt);
     const category = categories.find((c) => c.code === expense.categoryCode);
+    const body = {
+      categoryCode: expense.categoryCode,
+      title: expense.title,
+      amountBdt: amount,
+      contactName: expense.contactName || null,
+      contactPhone: expense.contactPhone || null,
+      note: expense.note || null,
+    };
     const decision = await confirm({
-      title: t.common.confirmCreateTitle,
-      message: t.common.confirmCreateMessage,
-      tone: "create",
-      confirmLabel: t.common.confirmCreate,
+      title: editingExpenseId
+        ? t.common.confirmUpdateTitle
+        : t.common.confirmCreateTitle,
+      message: editingExpenseId
+        ? t.common.confirmUpdateMessage
+        : t.common.confirmCreateMessage,
+      tone: editingExpenseId ? "update" : "create",
+      confirmLabel: editingExpenseId
+        ? t.common.confirmUpdate
+        : t.common.confirmCreate,
       cancelLabel: t.common.cancel,
       details: confirmDetails(
         [
+          ...(editingExpenseId
+            ? [{ label: t.common.fieldId, value: editingExpenseId }]
+            : []),
           {
             label: t.owner.fieldExpenseCategory,
-            value: category ? (locale === "bn" ? category.nameBn : category.nameEn) : expense.categoryCode,
+            value: category
+              ? locale === "bn"
+                ? category.nameBn
+                : category.nameEn
+              : body.categoryCode,
           },
-          { label: t.owner.fieldExpenseTitle, value: expense.title },
+          { label: t.owner.fieldExpenseTitle, value: body.title },
           { label: t.owner.fieldAmount, value: `৳${amount.toLocaleString()}` },
-          { label: t.owner.fieldContactName, value: expense.contactName },
-          { label: t.owner.fieldContactPhone, value: expense.contactPhone },
-          { label: t.owner.fieldNote, value: expense.note },
+          { label: t.owner.fieldContactName, value: body.contactName },
+          { label: t.owner.fieldContactPhone, value: body.contactPhone },
+          { label: t.owner.fieldNote, value: body.note },
         ],
         { skipEmpty: true },
       ),
@@ -439,24 +500,17 @@ export function OwnerWalletPage({ locale }: Props) {
     if (!decision.ok) return;
 
     try {
-      await api.owner.recordExpense({
-        categoryCode: expense.categoryCode,
-        title: expense.title,
-        amountBdt: Number(expense.amountBdt),
-        contactName: expense.contactName || null,
-        contactPhone: expense.contactPhone || null,
-        note: expense.note || null,
-      });
-      setExpense({
-        categoryCode: expense.categoryCode,
-        title: "",
-        amountBdt: "",
-        contactName: "",
-        contactPhone: "",
-        note: "",
-      });
-      setOkMsg(t.owner.expenseDebited);
+      if (editingExpenseId) {
+        await api.owner.updateExpense(editingExpenseId, body);
+        setEditingExpenseId(null);
+        setOkMsg(t.owner.expenseUpdated);
+      } else {
+        await api.owner.recordExpense(body);
+        setOkMsg(t.owner.expenseDebited);
+      }
+      setExpense(blankExpense(expense.categoryCode));
       await load();
+      if (tab === "analytics") await loadAnalytics();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed");
     }
@@ -908,6 +962,9 @@ export function OwnerWalletPage({ locale }: Props) {
             <p className="muted tiny">{t.owner.collapseExpenseHint}</p>
               <form className="owner-form compact" onSubmit={onExpense}>
                 <p className="muted tiny full">{t.owner.expenseDebitHint}</p>
+                {editingExpenseId ? (
+                  <p className="ok-banner tiny full">{t.owner.editExpense}</p>
+                ) : null}
                 <label>
                   {t.owner.fieldExpenseCategory}
                   <select
@@ -1000,10 +1057,72 @@ export function OwnerWalletPage({ locale }: Props) {
                     }
                   />
                 </label>
-                <button type="submit" className="cta" disabled={pending}>
-                  {t.owner.addExpense}
-                </button>
+                <div className="media-actions full">
+                  <button type="submit" className="cta" disabled={pending}>
+                    {editingExpenseId ? t.common.save : t.owner.addExpense}
+                  </button>
+                  {editingExpenseId ? (
+                    <button
+                      type="button"
+                      className="btn ghost compact"
+                      onClick={cancelEditExpense}
+                    >
+                      {t.common.cancel}
+                    </button>
+                  ) : null}
+                </div>
               </form>
+              <div className="purchase-cards" style={{ marginTop: "1rem" }}>
+                <p className="muted tiny">{t.owner.expensesRecent}</p>
+                {expenses.length === 0 ? (
+                  <p className="muted tiny">{t.owner.analyticsEmpty}</p>
+                ) : (
+                  expenses.slice(0, 12).map((row) => (
+                    <article key={row.id} className="panel-card">
+                      <p className="muted tiny">
+                        {new Date(row.occurredAt).toLocaleString()}
+                      </p>
+                      <div className="cost-breakdown">
+                        <p>
+                          <strong>{row.title}</strong>
+                          <span className="muted tiny">
+                            {" "}
+                            ·{" "}
+                            {locale === "bn"
+                              ? row.category.nameBn
+                              : row.category.nameEn}
+                          </span>
+                        </p>
+                        <ul className="breakdown-list">
+                          <li className="total">
+                            {t.owner.fieldAmount}: ৳
+                            {row.amountBdt.toLocaleString()}
+                          </li>
+                        </ul>
+                        {row.contactName || row.contactPhone ? (
+                          <p className="muted tiny">
+                            {[row.contactName, row.contactPhone]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                        ) : null}
+                        {row.note ? (
+                          <p className="muted tiny">{row.note}</p>
+                        ) : null}
+                        <div className="media-actions">
+                          <button
+                            type="button"
+                            className="btn ghost compact"
+                            onClick={() => startEditExpense(row)}
+                          >
+                            {t.common.edit}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  ))
+                )}
+              </div>
           </section>
         ) : (
           <p className="muted">{t.owner.readOnlyHint}</p>
