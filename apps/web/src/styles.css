@@ -760,17 +760,18 @@ button {
 
 /* Banking-style wallet peek — click to show, auto-hides */
 .wallet-peek {
+  --wallet-peek-accent: #e8b84a;
   appearance: none;
-  flex: 0 1 auto;
-  min-width: 0;
-  display: grid;
-  gap: 0.05rem;
-  justify-items: start;
+  flex: 0 0 auto;
+  min-width: 8.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   margin: 0;
-  padding: 0.28rem 0.55rem;
-  border: 1px solid color-mix(in srgb, var(--topbar-fg) 35%, transparent);
-  border-radius: 0.4rem;
-  background: color-mix(in srgb, var(--topbar-fg) 10%, transparent);
+  padding: 0.4rem 0.7rem;
+  border: 1.5px solid color-mix(in srgb, var(--wallet-peek-accent) 55%, var(--topbar-fg));
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--wallet-peek-accent) 22%, transparent);
   color: var(--topbar-fg);
   font: inherit;
   cursor: pointer;
@@ -779,36 +780,66 @@ button {
 
 .wallet-peek:hover,
 .wallet-peek:focus-visible {
-  border-color: color-mix(in srgb, var(--topbar-fg) 70%, transparent);
-  background: color-mix(in srgb, var(--topbar-fg) 16%, transparent);
+  border-color: var(--wallet-peek-accent);
+  background: color-mix(in srgb, var(--wallet-peek-accent) 32%, transparent);
   outline: none;
 }
 
 .wallet-peek.is-open {
-  border-color: color-mix(in srgb, var(--tone-wallet, #6ee7b7) 70%, var(--topbar-fg));
-  background: color-mix(in srgb, var(--tone-wallet, #6ee7b7) 18%, transparent);
+  border-color: var(--wallet-peek-accent);
+  background: color-mix(in srgb, var(--wallet-peek-accent) 38%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--wallet-peek-accent) 40%, transparent);
+}
+
+.wallet-peek-icon {
+  flex: 0 0 auto;
+  width: 1.55rem;
+  height: 1.55rem;
+  display: grid;
+  place-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wallet-peek-accent) 85%, #fff);
+  color: #1a1408;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.wallet-peek-copy {
+  display: grid;
+  gap: 0.05rem;
+  min-width: 0;
 }
 
 .wallet-peek-label {
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  opacity: 0.82;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--wallet-peek-accent) 70%, var(--topbar-fg));
   white-space: nowrap;
 }
 
 .wallet-peek-amount {
   font-family: var(--font-display);
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-html[data-theme="night"] .wallet-peek.is-open {
-  border-color: color-mix(in srgb, var(--tone-wallet, #d4b896) 70%, var(--topbar-fg));
-  background: color-mix(in srgb, var(--tone-wallet, #d4b896) 18%, transparent);
+html[data-theme="dark"] .wallet-peek {
+  --wallet-peek-accent: #f0c14d;
+}
+
+html[data-theme="night"] .wallet-peek {
+  --wallet-peek-accent: #e0a45a;
+}
+
+html[data-theme="night"] .wallet-peek-icon {
+  color: #1a120a;
 }
 
 .owner-topbar .lang,
@@ -1265,16 +1296,23 @@ html[data-theme="night"] .owner-nav a.nav-cash-utility:hover {
   }
 
   .wallet-peek {
-    padding: 0.22rem 0.45rem;
-    max-width: 42%;
+    padding: 0.35rem 0.55rem;
+    min-width: 7.25rem;
+    max-width: none;
+  }
+
+  .wallet-peek-icon {
+    width: 1.4rem;
+    height: 1.4rem;
+    font-size: 0.85rem;
   }
 
   .wallet-peek-label {
-    font-size: 0.62rem;
+    font-size: 0.66rem;
   }
 
   .wallet-peek-amount {
-    font-size: 0.86rem;
+    font-size: 0.95rem;
   }
 
   .topbar-branch {

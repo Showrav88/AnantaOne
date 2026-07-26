@@ -223,15 +223,20 @@ export function OwnerLayout({ locale, onLocale }: Props) {
                 : t.owner.walletPeekShow
             }
           >
-            <span className="wallet-peek-label">{t.owner.cashBalance}</span>
-            <span className="wallet-peek-amount">
-              {walletShown
-                ? walletLoading && walletBalance == null
-                  ? t.common.loading
-                  : walletBalance == null
-                    ? "৳—"
-                    : `৳${walletBalance.toLocaleString()}`
-                : "৳••••••"}
+            <span className="wallet-peek-icon" aria-hidden="true">
+              ৳
+            </span>
+            <span className="wallet-peek-copy">
+              <span className="wallet-peek-label">{t.owner.cashBalance}</span>
+              <span className="wallet-peek-amount">
+                {walletShown
+                  ? walletLoading && walletBalance == null
+                    ? t.common.loading
+                    : walletBalance == null
+                      ? "৳—"
+                      : `৳${walletBalance.toLocaleString()}`
+                  : "৳••••••"}
+              </span>
             </span>
           </button>
         ) : null}
