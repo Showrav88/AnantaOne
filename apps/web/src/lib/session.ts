@@ -1,6 +1,7 @@
 const ACCESS_KEY = "anantaone.accessToken";
 const REFRESH_KEY = "anantaone.refreshToken";
 const USER_KEY = "anantaone.user";
+const COMPANY_KEY = "anantaone.company";
 const ACTIVE_BRANCH_KEY = "anantaone.activeBranchId";
 
 export type AuthUser = {
@@ -44,20 +45,43 @@ export function getStoredUser(): AuthUser | null {
   }
 }
 
+export function getStoredCompany(): AuthCompany {
+  const raw = localStorage.getItem(COMPANY_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AuthCompany;
+  } catch {
+    return null;
+  }
+}
+
+export function saveCompany(company: AuthCompany) {
+  if (company) {
+    localStorage.setItem(COMPANY_KEY, JSON.stringify(company));
+  } else {
+    localStorage.removeItem(COMPANY_KEY);
+  }
+}
+
 export function saveSession(input: {
   accessToken: string;
   refreshToken: string;
   user: AuthUser;
+  company?: AuthCompany;
 }) {
   localStorage.setItem(ACCESS_KEY, input.accessToken);
   localStorage.setItem(REFRESH_KEY, input.refreshToken);
   localStorage.setItem(USER_KEY, JSON.stringify(input.user));
+  if (input.company !== undefined) {
+    saveCompany(input.company);
+  }
 }
 
 export function clearSession() {
   localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(COMPANY_KEY);
   localStorage.removeItem(ACTIVE_BRANCH_KEY);
 }
 

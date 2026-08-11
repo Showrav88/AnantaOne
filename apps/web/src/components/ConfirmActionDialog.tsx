@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { ModalPortal } from "./ModalPortal";
 
 export type ConfirmDetail = {
   label: string;
@@ -93,11 +94,12 @@ export function ConfirmActionProvider({ children }: { children: ReactNode }) {
     <ConfirmActionContext.Provider value={api}>
       {children}
       {pending ? (
-        <div
-          className="owner-dialog-backdrop no-print"
-          role="presentation"
-          onClick={() => close({ ok: false })}
-        >
+        <ModalPortal>
+          <div
+            className="owner-dialog-backdrop no-print"
+            role="presentation"
+            onClick={() => close({ ok: false })}
+          >
           <div
             className={`owner-dialog confirm confirm-action tone-${tone}`}
             role="dialog"
@@ -153,6 +155,7 @@ export function ConfirmActionProvider({ children }: { children: ReactNode }) {
             </div>
           </div>
         </div>
+        </ModalPortal>
       ) : null}
     </ConfirmActionContext.Provider>
   );

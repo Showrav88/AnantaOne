@@ -5,6 +5,7 @@ import {
   confirmDetails,
   useConfirmAction,
 } from "../../components/ConfirmActionDialog";
+import { ModalPortal } from "../../components/ModalPortal";
 import { api, type BranchRow, type StaffMember } from "../../lib/api";
 import { getStoredUser } from "../../lib/session";
 import { uploadTenantMedia } from "../../lib/tenantUpload";
@@ -706,11 +707,12 @@ export function OwnerStaffPage({ locale }: Props) {
       </div>
 
       {detailMember ? (
-        <div
-          className="owner-dialog-backdrop"
-          role="presentation"
-          onClick={() => setDetailMember(null)}
-        >
+        <ModalPortal>
+          <div
+            className="owner-dialog-backdrop"
+            role="presentation"
+            onClick={() => setDetailMember(null)}
+          >
           <div
             className="owner-dialog"
             role="dialog"
@@ -825,6 +827,7 @@ export function OwnerStaffPage({ locale }: Props) {
             </div>
           </div>
         </div>
+        </ModalPortal>
       ) : null}
     </div>
   );
