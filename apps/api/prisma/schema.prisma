@@ -36,6 +36,7 @@ model UnitLookup {
 
   products           Product[]
   materialPurchases  MaterialPurchase[]
+  materials          Material[]
 }
 
 /// Bangladesh division (বিভাগ) — shared reference data.
@@ -124,6 +125,7 @@ model Company {
   branches           Branch[]
   users              User[]
   buyers             Buyer[]
+  materials          Material[]
   products           Product[]
   cashWallet         CashWallet?
   cashTransactions   CashTransaction[]
@@ -363,6 +365,35 @@ model Buyer {
   @@unique([tenantId, phone])
   @@index([tenantId])
   @@index([wardId])
+}
+
+/// Tenant raw-material / supply catalog (bottle, cap, acid, RO water…).
+model Material {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  nameBn    String?
+  /// Optional short code unique per tenant (e.g. BT500).
+  code      String?
+  kindId    String
+  unitId    String
+  minStock  Decimal? @db.Decimal(14, 3)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+  updatedBy String?
+
+  company   Company          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kind      SupplyKindLookup   @relation(fields: [kindId], references: [id])
+  unit      UnitLookup         @relation(fields: [unitId], references: [id])
+  purchases MaterialPurchase[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([tenantId, isActive])
+  @@index([kindId])
+  @@index([unitId])
 }
 
 model Product {
@@ -716,6 +747,7 @@ model MaterialPurchase {
   supplierName             String?
   supplierPhone            String?
   materialName             String
+  materialId               String?
   kindId                   String
   unitId                   String
   /// How many units bought (L, pcs, kg…).
@@ -741,6 +773,7 @@ model MaterialPurchase {
   updatedBy                String?
 
   company                Company          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  catalogMaterial        Material?        @relation(fields: [materialId], references: [id], onDelete: SetNull)
   kind                   SupplyKindLookup @relation(fields: [kindId], references: [id])
   unit                   UnitLookup       @relation(fields: [unitId], references: [id])
   cashTransaction        CashTransaction  @relation("MaterialBuyTxn", fields: [cashTransactionId], references: [id], onDelete: Cascade)
@@ -749,6 +782,7 @@ model MaterialPurchase {
   @@index([tenantId, purchasedAt])
   @@index([kindId])
   @@index([unitId])
+  @@index([materialId])
 }
 
 /// What kind of supply was bought (bottle, acid, raw water…).
@@ -764,6 +798,7 @@ model SupplyKindLookup {
   updatedAt   DateTime @updatedAt
 
   purchases MaterialPurchase[]
+  materials Material[]
 }
 
 /// Expense categories for utility and other cash-out (not counter sales).

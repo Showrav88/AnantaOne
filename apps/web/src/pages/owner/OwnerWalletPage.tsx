@@ -12,6 +12,7 @@ import {
   api,
   type CashExpenseRow,
   type CashTransaction,
+  type MaterialRow,
   type SupplyPurchase,
   type WalletAnalytics,
   type WalletSummary,
@@ -133,12 +134,14 @@ export function OwnerWalletPage({ locale }: Props) {
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [purchases, setPurchases] = useState<SupplyPurchase[]>([]);
+  const [catalogMaterials, setCatalogMaterials] = useState<MaterialRow[]>([]);
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(
     null,
   );
   const [expenses, setExpenses] = useState<CashExpenseRow[]>([]);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [material, setMaterial] = useState({
+    materialId: "",
     materialName: "",
     kindCode: "RAW_MATERIAL",
     unitCode: "LITER",
@@ -186,6 +189,7 @@ export function OwnerWalletPage({ locale }: Props) {
 
   function blankMaterial(kindCode?: string, unitCode?: string) {
     return {
+      materialId: "",
       materialName: "",
       kindCode: kindCode ?? "RAW_MATERIAL",
       unitCode: unitCode ?? "LITER",
@@ -198,6 +202,22 @@ export function OwnerWalletPage({ locale }: Props) {
       supplierPhone: "",
       note: "",
     };
+  }
+
+  function applyCatalogMaterial(materialId: string) {
+    if (!materialId) {
+      setMaterial((m) => ({ ...m, materialId: "" }));
+      return;
+    }
+    const row = catalogMaterials.find((x) => x.id === materialId);
+    if (!row) return;
+    setMaterial((m) => ({
+      ...m,
+      materialId: row.id,
+      materialName: row.name,
+      kindCode: row.kind.code,
+      unitCode: row.unit.code,
+    }));
   }
 
   function blankExpense(categoryCode?: string) {
@@ -213,6 +233,7 @@ export function OwnerWalletPage({ locale }: Props) {
 
   function fillMaterialFromPurchase(p: SupplyPurchase) {
     setMaterial({
+      materialId: p.materialId ?? p.catalogMaterial?.id ?? "",
       materialName: p.materialName,
       kindCode: p.kind?.code ?? "RAW_MATERIAL",
       unitCode: p.unit?.code ?? "LITER",
@@ -263,7 +284,8 @@ export function OwnerWalletPage({ locale }: Props) {
   }
 
   async function load() {
-    const [walletRes, catRes, metaRes, purchaseRes, expenseRes] = await Promise.all([
+    const [walletRes, catRes, metaRes, purchaseRes, expenseRes, catalogRes] =
+      await Promise.all([
       api.owner.wallet(),
       api.owner
         .expenseCategories()
@@ -274,6 +296,7 @@ export function OwnerWalletPage({ locale }: Props) {
       })),
       api.owner.supplyPurchases().catch(() => ({ purchases: [] as SupplyPurchase[] })),
       api.owner.listExpenses().catch(() => ({ expenses: [] as CashExpenseRow[] })),
+      api.owner.materials(true).catch(() => ({ materials: [] as MaterialRow[] })),
     ]);
     setWallet(walletRes.wallet);
     setTxns(walletRes.transactions);
@@ -282,6 +305,7 @@ export function OwnerWalletPage({ locale }: Props) {
     setUnits(metaRes.units);
     setPurchases(purchaseRes.purchases);
     setExpenses(expenseRes.expenses);
+    setCatalogMaterials(catalogRes.materials);
     if (metaRes.kinds[0]) {
       setMaterial((m) =>
         metaRes.kinds.some((k) => k.code === m.kindCode)
@@ -318,6 +342,7 @@ export function OwnerWalletPage({ locale }: Props) {
     setError(null);
     setOkMsg(null);
     const body = {
+      ...(material.materialId ? { materialId: material.materialId } : {}),
       materialName: material.materialName,
       kindCode: material.kindCode,
       unitCode: material.unitCode,
@@ -701,13 +726,33 @@ export function OwnerWalletPage({ locale }: Props) {
                     {t.owner.editSupplyPurchase}
                   </p>
                 ) : null}
+                <label className="full">
+                  {t.owner.fieldCatalogMaterial}
+                  <select
+                    value={material.materialId}
+                    onChange={(e) => applyCatalogMaterial(e.target.value)}
+                  >
+                    <option value="">{t.owner.catalogMaterialNone}</option>
+                    {catalogMaterials.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.code ? `${m.code} · ` : ""}
+                        {locale === "bn" && m.nameBn ? m.nameBn : m.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="muted tiny">{t.owner.catalogMaterialHint}</span>
+                </label>
                 <label>
                   {t.owner.fieldMaterial}
                   <input
                     required
                     value={material.materialName}
                     onChange={(e) =>
-                      setMaterial({ ...material, materialName: e.target.value })
+                      setMaterial({
+                        ...material,
+                        materialId: "",
+                        materialName: e.target.value,
+                      })
                     }
                     placeholder={t.owner.supplyNameHint}
                   />

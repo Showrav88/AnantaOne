@@ -359,7 +359,13 @@ export type WalletSummary = {
 
 export type SupplyPurchase = {
   id: string;
+  materialId?: string | null;
   materialName: string;
+  catalogMaterial?: {
+    id: string;
+    name: string;
+    code: string | null;
+  } | null;
   supplierName: string | null;
   supplierPhone: string | null;
   qty: number;
@@ -383,6 +389,18 @@ export type SupplyPurchase = {
     travelBdt: number;
     totalBdt: number;
   };
+};
+
+export type MaterialRow = {
+  id: string;
+  name: string;
+  nameBn: string | null;
+  code: string | null;
+  minStock: number | null;
+  isActive: boolean;
+  kind: { code: string; nameEn: string; nameBn: string };
+  unit: { code: string; nameEn: string; nameBn: string };
+  purchaseCount: number;
 };
 
 export type CashExpenseRow = {
@@ -1015,6 +1033,27 @@ export const api = {
         `/api/v1/owner/products/${id}`,
         1,
         { method: "DELETE" },
+        true,
+      ),
+    materials: (activeOnly?: boolean) =>
+      getJson<{ ok: boolean; materials: MaterialRow[] }>(
+        `/api/v1/owner/materials${activeOnly ? "?active=1" : ""}`,
+        2,
+        undefined,
+        true,
+      ),
+    createMaterialCatalog: (body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; material: MaterialRow }>(
+        "/api/v1/owner/materials",
+        1,
+        { method: "POST", body: JSON.stringify(body) },
+        true,
+      ),
+    updateMaterialCatalog: (id: string, body: Record<string, unknown>) =>
+      getJson<{ ok: boolean; material: MaterialRow }>(
+        `/api/v1/owner/materials/${id}`,
+        1,
+        { method: "PATCH", body: JSON.stringify(body) },
         true,
       ),
     buyers: () =>
