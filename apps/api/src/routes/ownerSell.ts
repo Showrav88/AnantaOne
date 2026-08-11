@@ -7,6 +7,7 @@ import {
   serializeProductUnit,
   voidUnusedBatchUnits,
 } from "../lib/productUnits.js";
+import { reconcileProductStockQty } from "../lib/productStock.js";
 import {
   buildInvoiceQrUrl,
   buildTagPayload,
@@ -173,13 +174,12 @@ ownerSellRouter.post(
         }
 
         if (parsed.data.addToStock) {
-          await tx.product.update({
-            where: { id: product.id },
-            data: {
-              stockQty: Number(product.stockQty) + parsed.data.qtyProduced,
-              updatedBy: req.auth!.id,
-            },
-          });
+          await reconcileProductStockQty(
+            tid(req),
+            product.id,
+            tx,
+            req.auth!.id,
+          );
         }
 
         return tx.productionBatch.findUniqueOrThrow({
@@ -328,17 +328,7 @@ ownerSellRouter.post(
           batchId: existing.id,
           tx,
         });
-        await tx.product.update({
-          where: { id: existing.productId },
-          data: {
-            stockQty: Math.max(
-              0,
-              Number(existing.product.stockQty) - remaining,
-            ),
-            updatedBy: req.auth!.id,
-          },
-        });
-        return tx.productionBatch.update({
+        const batch = await tx.productionBatch.update({
           where: { id: existing.id },
           data: {
             qtyRemaining: 0,
@@ -351,6 +341,13 @@ ownerSellRouter.post(
             _count: { select: { units: true } },
           },
         });
+        await reconcileProductStockQty(
+          tid(req),
+          existing.productId,
+          tx,
+          req.auth!.id,
+        );
+        return batch;
       });
       res.json({
         ok: true,

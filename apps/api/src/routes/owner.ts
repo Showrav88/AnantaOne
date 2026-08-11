@@ -9,6 +9,7 @@ import {
 } from "../middleware/companyAccess.js";
 import { branchFilter, resolveBranchScope } from "../lib/branchScope.js";
 import { buildAutoSku, categorySkuPrefix } from "../lib/shortCodes.js";
+import { reconcileAllProductStock } from "../lib/productStock.js";
 
 export const ownerRouter = Router();
 
@@ -20,6 +21,7 @@ function tenantId(req: { auth?: { tenantId: string | null } }) {
 
 ownerRouter.get("/dashboard", async (req, res) => {
   const tid = tenantId(req);
+  await reconcileAllProductStock(tid);
   const scope = resolveBranchScope(req);
   const orderBranch = branchFilter(scope);
   const isOwner = req.auth!.roleCode === "OWNER";
@@ -330,8 +332,10 @@ ownerRouter.patch("/company", requireOwnerOnly, async (req, res) => {
 });
 
 ownerRouter.get("/products", async (req, res) => {
+  const tid = tenantId(req);
+  await reconcileAllProductStock(tid);
   const products = await prisma.product.findMany({
-    where: { tenantId: tenantId(req) },
+    where: { tenantId: tid },
     include: { unit: true },
     orderBy: [{ isActive: "desc" }, { name: "asc" }],
   });
@@ -419,7 +423,7 @@ ownerRouter.post("/products", requireOwnerOnly, async (req, res) => {
         unitId: unit.id,
         size: parsed.data.size ?? null,
         priceBdt: parsed.data.priceBdt,
-        stockQty: parsed.data.stockQty,
+        stockQty: 0,
         minStock: parsed.data.minStock,
         description: parsed.data.description ?? null,
         imageUrl: parsed.data.imageUrl ?? null,
@@ -466,7 +470,8 @@ ownerRouter.patch("/products/:id", requireOwnerOnly, async (req, res) => {
     unitId = unit.id;
   }
 
-  const { unitCode: _unitCode, sku: skuRaw, ...rest } = parsed.data;
+  const { unitCode: _unitCode, sku: skuRaw, stockQty: _stockQty, ...rest } =
+    parsed.data;
   const sku =
     skuRaw != null && skuRaw.trim().length >= 2
       ? skuRaw.trim().toUpperCase()

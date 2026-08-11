@@ -34,7 +34,6 @@ const emptyForm = {
   size: "",
   unitCode: "LITER",
   priceBdt: "",
-  stockQty: "",
   minStock: "",
   description: "",
 };
@@ -167,7 +166,6 @@ export function OwnerProductsPage({ locale }: Props) {
       size: p.size == null ? "" : String(p.size),
       unitCode: p.unit ?? "LITER",
       priceBdt: String(p.priceBdt),
-      stockQty: String(p.stockQty),
       minStock: String(p.minStock),
       description: p.description ?? "",
     });
@@ -254,10 +252,6 @@ export function OwnerProductsPage({ locale }: Props) {
           },
           { label: t.owner.fieldPrice, value: `৳${Number(form.priceBdt || 0)}` },
           {
-            label: t.owner.fieldStock,
-            value: form.stockQty === "" ? "0" : form.stockQty,
-          },
-          {
             label: t.owner.fieldMinStock,
             value: form.minStock === "" ? "0" : form.minStock,
           },
@@ -297,7 +291,6 @@ export function OwnerProductsPage({ locale }: Props) {
         size: form.size === "" ? null : Number(form.size),
         unitCode: form.unitCode,
         priceBdt: Number(form.priceBdt),
-        stockQty: form.stockQty === "" ? 0 : Number(form.stockQty),
         minStock: form.minStock === "" ? 0 : Number(form.minStock),
         description: form.description || null,
       };
@@ -680,19 +673,7 @@ export function OwnerProductsPage({ locale }: Props) {
               onChange={(e) => setForm({ ...form, priceBdt: e.target.value })}
             />
           </label>
-          <label>
-            {t.owner.fieldStock}
-            <input
-              type="number"
-              min="0"
-              step="1"
-              inputMode="numeric"
-              autoComplete="off"
-              value={form.stockQty}
-              placeholder={t.owner.numberZeroIfEmptyHint}
-              onChange={(e) => setForm({ ...form, stockQty: e.target.value })}
-            />
-          </label>
+          <p className="muted tiny full">{t.owner.stockFromBatchesHint}</p>
           <label>
             {t.owner.fieldMinStock}
             <input

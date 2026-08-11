@@ -1,6 +1,7 @@
 import { prisma } from "../db.js";
 import { quoteOrderTotals, normalizeCategory } from "./delivery.js";
 import { allocateUnitsToLine } from "./productUnits.js";
+import { reconcileProductStockQty } from "./productStock.js";
 import {
   makeInvoiceCode,
   pickBatchFefo,
@@ -277,10 +278,6 @@ export async function acceptOnlineOrder(opts: {
         where: { id: batch.id },
         data: { qtyRemaining: { decrement: Number(line.qty) } },
       });
-      await tx.product.update({
-        where: { id: line.productId },
-        data: { stockQty: { decrement: Number(line.qty) } },
-      });
       await tx.orderLine.update({
         where: { id: line.id },
         data: { batchId: batch.id },
@@ -292,6 +289,11 @@ export async function acceptOnlineOrder(opts: {
         qty: Number(line.qty),
         tx,
       });
+    }
+
+    const productIds = [...new Set(freshLines.map((l) => l.productId))];
+    for (const productId of productIds) {
+      await reconcileProductStockQty(opts.tenantId, productId, tx);
     }
 
     const totalRow = await tx.salesOrder.findUniqueOrThrow({

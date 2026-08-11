@@ -5,6 +5,7 @@ import {
   allocateUnitsToLine,
   restoreUnitsForOrderLines,
 } from "./productUnits.js";
+import { reconcileProductStockQty } from "./productStock.js";
 import { recordWalletTxn, serializeTxn } from "./wallet.js";
 
 type TxClient = Prisma.TransactionClient;
@@ -324,13 +325,6 @@ export async function confirmSell(input: ConfirmSellInput) {
         where: { id: batch.id },
         data: { qtyRemaining: Number(batch.qtyRemaining) - line.qty },
       });
-      await tx.product.update({
-        where: { id: product.id },
-        data: {
-          stockQty: Math.max(0, Number(product.stockQty) - line.qty),
-          updatedBy: input.userId,
-        },
-      });
 
       prepared.push({
         productId: product.id,
@@ -416,6 +410,16 @@ export async function confirmSell(input: ConfirmSellInput) {
           tx,
         });
       }
+    }
+
+    const productIds = [...new Set(prepared.map((l) => l.productId))];
+    for (const productId of productIds) {
+      await reconcileProductStockQty(
+        input.tenantId,
+        productId,
+        tx,
+        input.userId,
+      );
     }
 
     return withCode;
@@ -542,16 +546,6 @@ export async function reverseSell(input: {
         where: { id: batch.id },
         data: { qtyRemaining: Number(batch.qtyRemaining) + qty },
       });
-      const product = await tx.product.findUniqueOrThrow({
-        where: { id: line.productId },
-      });
-      await tx.product.update({
-        where: { id: product.id },
-        data: {
-          stockQty: Number(product.stockQty) + qty,
-          updatedBy: input.userId,
-        },
-      });
       restocked.push({
         productId: line.productId,
         batchId,
@@ -589,6 +583,16 @@ export async function reverseSell(input: {
         allowNegative: true,
         tx,
       });
+    }
+
+    const productIds = [...new Set(order.lines.map((l) => l.productId))];
+    for (const productId of productIds) {
+      await reconcileProductStockQty(
+        input.tenantId,
+        productId,
+        tx,
+        input.userId,
+      );
     }
 
     return walletResult;
