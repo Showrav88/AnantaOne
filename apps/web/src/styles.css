@@ -4035,7 +4035,24 @@ html[data-theme="night"] .owner-dialog-backdrop {
   background: rgba(0, 0, 0, 0.62);
 }
 
-.owner-dialog-head {
+.owner-dialog.catalog-modal {
+  width: min(42rem, 96vw);
+  max-height: 92vh;
+  overflow: auto;
+}
+
+.catalog-modal-form textarea {
+  width: 100%;
+  min-height: 4.5rem;
+  resize: vertical;
+  font: inherit;
+  padding: 0.45rem 0.55rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--border);
+  background: var(--input-bg, transparent);
+  color: inherit;
+}
+
   display: flex;
   align-items: flex-start;
   justify-content: space-between;

@@ -10,6 +10,7 @@ import {
 import { branchFilter, resolveBranchScope } from "../lib/branchScope.js";
 import { buildAutoSku, categorySkuPrefix } from "../lib/shortCodes.js";
 import { reconcileAllProductStock } from "../lib/productStock.js";
+import { getProductProductionStats } from "../lib/productStats.js";
 
 export const ownerRouter = Router();
 
@@ -342,18 +343,37 @@ ownerRouter.get("/products", async (req, res) => {
   res.json({ ok: true, products: products.map(serializeProduct) });
 });
 
+ownerRouter.get("/products/stats", async (req, res) => {
+  const stats = await getProductProductionStats(tenantId(req));
+  res.json({ ok: true, stats });
+});
+
+const PRODUCT_CATEGORIES = [
+  "DRINKING",
+  "DISTILLED",
+  "BATTERY",
+  "HANDWASH",
+  "DISHWASH",
+  "CLEANER",
+  "OTHER",
+] as const;
+
+const PACK_TYPES = ["BOTTLE", "SACHET", "JAR", "BOX", "OTHER"] as const;
+
 const productCreateSchema = z.object({
   name: z.string().min(2).max(120),
   nameBn: z.string().max(120).nullable().optional(),
-  /** Optional — blank / omitted generates a short ordered SKU (e.g. D001). */
+  /** Optional — blank / omitted generates a short ordered SKU (e.g. MW001). */
   sku: z.string().max(64).optional(),
-  category: z.string().min(2).max(64).default("water"),
+  category: z.enum(PRODUCT_CATEGORIES).default("DRINKING"),
+  packType: z.enum(PACK_TYPES).default("BOTTLE"),
   unitCode: z.string().min(2).max(32).default("BOTTLE"),
-  size: z.coerce.number().positive().nullable().optional(),
+  size: z.coerce.number().positive().max(99999).nullable().optional(),
   priceBdt: z.coerce.number().nonnegative(),
   stockQty: z.coerce.number().nonnegative().default(0),
   minStock: z.coerce.number().nonnegative().default(0),
   description: z.string().max(1000).nullable().optional(),
+  materialsNote: z.string().max(2000).nullable().optional(),
   imageUrl: z.string().url().nullable().optional(),
   imagePublicId: z.string().max(240).nullable().optional(),
   isActive: z.boolean().optional(),
@@ -420,12 +440,14 @@ ownerRouter.post("/products", requireOwnerOnly, async (req, res) => {
         nameBn: parsed.data.nameBn ?? null,
         sku,
         category: parsed.data.category,
+        packType: parsed.data.packType,
         unitId: unit.id,
         size: parsed.data.size ?? null,
         priceBdt: parsed.data.priceBdt,
         stockQty: 0,
         minStock: parsed.data.minStock,
         description: parsed.data.description ?? null,
+        materialsNote: parsed.data.materialsNote ?? null,
         imageUrl: parsed.data.imageUrl ?? null,
         imagePublicId: parsed.data.imagePublicId ?? null,
         isActive: parsed.data.isActive ?? true,
@@ -560,6 +582,7 @@ function serializeProduct(product: {
   nameBn: string | null;
   sku: string;
   category: string;
+  packType: string;
   unitId: string;
   size?: { toString(): string } | number | string | null;
   unit?: { code: string; nameEn: string; nameBn: string };
@@ -567,6 +590,7 @@ function serializeProduct(product: {
   stockQty: { toString(): string } | number | string;
   minStock: { toString(): string } | number | string;
   description: string | null;
+  materialsNote?: string | null;
   imageUrl?: string | null;
   imagePublicId?: string | null;
   isActive: boolean;
@@ -580,6 +604,7 @@ function serializeProduct(product: {
     nameBn: product.nameBn,
     sku: product.sku,
     category: product.category,
+    packType: product.packType ?? "BOTTLE",
     unitId: product.unitId,
     size: product.size == null ? null : Number(product.size),
     unit: product.unit?.code ?? null,
@@ -590,6 +615,7 @@ function serializeProduct(product: {
     stockQty: Number(product.stockQty),
     minStock: Number(product.minStock),
     description: product.description,
+    materialsNote: product.materialsNote ?? null,
     imageUrl: product.imageUrl ?? null,
     imagePublicId: product.imagePublicId ?? null,
     isActive: product.isActive,

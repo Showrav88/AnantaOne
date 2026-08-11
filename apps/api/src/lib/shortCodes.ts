@@ -44,8 +44,16 @@ export function categorySkuPrefix(category: string): string {
       return "DW";
     case "BATTERY":
       return "BW";
+    case "HANDWASH":
+      return "HW";
+    case "DISHWASH":
+      return "DS";
+    case "CLEANER":
+      return "CL";
+    case "OTHER":
+      return "OT";
     default:
-      return "XX";
+      return "OT";
   }
 }
 
