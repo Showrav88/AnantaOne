@@ -42,7 +42,7 @@ export function OwnerDashboardPage({ locale }: Props) {
   }
 
   return (
-    <div className="owner-page owner-dashboard">
+    <div className="owner-page">
       <header className="owner-header">
         <div>
           <p className="eyebrow">{t.owner.navDashboard}</p>
@@ -74,7 +74,7 @@ export function OwnerDashboardPage({ locale }: Props) {
       </header>
 
       {isOwner ? (
-        <section className="panel-card upload-panel dashboard-quick">
+        <section className="panel-card upload-panel">
           <h2>{t.owner.siteTitle}</h2>
           <p className="muted">{t.owner.siteHint}</p>
           <div className="site-upload-row">
@@ -104,7 +104,7 @@ export function OwnerDashboardPage({ locale }: Props) {
         </section>
       )}
 
-      <section className="stat-grid stat-grid--auto">
+      <section className="stat-grid">
         {isOwner && data.stats.cashBalanceBdt != null ? (
           <article>
             <p>{t.owner.statCash}</p>
