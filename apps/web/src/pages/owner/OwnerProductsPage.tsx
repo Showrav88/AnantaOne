@@ -430,9 +430,7 @@ export function OwnerProductsPage({ locale }: Props) {
                   <td data-label={t.owner.fieldProductName}>
                     {locale === "bn" && p.nameBn ? p.nameBn : p.name}
                   </td>
-                  <td className="cell-id" data-label={t.owner.fieldSku}>
-                    {p.sku}
-                  </td>
+                  <td data-label={t.owner.fieldSku}>{p.sku}</td>
                   <td data-label={t.owner.fieldCategory}>
                     {categoryLabel(p.category, catLabels)}
                   </td>
@@ -465,7 +463,7 @@ export function OwnerProductsPage({ locale }: Props) {
                   <td data-label={t.owner.fieldStatus}>
                     {p.isActive ? t.owner.statusActive : t.owner.statusInactive}
                   </td>
-                  <td className="cell-actions" data-label={t.owner.batchActions}>
+                  <td>
                     {canWrite && p.isActive ? (
                       <>
                         <button
@@ -474,10 +472,10 @@ export function OwnerProductsPage({ locale }: Props) {
                           onClick={() => openEdit(p)}
                         >
                           {t.common.edit}
-                        </button>
+                        </button>{" "}
                         <button
                           type="button"
-                          className="linkish dangerish"
+                          className="linkish"
                           onClick={() => void deactivate(p.id)}
                         >
                           {t.owner.deactivate}

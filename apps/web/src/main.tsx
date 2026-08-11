@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { applyDisplayPrefs } from "./lib/prefs";
 import "./styles.css";
-import "./owner-desktop-ui.css";
 
 applyDisplayPrefs();
 
