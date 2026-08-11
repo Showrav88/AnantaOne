@@ -58,6 +58,9 @@ export function HomePulsePage({ locale, onLocale }: Props) {
   }
 
   useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth >= 901) {
+      setShowLive(true);
+    }
     startTransition(() => {
       void refresh();
     });
@@ -71,13 +74,15 @@ export function HomePulsePage({ locale, onLocale }: Props) {
     startTransition(() => {
       void refresh();
     });
-    requestAnimationFrame(() => {
-      document.getElementById("live")?.scrollIntoView({ behavior: "smooth" });
-    });
+    if (typeof window !== "undefined" && window.innerWidth < 901) {
+      requestAnimationFrame(() => {
+        document.getElementById("live")?.scrollIntoView({ behavior: "smooth" });
+      });
+    }
   }
 
   return (
-    <div className="page">
+    <div className="page pulse-wide">
       <div className="atmosphere" aria-hidden="true" />
 
       <header className="topbar">
