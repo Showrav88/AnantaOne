@@ -3,16 +3,21 @@ import { getMessages, type LocaleCode } from "@anantaone/i18n";
 import {
   confirmDetails,
   useConfirmAction,
-} from "../ConfirmActionDialog";
-import { api, type MaterialRow, type Product } from "../../lib/api";
+} from "./ConfirmActionDialog";
+import {
+  api,
+  type MaterialRow,
+  type Product,
+  type ProductBomLine,
+} from "../lib/api";
 import {
   PRODUCT_CATEGORIES,
   PACK_TYPES,
   categoryLabel,
   packTypeLabel,
-} from "../../lib/productCatalog";
-import { PRODUCT_PRESETS } from "../../lib/productPresets";
-import { uploadTenantMedia } from "../../lib/tenantUpload";
+} from "../lib/productCatalog";
+import { PRODUCT_PRESETS } from "../lib/productPresets";
+import { uploadTenantMedia } from "../lib/tenantUpload";
 
 const emptyForm = {
   presetId: "custom",
@@ -111,7 +116,7 @@ export function ProductCatalogModal({
     try {
       const res = await api.owner.productBom(productId);
       setBomLines(
-        res.bom.directLines.map((l) => ({
+        res.bom.directLines.map((l: ProductBomLine) => ({
           materialId: l.materialId,
           qty: String(l.qty),
         })),
@@ -119,7 +124,7 @@ export function ProductCatalogModal({
       if (res.bom.effectiveLines.length > 0) {
         setEffectiveBomHint(
           res.bom.effectiveLines
-            .map((l) => {
+            .map((l: ProductBomLine) => {
               const name =
                 locale === "bn" && l.material.nameBn
                   ? l.material.nameBn
@@ -142,7 +147,7 @@ export function ProductCatalogModal({
     setError(null);
     void api.owner
       .materials(true)
-      .then((res) => setMaterials(res.materials))
+      .then((res: { materials: MaterialRow[] }) => setMaterials(res.materials))
       .catch(() => setMaterials([]));
 
     if (product) {
@@ -677,7 +682,7 @@ export function ProductCatalogModal({
                         setBomLines(bomLines.filter((_, i) => i !== idx))
                       }
                     >
-                      {t.common.remove}
+                      {t.common.delete}
                     </button>
                   </li>
                 ))}

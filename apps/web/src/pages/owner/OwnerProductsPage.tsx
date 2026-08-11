@@ -461,7 +461,7 @@ export function OwnerProductsPage({ locale }: Props) {
                     {stat?.qtyInStock ?? p.stockQty}
                   </td>
                   <td data-label={t.owner.fieldStatus}>
-                    {p.isActive ? t.owner.active : t.owner.inactive}
+                    {p.isActive ? t.owner.statusActive : t.owner.statusInactive}
                   </td>
                   <td>
                     {canWrite && p.isActive ? (

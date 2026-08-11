@@ -4102,6 +4102,7 @@ html[data-theme="night"] .owner-dialog-backdrop {
   margin-bottom: 0.35rem;
 }
 
+.owner-dialog-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
