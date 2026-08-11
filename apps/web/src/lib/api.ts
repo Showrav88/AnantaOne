@@ -1253,6 +1253,13 @@ export const api = {
           qty: number;
           unitPriceBdt?: number;
           batchId?: string | null;
+          produceBatch?: {
+            batchCode?: string | null;
+            manufacturedAt?: string;
+            expiresAt?: string | null;
+            generateUnitTags?: boolean;
+            note?: string | null;
+          } | null;
         }>;
       },
     ) =>

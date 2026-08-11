@@ -866,6 +866,25 @@ ownerCommerceRouter.post(
         qty: z.coerce.number().positive(),
         unitPriceBdt: z.coerce.number().nonnegative().optional(),
         batchId: z.string().cuid().nullable().optional(),
+        produceBatch: z
+          .object({
+            batchCode: z.string().min(1).max(64).nullable().optional(),
+            manufacturedAt: z
+              .string()
+              .datetime()
+              .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/))
+              .optional(),
+            expiresAt: z
+              .string()
+              .datetime()
+              .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/))
+              .nullable()
+              .optional(),
+            generateUnitTags: z.boolean().optional(),
+            note: z.string().max(500).nullable().optional(),
+          })
+          .nullable()
+          .optional(),
       });
       const body = z
         .object({

@@ -2,11 +2,8 @@ import { prisma } from "../db.js";
 import { quoteOrderTotals, normalizeCategory } from "./delivery.js";
 import { allocateUnitsToLine } from "./productUnits.js";
 import { reconcileProductStockQty } from "./productStock.js";
-import {
-  makeInvoiceCode,
-  pickBatchFefo,
-  serializeOrder,
-} from "./sell.js";
+import { resolveBatchForLine, type ProduceBatchOpts } from "./batchProduction.js";
+import { makeInvoiceCode, serializeOrder } from "./sell.js";
 import { recordWalletTxn } from "./wallet.js";
 
 export type OnlineCheckoutLine = {
@@ -44,9 +41,6 @@ export async function placeOnlineOrder(input: OnlineCheckoutInput) {
   const quoteLines = input.lines.map((line) => {
     const product = productMap.get(line.productId);
     if (!product) throw new Error("Product not found");
-    if (Number(product.stockQty) < line.qty) {
-      throw new Error(`Insufficient stock for ${product.name}`);
-    }
     return {
       productId: product.id,
       category: product.category,
@@ -175,6 +169,8 @@ export type AcceptOnlineLine = {
   qty: number;
   unitPriceBdt?: number;
   batchId?: string | null;
+  /** Create a new production batch for this line (make-to-order). */
+  produceBatch?: ProduceBatchOpts | null;
 };
 
 /**
@@ -267,13 +263,15 @@ export async function acceptOnlineOrder(opts: {
     for (let i = 0; i < freshLines.length; i++) {
       const line = freshLines[i]!;
       const override = workLines[i];
-      const batch = await pickBatchFefo(
-        opts.tenantId,
-        line.productId,
-        Number(line.qty),
+      const batch = await resolveBatchForLine({
+        tenantId: opts.tenantId,
+        productId: line.productId,
+        qty: Number(line.qty),
+        batchId: override?.batchId,
+        produceBatch: override?.produceBatch,
+        createdBy: opts.userId,
         tx,
-        override?.batchId,
-      );
+      });
       await tx.productionBatch.update({
         where: { id: batch.id },
         data: { qtyRemaining: { decrement: Number(line.qty) } },

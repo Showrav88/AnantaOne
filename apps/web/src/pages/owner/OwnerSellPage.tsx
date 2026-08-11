@@ -28,6 +28,10 @@ type CartLine = {
   batchId: string;
   unitSerialCode?: string | null;
   batchCode?: string | null;
+  /** Online make-to-order: create batch on confirm instead of using stock. */
+  produceNew?: boolean;
+  produceBatchCode?: string;
+  produceMfg?: string;
 };
 
 export function OwnerSellPage({ locale }: Props) {
@@ -176,6 +180,9 @@ export function OwnerSellPage({ locale }: Props) {
                 catalogPriceBdt: l.catalogPriceBdt,
                 unitPriceBdt: String(l.unitPriceBdt),
                 batchId: fefo?.id ?? "",
+                produceNew: !fefo,
+                produceBatchCode: "",
+                produceMfg: new Date().toISOString().slice(0, 10),
               };
             }),
           );
@@ -380,7 +387,12 @@ export function OwnerSellPage({ locale }: Props) {
       return;
     }
     for (const l of lines) {
-      if (!l.batchId) {
+      if (onlineMeta) {
+        if (!l.produceNew && !l.batchId) {
+          setError(t.owner.sellNeedBatchOrProduce);
+          return;
+        }
+      } else if (!l.batchId) {
         setError(t.owner.sellNeedBatch);
         return;
       }
@@ -419,8 +431,15 @@ export function OwnerSellPage({ locale }: Props) {
             productId: l.productId,
             qty: Number(l.qty),
             unitPriceBdt: Number(l.unitPriceBdt),
-            batchId: l.batchId || null,
-            unitSerialCode: l.unitSerialCode || null,
+            batchId: l.produceNew ? null : l.batchId || null,
+            produceBatch: l.produceNew
+              ? {
+                  batchCode: l.produceBatchCode?.trim() || null,
+                  manufacturedAt: l.produceMfg || undefined,
+                  generateUnitTags: true,
+                  note: `Online ${onlineMeta.invoiceCode}`,
+                }
+              : null,
           })),
         });
         const orderId = String((res.order as { id: string }).id);
@@ -771,29 +790,120 @@ export function OwnerSellPage({ locale }: Props) {
                           ) : null}
                         </td>
                         <td>
-                          <select
-                            value={l.batchId}
-                            disabled={Boolean(l.unitSerialCode)}
-                            onChange={(e) =>
-                              setLines((prev) =>
-                                prev.map((x) =>
-                                  x.key === l.key
-                                    ? { ...x, batchId: e.target.value }
-                                    : x,
-                                ),
-                              )
-                            }
-                          >
-                            {lineBatches.length === 0 ? (
-                              <option value="">{t.owner.noBatch}</option>
-                            ) : (
-                              lineBatches.map((b) => (
-                                <option key={b.id} value={b.id}>
-                                  {b.batchCode} · {b.qtyRemaining}
-                                </option>
-                              ))
-                            )}
-                          </select>
+                          {onlineMeta ? (
+                            <div className="produce-batch-cell">
+                              <label className="tiny batch-mode-toggle">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(l.produceNew)}
+                                  onChange={(e) =>
+                                    setLines((prev) =>
+                                      prev.map((x) =>
+                                        x.key === l.key
+                                          ? {
+                                              ...x,
+                                              produceNew: e.target.checked,
+                                              batchId: e.target.checked
+                                                ? ""
+                                                : x.batchId,
+                                            }
+                                          : x,
+                                      ),
+                                    )
+                                  }
+                                />
+                                {t.owner.onlineProduceBatch}
+                              </label>
+                              {l.produceNew ? (
+                                <div className="produce-batch-fields">
+                                  <input
+                                    placeholder={t.owner.batchCodeAuto}
+                                    value={l.produceBatchCode ?? ""}
+                                    onChange={(e) =>
+                                      setLines((prev) =>
+                                        prev.map((x) =>
+                                          x.key === l.key
+                                            ? {
+                                                ...x,
+                                                produceBatchCode: e.target.value,
+                                              }
+                                            : x,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                  <input
+                                    type="date"
+                                    value={
+                                      l.produceMfg ??
+                                      new Date().toISOString().slice(0, 10)
+                                    }
+                                    onChange={(e) =>
+                                      setLines((prev) =>
+                                        prev.map((x) =>
+                                          x.key === l.key
+                                            ? {
+                                                ...x,
+                                                produceMfg: e.target.value,
+                                              }
+                                            : x,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                </div>
+                              ) : (
+                                <select
+                                  value={l.batchId}
+                                  onChange={(e) =>
+                                    setLines((prev) =>
+                                      prev.map((x) =>
+                                        x.key === l.key
+                                          ? { ...x, batchId: e.target.value }
+                                          : x,
+                                      ),
+                                    )
+                                  }
+                                >
+                                  {lineBatches.length === 0 ? (
+                                    <option value="">
+                                      {t.owner.noBatch}
+                                    </option>
+                                  ) : (
+                                    lineBatches.map((b) => (
+                                      <option key={b.id} value={b.id}>
+                                        {b.batchCode} · {b.qtyRemaining}
+                                      </option>
+                                    ))
+                                  )}
+                                </select>
+                              )}
+                            </div>
+                          ) : (
+                            <select
+                              value={l.batchId}
+                              disabled={Boolean(l.unitSerialCode)}
+                              onChange={(e) =>
+                                setLines((prev) =>
+                                  prev.map((x) =>
+                                    x.key === l.key
+                                      ? { ...x, batchId: e.target.value }
+                                      : x,
+                                  ),
+                                )
+                              }
+                            >
+                              {lineBatches.length === 0 ? (
+                                <option value="">{t.owner.noBatch}</option>
+                              ) : (
+                                lineBatches.map((b) => (
+                                  <option key={b.id} value={b.id}>
+                                    {b.batchCode} · {b.qtyRemaining}
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                          )}
                         </td>
                         <td className="sell-col-qty">
                           <input
@@ -883,40 +993,142 @@ export function OwnerSellPage({ locale }: Props) {
                       </button>
                     </div>
                     <div className="sell-line-fields">
-                      <label className="full">
-                        {t.owner.fieldBatch}
-                        <select
-                          value={l.batchId}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((x) =>
-                                x.key === l.key
-                                  ? { ...x, batchId: e.target.value }
-                                  : x,
-                              ),
-                            )
-                          }
-                        >
-                          {batches
-                            .filter(
+                      {onlineMeta ? (
+                        <div className="full produce-batch-cell">
+                          <label className="tiny batch-mode-toggle">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(l.produceNew)}
+                              onChange={(e) =>
+                                setLines((prev) =>
+                                  prev.map((x) =>
+                                    x.key === l.key
+                                      ? {
+                                          ...x,
+                                          produceNew: e.target.checked,
+                                          batchId: e.target.checked ? "" : x.batchId,
+                                        }
+                                      : x,
+                                  ),
+                                )
+                              }
+                            />
+                            {t.owner.onlineProduceBatch}
+                          </label>
+                          {l.produceNew ? (
+                            <>
+                              <label className="full">
+                                {t.owner.fieldBatchCode}
+                                <input
+                                  placeholder={t.owner.batchCodeAuto}
+                                  value={l.produceBatchCode ?? ""}
+                                  onChange={(e) =>
+                                    setLines((prev) =>
+                                      prev.map((x) =>
+                                        x.key === l.key
+                                          ? {
+                                              ...x,
+                                              produceBatchCode: e.target.value,
+                                            }
+                                          : x,
+                                      ),
+                                    )
+                                  }
+                                />
+                              </label>
+                              <label className="full">
+                                {t.owner.fieldMfgDate}
+                                <input
+                                  type="date"
+                                  value={
+                                    l.produceMfg ??
+                                    new Date().toISOString().slice(0, 10)
+                                  }
+                                  onChange={(e) =>
+                                    setLines((prev) =>
+                                      prev.map((x) =>
+                                        x.key === l.key
+                                          ? { ...x, produceMfg: e.target.value }
+                                          : x,
+                                      ),
+                                    )
+                                  }
+                                />
+                              </label>
+                            </>
+                          ) : (
+                            <label className="full">
+                              {t.owner.fieldBatch}
+                              <select
+                                value={l.batchId}
+                                onChange={(e) =>
+                                  setLines((prev) =>
+                                    prev.map((x) =>
+                                      x.key === l.key
+                                        ? { ...x, batchId: e.target.value }
+                                        : x,
+                                    ),
+                                  )
+                                }
+                              >
+                                {batches
+                                  .filter(
+                                    (b) =>
+                                      b.productId === l.productId &&
+                                      (b.qtyRemaining > 0 || b.id === l.batchId),
+                                  )
+                                  .map((b) => (
+                                    <option key={b.id} value={b.id}>
+                                      {b.batchCode} · {b.qtyRemaining}
+                                    </option>
+                                  ))}
+                                {!batches.some(
+                                  (b) =>
+                                    b.productId === l.productId &&
+                                    (b.qtyRemaining > 0 || b.id === l.batchId),
+                                ) ? (
+                                  <option value="">{t.owner.noBatch}</option>
+                                ) : null}
+                              </select>
+                            </label>
+                          )}
+                        </div>
+                      ) : (
+                        <label className="full">
+                          {t.owner.fieldBatch}
+                          <select
+                            value={l.batchId}
+                            onChange={(e) =>
+                              setLines((prev) =>
+                                prev.map((x) =>
+                                  x.key === l.key
+                                    ? { ...x, batchId: e.target.value }
+                                    : x,
+                                ),
+                              )
+                            }
+                          >
+                            {batches
+                              .filter(
+                                (b) =>
+                                  b.productId === l.productId &&
+                                  (b.qtyRemaining > 0 || b.id === l.batchId),
+                              )
+                              .map((b) => (
+                                <option key={b.id} value={b.id}>
+                                  {b.batchCode} · {b.qtyRemaining}
+                                </option>
+                              ))}
+                            {!batches.some(
                               (b) =>
                                 b.productId === l.productId &&
                                 (b.qtyRemaining > 0 || b.id === l.batchId),
-                            )
-                            .map((b) => (
-                              <option key={b.id} value={b.id}>
-                                {b.batchCode} · {b.qtyRemaining}
-                              </option>
-                            ))}
-                          {!batches.some(
-                            (b) =>
-                              b.productId === l.productId &&
-                              (b.qtyRemaining > 0 || b.id === l.batchId),
-                          ) ? (
-                            <option value="">{t.owner.noBatch}</option>
-                          ) : null}
-                        </select>
-                      </label>
+                            ) ? (
+                              <option value="">{t.owner.noBatch}</option>
+                            ) : null}
+                          </select>
+                        </label>
+                      )}
                       <label>
                         {t.owner.fieldQty}
                         <input
