@@ -188,7 +188,7 @@ export function PublicProductPage({ locale, onLocale }: Props) {
             >
               {inStockNow ? t.shop.addToCart : t.shop.shopOrderAnyway}
             </button>
-            {available ? (
+            {inStockNow ? (
               <button
                 type="button"
                 className="btn ghost shop-cta"

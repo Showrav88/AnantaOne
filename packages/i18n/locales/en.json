@@ -91,7 +91,9 @@
     "yourCart": "Your cart",
     "continueShopping": "Continue shopping",
     "decreaseQty": "Decrease quantity",
-    "increaseQty": "Increase quantity"
+    "increaseQty": "Increase quantity",
+    "shopMadeToOrder": "Made to order",
+    "shopOrderAnyway": "Order"
   },
   "home": {
     "ctaPrimary": "Open live dashboard",

@@ -91,7 +91,9 @@
     "yourCart": "আপনার কার্ট",
     "continueShopping": "কেনাকাটা চালিয়ে যান",
     "decreaseQty": "পরিমাণ কমান",
-    "increaseQty": "পরিমাণ বাড়ান"
+    "increaseQty": "পরিমাণ বাড়ান",
+    "shopMadeToOrder": "অর্ডারে তৈরি",
+    "shopOrderAnyway": "অর্ডার"
   },
   "home": {
     "ctaPrimary": "লাইভ ড্যাশবোর্ড খুলুন",
