@@ -348,24 +348,6 @@ export function OwnerLayout({ locale, onLocale }: Props) {
         <p className="owner-brand">{brandLabel}</p>
         <p className="owner-role">{roleLabel}</p>
         <p className="muted-nav">{user?.email}</p>
-        <div className="branch-switcher nav-branch">
-          <p className="muted tiny">{t.owner.activeBranch}</p>
-          {isOwner ? (
-            <select
-              value={activeBranch}
-              onChange={(e) => onSwitchBranch(e.target.value)}
-            >
-              <option value="all">{t.owner.allBranches}</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <p className="branch-locked">{lockedBranchName}</p>
-          )}
-        </div>
         <nav className="nav-tiles" onClick={closeNavOnMobile}>
           <NavTileLink
             to="/owner"
