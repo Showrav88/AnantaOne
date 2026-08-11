@@ -714,6 +714,7 @@ async function refreshAccessToken(): Promise<boolean> {
     accessToken: data.accessToken,
     refreshToken: data.refreshToken,
     user: data.user,
+    company: data.company,
   });
   return true;
 }
@@ -883,6 +884,7 @@ export const api = {
         accessToken: data.accessToken,
         refreshToken: data.refreshToken,
         user: data.user,
+        company: data.company,
       });
       return data;
     },
@@ -895,6 +897,7 @@ export const api = {
         accessToken: data.accessToken,
         refreshToken: data.refreshToken,
         user: data.user,
+        company: data.company,
       });
       return data;
     },

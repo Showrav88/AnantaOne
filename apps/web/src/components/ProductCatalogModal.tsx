@@ -18,6 +18,7 @@ import {
 } from "../lib/productCatalog";
 import { PRODUCT_PRESETS } from "../lib/productPresets";
 import { uploadTenantMedia } from "../lib/tenantUpload";
+import { ModalPortal } from "./ModalPortal";
 
 const emptyForm = {
   presetId: "custom",
@@ -370,11 +371,12 @@ export function ProductCatalogModal({
   if (!open) return null;
 
   return (
-    <div
-      className="owner-dialog-backdrop"
-      role="presentation"
-      onClick={onClose}
-    >
+    <ModalPortal>
+      <div
+        className="owner-dialog-backdrop"
+        role="presentation"
+        onClick={onClose}
+      >
       <div
         className="owner-dialog catalog-modal"
         role="dialog"
@@ -752,5 +754,6 @@ export function ProductCatalogModal({
         </form>
       </div>
     </div>
+    </ModalPortal>
   );
 }

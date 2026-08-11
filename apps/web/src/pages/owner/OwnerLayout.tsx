@@ -6,7 +6,9 @@ import { DisplayControls } from "../../components/DisplayControls";
 import { api, type BranchRow } from "../../lib/api";
 import {
   getActiveBranchId,
+  getStoredCompany,
   getStoredUser,
+  saveCompany,
   setActiveBranchId,
 } from "../../lib/session";
 
@@ -17,6 +19,46 @@ type Props = {
 
 function isDesktopWidth() {
   return typeof window !== "undefined" && window.innerWidth > 900;
+}
+
+type NavTileProps = {
+  to: string;
+  label: string;
+  icon: string;
+  end?: boolean;
+  className?: string | ((args: { isActive: boolean }) => string);
+  onNavigate?: () => void;
+};
+
+function NavTileLink({
+  to,
+  label,
+  icon,
+  end,
+  className,
+  onNavigate,
+}: NavTileProps) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) => {
+        const extra =
+          typeof className === "function"
+            ? className({ isActive })
+            : (className ?? "");
+        return ["nav-tile", extra, isActive ? "active" : ""]
+          .filter(Boolean)
+          .join(" ");
+      }}
+      onClick={onNavigate}
+    >
+      <span className="nav-tile-icon" aria-hidden="true">
+        {icon}
+      </span>
+      <span className="nav-tile-label">{label}</span>
+    </NavLink>
+  );
 }
 
 const WALLET_PEEK_MS = 5000;
@@ -36,6 +78,9 @@ export function OwnerLayout({ locale, onLocale }: Props) {
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [walletShown, setWalletShown] = useState(false);
   const [walletLoading, setWalletLoading] = useState(false);
+  const [shopName, setShopName] = useState(
+    () => getStoredCompany()?.name ?? "",
+  );
   const walletHideTimer = useRef<number | null>(null);
   const roleLabel =
     user?.role.code === "MANAGER"
@@ -87,6 +132,18 @@ export function OwnerLayout({ locale, onLocale }: Props) {
       document.body.style.overflow = prev;
     };
   }, [menuOpen, desktop]);
+
+  useEffect(() => {
+    void api.auth
+      .me()
+      .then((res) => {
+        if (res.company?.name) {
+          saveCompany(res.company);
+          setShopName(res.company.name);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     void api.owner
@@ -184,6 +241,10 @@ export function OwnerLayout({ locale, onLocale }: Props) {
     t.owner.noBranch;
 
   const showBackdrop = menuOpen && !desktop;
+  const brandLabel = shopName || t.app.name;
+  const closeNavOnMobile = () => {
+    if (!desktop) closeMenu();
+  };
 
   return (
     <div
@@ -205,7 +266,7 @@ export function OwnerLayout({ locale, onLocale }: Props) {
           <span />
           <span />
         </button>
-        <p className="owner-topbar-brand">{t.app.name}</p>
+        <p className="owner-topbar-brand">{brandLabel}</p>
         {isOwner ? (
           <button
             type="button"
@@ -284,7 +345,7 @@ export function OwnerLayout({ locale, onLocale }: Props) {
       ) : null}
 
       <aside className="owner-nav">
-        <p className="owner-brand">{t.app.name}</p>
+        <p className="owner-brand">{brandLabel}</p>
         <p className="owner-role">{roleLabel}</p>
         <p className="muted-nav">{user?.email}</p>
         <div className="branch-switcher nav-branch">
@@ -305,42 +366,83 @@ export function OwnerLayout({ locale, onLocale }: Props) {
             <p className="branch-locked">{lockedBranchName}</p>
           )}
         </div>
-        <nav onClick={() => { if (!desktop) closeMenu(); }}>
-          <NavLink to="/owner" end>
-            {t.owner.navDashboard}
-          </NavLink>
-          <NavLink to="/owner/sell">{t.owner.navSell}</NavLink>
-          <NavLink to="/owner/history">{t.owner.navHistory}</NavLink>
+        <nav className="nav-tiles" onClick={closeNavOnMobile}>
+          <NavTileLink
+            to="/owner"
+            end
+            icon="📊"
+            label={t.owner.navDashboard}
+          />
+          <NavTileLink to="/owner/sell" icon="🛒" label={t.owner.navSell} />
+          <NavTileLink
+            to="/owner/history"
+            icon="📜"
+            label={t.owner.navHistory}
+          />
           {isOwner ? (
-            <NavLink to="/owner/batches">{t.owner.navBatches}</NavLink>
+            <NavTileLink
+              to="/owner/batches"
+              icon="🏭"
+              label={t.owner.navBatches}
+            />
           ) : null}
           {isOwner ? (
-            <NavLink to="/owner/tags">{t.owner.navTags}</NavLink>
+            <NavTileLink to="/owner/tags" icon="🏷️" label={t.owner.navTags} />
           ) : null}
-          <NavLink to="/owner/products">{t.owner.navProducts}</NavLink>
+          <NavTileLink
+            to="/owner/products"
+            icon="📦"
+            label={t.owner.navProducts}
+          />
           {isOwner || isManager ? (
-            <NavLink to="/owner/materials">{t.owner.navMaterials}</NavLink>
+            <NavTileLink
+              to="/owner/materials"
+              icon="🧪"
+              label={t.owner.navMaterials}
+            />
           ) : null}
           {isOwner ? (
-            <NavLink to="/owner/buyers">{t.owner.navBuyers}</NavLink>
+            <NavTileLink
+              to="/owner/buyers"
+              icon="👥"
+              label={t.owner.navBuyers}
+            />
           ) : null}
-          <NavLink to="/owner/online-orders">{t.owner.navOnlineOrders}</NavLink>
+          <NavTileLink
+            to="/owner/online-orders"
+            icon="🌐"
+            label={t.owner.navOnlineOrders}
+          />
           {isOwner || isManager ? (
-            <NavLink to="/owner/delivery">{t.owner.navDelivery}</NavLink>
+            <NavTileLink
+              to="/owner/delivery"
+              icon="🚚"
+              label={t.owner.navDelivery}
+            />
           ) : null}
           {isOwner ? (
-            <NavLink to="/owner/site">{t.owner.navSite}</NavLink>
+            <NavTileLink to="/owner/site" icon="🏪" label={t.owner.navSite} />
           ) : null}
           {isOwner ? (
-            <NavLink to="/owner/company">{t.owner.navCompany}</NavLink>
+            <NavTileLink
+              to="/owner/company"
+              icon="🏢"
+              label={t.owner.navCompany}
+            />
           ) : null}
           {isOwner || isManager ? (
-            <NavLink to="/owner/branches">{t.owner.navBranches}</NavLink>
+            <NavTileLink
+              to="/owner/branches"
+              icon="🏬"
+              label={t.owner.navBranches}
+            />
           ) : null}
           {isOwner ? (
             <>
-              <NavLink
+              <NavTileLink
                 to="/owner/wallet"
+                icon="💰"
+                label={t.owner.navWallet}
                 className={({ isActive }) => {
                   const tab = new URLSearchParams(location.search).get("tab");
                   const onHome =
@@ -354,11 +456,11 @@ export function OwnerLayout({ locale, onLocale }: Props) {
                     .filter(Boolean)
                     .join(" ");
                 }}
-              >
-                {t.owner.navWallet}
-              </NavLink>
-              <NavLink
+              />
+              <NavTileLink
                 to="/owner/wallet?tab=supply"
+                icon="🚛"
+                label={t.owner.navSupplier}
                 className={({ isActive }) => {
                   const tab = new URLSearchParams(location.search).get("tab");
                   return [
@@ -369,11 +471,11 @@ export function OwnerLayout({ locale, onLocale }: Props) {
                     .filter(Boolean)
                     .join(" ");
                 }}
-              >
-                {t.owner.navSupplier}
-              </NavLink>
-              <NavLink
+              />
+              <NavTileLink
                 to="/owner/wallet?tab=utility"
+                icon="⚡"
+                label={t.owner.navUtilities}
                 className={({ isActive }) => {
                   const tab = new URLSearchParams(location.search).get("tab");
                   return [
@@ -384,16 +486,18 @@ export function OwnerLayout({ locale, onLocale }: Props) {
                     .filter(Boolean)
                     .join(" ");
                 }}
-              >
-                {t.owner.navUtilities}
-              </NavLink>
+              />
             </>
           ) : null}
           {isOwner ? (
-            <NavLink to="/owner/payments">{t.owner.navPayments}</NavLink>
+            <NavTileLink
+              to="/owner/payments"
+              icon="💵"
+              label={t.owner.navPayments}
+            />
           ) : null}
           {isOwner || isManager ? (
-            <NavLink to="/owner/staff">{t.owner.navStaff}</NavLink>
+            <NavTileLink to="/owner/staff" icon="👤" label={t.owner.navStaff} />
           ) : null}
         </nav>
         <div className="owner-nav-foot">
