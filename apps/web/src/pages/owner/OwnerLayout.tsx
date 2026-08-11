@@ -306,39 +306,51 @@ export function OwnerLayout({ locale, onLocale }: Props) {
           )}
         </div>
         <nav onClick={() => { if (!desktop) closeMenu(); }}>
-          <NavLink to="/owner" end>
-            {t.owner.navDashboard}
-          </NavLink>
-          <NavLink to="/owner/sell">{t.owner.navSell}</NavLink>
-          <NavLink to="/owner/history">{t.owner.navHistory}</NavLink>
-          {isOwner ? (
-            <NavLink to="/owner/batches">{t.owner.navBatches}</NavLink>
-          ) : null}
-          {isOwner ? (
-            <NavLink to="/owner/tags">{t.owner.navTags}</NavLink>
-          ) : null}
-          <NavLink to="/owner/products">{t.owner.navProducts}</NavLink>
+          <div className="nav-group">
+            <p className="nav-group-label">{t.owner.navGroupDaily}</p>
+            <NavLink to="/owner" end>
+              {t.owner.navDashboard}
+            </NavLink>
+            <NavLink to="/owner/sell">{t.owner.navSell}</NavLink>
+            <NavLink to="/owner/history">{t.owner.navHistory}</NavLink>
+            <NavLink to="/owner/online-orders">{t.owner.navOnlineOrders}</NavLink>
+          </div>
+
           {isOwner || isManager ? (
-            <NavLink to="/owner/materials">{t.owner.navMaterials}</NavLink>
+            <div className="nav-group">
+              <p className="nav-group-label">{t.owner.navGroupProduction}</p>
+              <NavLink to="/owner/products">{t.owner.navProducts}</NavLink>
+              {isOwner || isManager ? (
+                <NavLink to="/owner/materials">{t.owner.navMaterials}</NavLink>
+              ) : null}
+              {isOwner ? (
+                <NavLink to="/owner/batches">{t.owner.navBatches}</NavLink>
+              ) : null}
+              {isOwner ? (
+                <NavLink to="/owner/tags">{t.owner.navTags}</NavLink>
+              ) : null}
+            </div>
           ) : null}
+
+          <div className="nav-group">
+            <p className="nav-group-label">{t.owner.navGroupPeople}</p>
+            {isOwner ? (
+              <NavLink to="/owner/buyers">{t.owner.navBuyers}</NavLink>
+            ) : null}
+            {isOwner || isManager ? (
+              <NavLink to="/owner/delivery">{t.owner.navDelivery}</NavLink>
+            ) : null}
+            {isOwner || isManager ? (
+              <NavLink to="/owner/branches">{t.owner.navBranches}</NavLink>
+            ) : null}
+            {isOwner || isManager ? (
+              <NavLink to="/owner/staff">{t.owner.navStaff}</NavLink>
+            ) : null}
+          </div>
+
           {isOwner ? (
-            <NavLink to="/owner/buyers">{t.owner.navBuyers}</NavLink>
-          ) : null}
-          <NavLink to="/owner/online-orders">{t.owner.navOnlineOrders}</NavLink>
-          {isOwner || isManager ? (
-            <NavLink to="/owner/delivery">{t.owner.navDelivery}</NavLink>
-          ) : null}
-          {isOwner ? (
-            <NavLink to="/owner/site">{t.owner.navSite}</NavLink>
-          ) : null}
-          {isOwner ? (
-            <NavLink to="/owner/company">{t.owner.navCompany}</NavLink>
-          ) : null}
-          {isOwner || isManager ? (
-            <NavLink to="/owner/branches">{t.owner.navBranches}</NavLink>
-          ) : null}
-          {isOwner ? (
-            <>
+            <div className="nav-group">
+              <p className="nav-group-label">{t.owner.navGroupMoney}</p>
               <NavLink
                 to="/owner/wallet"
                 className={({ isActive }) => {
@@ -387,13 +399,16 @@ export function OwnerLayout({ locale, onLocale }: Props) {
               >
                 {t.owner.navUtilities}
               </NavLink>
-            </>
+              <NavLink to="/owner/payments">{t.owner.navPayments}</NavLink>
+            </div>
           ) : null}
+
           {isOwner ? (
-            <NavLink to="/owner/payments">{t.owner.navPayments}</NavLink>
-          ) : null}
-          {isOwner || isManager ? (
-            <NavLink to="/owner/staff">{t.owner.navStaff}</NavLink>
+            <div className="nav-group">
+              <p className="nav-group-label">{t.owner.navGroupSetup}</p>
+              <NavLink to="/owner/site">{t.owner.navSite}</NavLink>
+              <NavLink to="/owner/company">{t.owner.navCompany}</NavLink>
+            </div>
           ) : null}
         </nav>
         <div className="owner-nav-foot">

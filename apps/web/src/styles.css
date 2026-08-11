@@ -637,7 +637,7 @@ button {
     top: 0;
     left: 0;
     bottom: 0;
-    width: 15rem;
+    width: var(--owner-sidebar-w, 17rem);
     z-index: 50;
     transform: translateX(-105%);
     transition: transform 200ms ease;
