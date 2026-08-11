@@ -311,6 +311,14 @@
     "scanBatchTitle": "স্ক্যান করে ব্যাচ খুঁজুন",
     "scanBatchHint": "ইউনিট QR স্ক্যান করলে তার প্রোডাকশন ব্যাচ হাইলাইট হবে।",
     "scanBatchFound": "{sku}-এর ব্যাচ {batch} পাওয়া গেছে",
+    "scanUnitStatus": "ইউনিট স্ট্যাটাস",
+    "unitStatusDefect": "ত্রুটিযুক্ত",
+    "markUnitDefect": "ত্রুটি চিহ্নিত",
+    "markUnitDefectTitle": "ইউনিট ত্রুটিযুক্ত চিহ্নিত করুন",
+    "markUnitDefectMessage": "এই ইউনিট বিক্রয়যোগ্য স্টক থেকে সরানো হবে। ব্যাচ ও পণ্য স্টক ১ কমবে।",
+    "markUnitDefectReason": "ত্রুটির কারণ",
+    "markUnitDefectReasonPlaceholder": "যেমন: ফাটা বোতল, লেবেল ভুল",
+    "markUnitDefectOk": "ইউনিট {code} ত্রুটিযুক্ত চিহ্নিত",
     "qtyRemaining": "বাকি",
     "productsEmpty": "এখনো কোনো পণ্য নেই।",
     "fieldProductName": "নাম (EN)",
@@ -718,6 +726,7 @@
     "unitStatus": "স্ট্যাটাস",
     "unitStatusInStock": "স্টকে আছে",
     "unitStatusSold": "বিক্রি হয়েছে",
-    "unitStatusVoid": "বাতিল"
+    "unitStatusVoid": "বাতিল",
+    "unitStatusDefect": "ত্রুটিযুক্ত"
   }
 }

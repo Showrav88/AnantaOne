@@ -36,6 +36,8 @@ export function OwnerProductsPage({ locale }: Props) {
   const { confirm } = useConfirmAction();
   const user = getStoredUser();
   const canWrite = user?.role.code === "OWNER";
+  const canMarkDefect =
+    user?.role.code === "OWNER" || user?.role.code === "MANAGER";
   const [products, setProducts] = useState<Product[]>([]);
   const [stats, setStats] = useState<ProductProductionStat[]>([]);
   const [units, setUnits] = useState<
@@ -197,6 +199,57 @@ export function OwnerProductsPage({ locale }: Props) {
     return unitLabel ? `${p.size} ${unitLabel}` : String(p.size);
   }
 
+  function formatUnitStatus(status: string | null) {
+    if (!status) return "—";
+    if (status === "IN_STOCK") return t.public.unitStatusInStock;
+    if (status === "SOLD") return t.public.unitStatusSold;
+    if (status === "VOID") return t.public.unitStatusVoid;
+    if (status === "DEFECT") return t.owner.unitStatusDefect;
+    return status;
+  }
+
+  async function markDefect(serialCode: string, productSku: string) {
+    const decision = await confirm({
+      title: t.owner.markUnitDefectTitle,
+      message: t.owner.markUnitDefectMessage,
+      tone: "danger",
+      confirmLabel: t.owner.markUnitDefect,
+      cancelLabel: t.common.cancel,
+      reasonLabel: t.owner.markUnitDefectReason,
+      reasonPlaceholder: t.owner.markUnitDefectReasonPlaceholder,
+      reasonMinLength: 5,
+      details: confirmDetails(
+        [
+          { label: t.owner.fieldSku, value: productSku },
+          { label: t.public.unitSerial, value: serialCode },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok || !decision.reason) return;
+
+    setError(null);
+    setOkMsg(null);
+    try {
+      await api.owner.markUnitDefect({
+        serialCode,
+        reason: decision.reason.trim(),
+      });
+      setOkMsg(t.owner.markUnitDefectOk.replace("{code}", serialCode));
+      setScanResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              unitStatus: "DEFECT",
+            }
+          : null,
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
   async function applyScan(raw: string) {
     setError(null);
     setOkMsg(null);
@@ -270,26 +323,53 @@ export function OwnerProductsPage({ locale }: Props) {
           />
         </label>
         {scanResult ? (
-          <p className="full scan-result-inline">
-            <strong>
-              {locale === "bn" && scanResult.product.nameBn
-                ? scanResult.product.nameBn
-                : scanResult.product.name}
-            </strong>
-            {" · "}
-            {scanResult.product.sku}
-            {scanResult.batch
-              ? ` · ${t.owner.fieldBatch} ${scanResult.batch.batchCode}`
-              : ` · ${t.owner.scanNoBatch.replace("{sku}", scanResult.product.sku)}`}
-            {" · "}
-            <Link
-              to={`/owner/batches?productId=${scanResult.product.id}${
-                scanResult.batch ? `&batchId=${scanResult.batch.id}` : ""
-              }`}
-            >
-              {t.owner.navBatches}
-            </Link>
-          </p>
+          <div className="full scan-result-inline">
+            <p>
+              <strong>
+                {locale === "bn" && scanResult.product.nameBn
+                  ? scanResult.product.nameBn
+                  : scanResult.product.name}
+              </strong>
+              {" · "}
+              {scanResult.product.sku}
+              {scanResult.batch
+                ? ` · ${t.owner.fieldBatch} ${scanResult.batch.batchCode}`
+                : ` · ${t.owner.scanNoBatch.replace("{sku}", scanResult.product.sku)}`}
+              {scanResult.unitSerial ? (
+                <>
+                  {" · "}
+                  {scanResult.unitSerial}
+                  {" · "}
+                  {t.owner.scanUnitStatus}:{" "}
+                  {formatUnitStatus(scanResult.unitStatus)}
+                </>
+              ) : null}
+              {" · "}
+              <Link
+                to={`/owner/batches?productId=${scanResult.product.id}${
+                  scanResult.batch ? `&batchId=${scanResult.batch.id}` : ""
+                }`}
+              >
+                {t.owner.navBatches}
+              </Link>
+            </p>
+            {canMarkDefect &&
+            scanResult.unitSerial &&
+            scanResult.unitStatus === "IN_STOCK" ? (
+              <button
+                type="button"
+                className="btn danger compact"
+                onClick={() =>
+                  void markDefect(
+                    scanResult.unitSerial!,
+                    scanResult.product.sku,
+                  )
+                }
+              >
+                {t.owner.markUnitDefect}
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
 

@@ -311,6 +311,14 @@
     "scanBatchTitle": "Scan to find batch",
     "scanBatchHint": "Scan a unit QR to highlight its production batch.",
     "scanBatchFound": "Found batch {batch} for {sku}",
+    "scanUnitStatus": "Unit status",
+    "unitStatusDefect": "Defective",
+    "markUnitDefect": "Mark defect",
+    "markUnitDefectTitle": "Mark unit defective",
+    "markUnitDefectMessage": "This unit will be removed from sellable stock. Batch remaining and product stock will decrease by 1.",
+    "markUnitDefectReason": "Defect reason",
+    "markUnitDefectReasonPlaceholder": "e.g. cracked bottle, label misprint",
+    "markUnitDefectOk": "Unit {code} marked defective",
     "qtyRemaining": "Left",
     "productsEmpty": "No products yet.",
     "fieldProductName": "Name (EN)",
@@ -721,6 +729,7 @@
     "unitStatus": "Status",
     "unitStatusInStock": "In stock",
     "unitStatusSold": "Sold",
-    "unitStatusVoid": "Void"
+    "unitStatusVoid": "Void",
+    "unitStatusDefect": "Defective"
   }
 }
