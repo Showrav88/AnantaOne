@@ -87,12 +87,20 @@ export type BuyersResponse = {
   buyers: BuyerRow[];
 };
 
+export type ProductProductionStat = {
+  productId: string;
+  qtyBuilt: number;
+  qtySold: number;
+  qtyInStock: number;
+};
+
 export type Product = {
   id: string;
   name: string;
   nameBn: string | null;
   sku: string;
   category: string;
+  packType?: string;
   imageUrl?: string | null;
   imagePublicId?: string | null;
   unit: string | null;
@@ -103,6 +111,7 @@ export type Product = {
   stockQty: number;
   minStock: number;
   description: string | null;
+  materialsNote?: string | null;
   isActive: boolean;
   createdAt?: string;
 };
@@ -967,6 +976,13 @@ export const api = {
     products: () =>
       getJson<{ ok: boolean; products: Product[] }>(
         "/api/v1/owner/products",
+        2,
+        undefined,
+        true,
+      ),
+    productStats: () =>
+      getJson<{ ok: boolean; stats: ProductProductionStat[] }>(
+        "/api/v1/owner/products/stats",
         2,
         undefined,
         true,

@@ -371,14 +371,18 @@ model Product {
   name        String
   nameBn      String?
   sku         String
-  category    String   @default("water")
+  category    String   @default("DRINKING")
+  /// BOTTLE | SACHET | JAR | BOX | OTHER
+  packType    String   @default("BOTTLE")
   unitId      String
-  /// How much one item is (e.g. 5 with unit Liter = 5L bottle).
+  /// How much one item is (e.g. 5 with unit Liter = 5L bottle). Free 100ml–20L+.
   size        Decimal? @db.Decimal(12, 3)
   priceBdt    Decimal  @db.Decimal(12, 2)
   stockQty    Decimal  @default(0) @db.Decimal(12, 2)
   minStock    Decimal  @default(0) @db.Decimal(12, 2)
   description String?
+  /// Free-text recipe / BOM placeholder until material master (bottle, cap, label…).
+  materialsNote String?
   imageUrl      String?
   imagePublicId String?
   isActive    Boolean  @default(true)
