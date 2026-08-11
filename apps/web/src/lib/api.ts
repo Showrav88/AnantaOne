@@ -514,6 +514,8 @@ export type ProductUnitTag = {
   serialCode: string;
   status: string;
   soldAt: string | null;
+  defectReason?: string | null;
+  defectAt?: string | null;
   qrUrl: string;
   product: {
     name: string;
@@ -1544,6 +1546,13 @@ export const api = {
         `/api/v1/owner/units/lookup?q=${encodeURIComponent(q)}`,
         1,
         undefined,
+        true,
+      ),
+    markUnitDefect: (body: { serialCode: string; reason: string }) =>
+      getJson<{ ok: boolean; unit: ProductUnitTag }>(
+        "/api/v1/owner/units/mark-defect",
+        1,
+        { method: "POST", body: JSON.stringify(body) },
         true,
       ),
     batchUnits: (

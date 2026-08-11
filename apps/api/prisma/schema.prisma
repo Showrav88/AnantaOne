@@ -472,10 +472,12 @@ model ProductUnit {
   serialNo    Int
   /// Public QR code, unique per company.
   serialCode  String
-  /// IN_STOCK | SOLD | VOID
+  /// IN_STOCK | SOLD | VOID | DEFECT
   status      String    @default("IN_STOCK")
   orderLineId String?
   soldAt      DateTime?
+  defectReason String?
+  defectAt    DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 

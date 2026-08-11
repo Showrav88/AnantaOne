@@ -1,5 +1,6 @@
 import type { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../db.js";
+import { reconcileProductStockQty } from "./productStock.js";
 import { makeShortSerialCode } from "./shortCodes.js";
 
 type TxClient = Prisma.TransactionClient;
@@ -220,12 +221,84 @@ export async function voidUnusedBatchUnits(opts: {
   return result.count;
 }
 
+/** Mark one in-stock unit defective — removes from sellable pool. */
+export async function markUnitDefect(opts: {
+  tenantId: string;
+  serialCode: string;
+  reason: string;
+  userId: string;
+  tx?: TxClient;
+}) {
+  const reason = opts.reason.trim();
+  if (reason.length < 5) {
+    throw new Error("Defect reason must be at least 5 characters");
+  }
+
+  const run = async (tx: TxClient) => {
+    const serialCode = opts.serialCode.trim().toUpperCase();
+    const unit = await tx.productUnit.findFirst({
+      where: { tenantId: opts.tenantId, serialCode },
+      include: { batch: true },
+    });
+    if (!unit) throw new Error("Unit tag not found");
+    if (unit.status === "DEFECT") {
+      throw new Error("Unit already marked defective");
+    }
+    if (unit.status === "VOID") {
+      throw new Error("Unit is void — cannot mark defect");
+    }
+    if (unit.status === "SOLD") {
+      throw new Error("Unit was sold — reverse the sale first");
+    }
+    if (unit.status !== "IN_STOCK") {
+      throw new Error(`Cannot mark defect (status: ${unit.status})`);
+    }
+
+    const now = new Date();
+    await tx.productUnit.update({
+      where: { id: unit.id },
+      data: {
+        status: "DEFECT",
+        defectReason: reason,
+        defectAt: now,
+      },
+    });
+
+    await tx.productionBatch.update({
+      where: { id: unit.batchId },
+      data: {
+        qtyRemaining: Math.max(0, Number(unit.batch.qtyRemaining) - 1),
+      },
+    });
+
+    await reconcileProductStockQty(
+      opts.tenantId,
+      unit.productId,
+      tx,
+      opts.userId,
+    );
+
+    return tx.productUnit.findUniqueOrThrow({
+      where: { id: unit.id },
+      include: {
+        product: { include: { unit: true } },
+        batch: true,
+      },
+    });
+  };
+
+  if (opts.tx) return run(opts.tx);
+  return prisma.$transaction(run);
+}
+
 export function serializeProductUnit(unit: {
   id: string;
   serialNo: number;
   serialCode: string;
   status: string;
   soldAt: Date | null;
+  defectReason?: string | null;
+  defectAt?: Date | null;
   batchId: string;
   productId: string;
   product?: {
@@ -250,6 +323,8 @@ export function serializeProductUnit(unit: {
     serialCode: unit.serialCode,
     status: unit.status,
     soldAt: unit.soldAt,
+    defectReason: unit.defectReason ?? null,
+    defectAt: unit.defectAt ?? null,
     batchId: unit.batchId,
     productId: unit.productId,
     product: unit.product

@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import {
   buildUnitQrUrl,
   createBatchUnits,
+  markUnitDefect,
   serializeProductUnit,
   voidUnusedBatchUnits,
 } from "../lib/productUnits.js";
@@ -577,6 +578,37 @@ ownerSellRouter.get(
         Number(unit.batch.qtyRemaining) > 0 &&
         unit.product.isActive,
     });
+  },
+);
+
+ownerSellRouter.post(
+  "/units/mark-defect",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const parsed = z
+      .object({
+        serialCode: z.string().min(2).max(128),
+        reason: z.string().min(5).max(500),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: parsed.error.message });
+      return;
+    }
+    try {
+      const unit = await markUnitDefect({
+        tenantId: tid(req),
+        serialCode: parsed.data.serialCode,
+        reason: parsed.data.reason.trim(),
+        userId: req.auth!.id,
+      });
+      res.json({ ok: true, unit: serializeProductUnit(unit) });
+    } catch (error) {
+      res.status(400).json({
+        ok: false,
+        message: error instanceof Error ? error.message : "Failed",
+      });
+    }
   },
 );
 

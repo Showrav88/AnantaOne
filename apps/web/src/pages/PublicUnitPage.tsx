@@ -36,10 +36,11 @@ type PublicUnit = {
   };
 };
 
-function statusLabel(status: string, t: ReturnType<typeof getMessages>) {
+function unitStatusLabel(status: string, t: ReturnType<typeof getMessages>) {
   if (status === "IN_STOCK") return t.public.unitStatusInStock;
   if (status === "SOLD") return t.public.unitStatusSold;
   if (status === "VOID") return t.public.unitStatusVoid;
+  if (status === "DEFECT") return t.public.unitStatusDefect;
   return status;
 }
 
@@ -129,7 +130,7 @@ export function PublicUnitPage({ locale, onLocale }: Props) {
               </li>
               <li>
                 <span>{t.public.unitStatus}</span>
-                <span>{statusLabel(unit.status, t)}</span>
+                <span>{unitStatusLabel(unit.status, t)}</span>
               </li>
               <li>
                 <span>MFG</span>
