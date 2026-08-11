@@ -4081,6 +4081,27 @@ html[data-theme="night"] .owner-dialog-backdrop {
   color: inherit;
 }
 
+.bom-editor {
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  padding: 0.65rem 0.75rem;
+  margin: 0;
+}
+
+.bom-lines {
+  margin: 0.5rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bom-line-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(5rem, 7rem) auto;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+
   display: flex;
   align-items: flex-start;
   justify-content: space-between;

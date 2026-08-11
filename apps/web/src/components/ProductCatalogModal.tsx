@@ -4,7 +4,7 @@ import {
   confirmDetails,
   useConfirmAction,
 } from "../ConfirmActionDialog";
-import { api, type Product } from "../../lib/api";
+import { api, type MaterialRow, type Product } from "../../lib/api";
 import {
   PRODUCT_CATEGORIES,
   PACK_TYPES,
@@ -21,6 +21,8 @@ const emptyForm = {
   sku: "",
   category: "DRINKING" as string,
   packType: "BOTTLE" as string,
+  innerProductId: "",
+  unitsPerPack: "",
   size: "",
   unitCode: "LITER",
   priceBdt: "",
@@ -33,6 +35,7 @@ type Props = {
   open: boolean;
   locale: LocaleCode;
   product: Product | null;
+  products: Product[];
   units: Array<{ code: string; nameEn: string; nameBn: string }>;
   onClose: () => void;
   onSaved: (wasEdit: boolean) => void;
@@ -45,6 +48,7 @@ export function ProductCatalogModal({
   open,
   locale,
   product,
+  products,
   units,
   onClose,
   onSaved,
@@ -59,6 +63,11 @@ export function ProductCatalogModal({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [autoSkuPreview, setAutoSkuPreview] = useState("");
+  const [materials, setMaterials] = useState<MaterialRow[]>([]);
+  const [bomLines, setBomLines] = useState<
+    Array<{ materialId: string; qty: string }>
+  >([]);
+  const [effectiveBomHint, setEffectiveBomHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -91,9 +100,51 @@ export function ProductCatalogModal({
     }
   }
 
+  const innerProductOptions = products.filter(
+    (p) =>
+      p.isActive &&
+      p.packType !== "BOX" &&
+      p.id !== editingId,
+  );
+
+  async function loadBom(productId: string) {
+    try {
+      const res = await api.owner.productBom(productId);
+      setBomLines(
+        res.bom.directLines.map((l) => ({
+          materialId: l.materialId,
+          qty: String(l.qty),
+        })),
+      );
+      if (res.bom.effectiveLines.length > 0) {
+        setEffectiveBomHint(
+          res.bom.effectiveLines
+            .map((l) => {
+              const name =
+                locale === "bn" && l.material.nameBn
+                  ? l.material.nameBn
+                  : l.material.name;
+              return `${name} × ${l.qty} ${l.material.unit.code}`;
+            })
+            .join(" · "),
+        );
+      } else {
+        setEffectiveBomHint(null);
+      }
+    } catch {
+      setBomLines([]);
+      setEffectiveBomHint(null);
+    }
+  }
+
   useEffect(() => {
     if (!open) return;
     setError(null);
+    void api.owner
+      .materials(true)
+      .then((res) => setMaterials(res.materials))
+      .catch(() => setMaterials([]));
+
     if (product) {
       setForm({
         presetId: "custom",
@@ -102,6 +153,9 @@ export function ProductCatalogModal({
         sku: product.sku,
         category: product.category,
         packType: product.packType ?? "BOTTLE",
+        innerProductId: product.innerProductId ?? "",
+        unitsPerPack:
+          product.unitsPerPack != null ? String(product.unitsPerPack) : "",
         size: product.size == null ? "" : String(product.size),
         unitCode: product.unit ?? "LITER",
         priceBdt: String(product.priceBdt),
@@ -110,9 +164,12 @@ export function ProductCatalogModal({
         materialsNote: product.materialsNote ?? "",
       });
       setImagePreview(product.imageUrl ?? null);
+      void loadBom(product.id);
     } else {
       setForm(emptyForm);
       setImagePreview(null);
+      setBomLines([]);
+      setEffectiveBomHint(null);
       void refreshAutoSku(emptyForm.category);
     }
     setImageFile(null);
@@ -263,12 +320,23 @@ export function ProductCatalogModal({
         nameBn: form.nameBn || null,
         category: form.category,
         packType: form.packType,
+        innerProductId:
+          form.packType === "BOX" && form.innerProductId
+            ? form.innerProductId
+            : null,
+        unitsPerPack:
+          form.packType === "BOX" && form.unitsPerPack.trim()
+            ? Number(form.unitsPerPack)
+            : null,
         size: form.size === "" ? null : Number(form.size),
-        unitCode: form.unitCode,
+        unitCode: form.packType === "BOX" ? "PIECE" : form.unitCode,
         priceBdt: Number(form.priceBdt),
         minStock: form.minStock === "" ? 0 : Number(form.minStock),
         description: form.description || null,
         materialsNote: form.materialsNote.trim() || null,
+        bomLines: bomLines
+          .filter((l) => l.materialId && Number(l.qty) > 0)
+          .map((l) => ({ materialId: l.materialId, qty: Number(l.qty) })),
       };
       if (editingId) {
         body.sku = form.sku;
@@ -387,7 +455,16 @@ export function ProductCatalogModal({
             {t.owner.fieldPackType}
             <select
               value={form.packType}
-              onChange={(e) => setForm({ ...form, packType: e.target.value })}
+              onChange={(e) => {
+                const packType = e.target.value;
+                setForm({
+                  ...form,
+                  packType,
+                  unitCode: packType === "BOX" ? "PIECE" : form.unitCode,
+                  innerProductId: packType === "BOX" ? form.innerProductId : "",
+                  unitsPerPack: packType === "BOX" ? form.unitsPerPack : "",
+                });
+              }}
             >
               {PACK_TYPES.map((p) => (
                 <option key={p} value={p}>
@@ -396,6 +473,45 @@ export function ProductCatalogModal({
               ))}
             </select>
           </label>
+
+          {form.packType === "BOX" ? (
+            <>
+              <label>
+                {t.owner.fieldInnerProduct}
+                <select
+                  value={form.innerProductId}
+                  onChange={(e) =>
+                    setForm({ ...form, innerProductId: e.target.value })
+                  }
+                >
+                  <option value="">{t.owner.innerProductNone}</option>
+                  {innerProductOptions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.sku} ·{" "}
+                      {locale === "bn" && p.nameBn ? p.nameBn : p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t.owner.fieldUnitsPerPack}
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  required
+                  inputMode="numeric"
+                  value={form.unitsPerPack}
+                  placeholder="24"
+                  onChange={(e) =>
+                    setForm({ ...form, unitsPerPack: e.target.value })
+                  }
+                />
+              </label>
+              <p className="muted tiny full">{t.owner.boxPackHint}</p>
+            </>
+          ) : null}
+
           <label>
             {t.owner.fieldSize}
             <input
@@ -414,7 +530,7 @@ export function ProductCatalogModal({
             {t.owner.fieldUnit}
             <select
               value={form.unitCode}
-              disabled={!isCustom && !editingId}
+              disabled={!isCustom && !editingId || form.packType === "BOX"}
               onChange={(e) => setForm({ ...form, unitCode: e.target.value })}
             >
               {units.map((u) => (
@@ -516,6 +632,76 @@ export function ProductCatalogModal({
             />
           </label>
           <p className="muted tiny full">{t.owner.stockFromBatchesHint}</p>
+
+          <fieldset className="full bom-editor">
+            <legend>{t.owner.fieldBom}</legend>
+            <p className="muted tiny">{t.owner.bomPerUnitHint}</p>
+            {bomLines.length === 0 ? (
+              <p className="muted tiny">{t.owner.bomEmpty}</p>
+            ) : (
+              <ul className="plain-list bom-lines">
+                {bomLines.map((line, idx) => (
+                  <li key={idx} className="bom-line-row">
+                    <select
+                      value={line.materialId}
+                      onChange={(e) => {
+                        const next = [...bomLines];
+                        next[idx] = { ...line, materialId: e.target.value };
+                        setBomLines(next);
+                      }}
+                    >
+                      <option value="">{t.owner.bomPickMaterial}</option>
+                      {materials.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.code ? `${m.code} · ` : ""}
+                          {locale === "bn" && m.nameBn ? m.nameBn : m.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min={0.000001}
+                      step="any"
+                      placeholder={t.owner.fieldQty}
+                      value={line.qty}
+                      onChange={(e) => {
+                        const next = [...bomLines];
+                        next[idx] = { ...line, qty: e.target.value };
+                        setBomLines(next);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="linkish"
+                      onClick={() =>
+                        setBomLines(bomLines.filter((_, i) => i !== idx))
+                      }
+                    >
+                      {t.common.remove}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button
+              type="button"
+              className="btn ghost compact"
+              onClick={() =>
+                setBomLines([...bomLines, { materialId: "", qty: "" }])
+              }
+            >
+              {t.owner.bomAddLine}
+            </button>
+            {form.packType === "BOX" && form.innerProductId ? (
+              <p className="muted tiny">{t.owner.bomBoxInnerHint}</p>
+            ) : null}
+            {effectiveBomHint ? (
+              <p className="muted tiny">
+                {t.owner.bomEffective}: {effectiveBomHint}
+              </p>
+            ) : null}
+          </fieldset>
+
           <label className="full">
             {t.owner.fieldDescription}
             <input

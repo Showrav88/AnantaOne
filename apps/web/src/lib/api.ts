@@ -101,6 +101,14 @@ export type Product = {
   sku: string;
   category: string;
   packType?: string;
+  innerProductId?: string | null;
+  unitsPerPack?: number | null;
+  innerProduct?: {
+    id: string;
+    sku: string;
+    name: string;
+    nameBn: string | null;
+  } | null;
   imageUrl?: string | null;
   imagePublicId?: string | null;
   unit: string | null;
@@ -114,6 +122,38 @@ export type Product = {
   materialsNote?: string | null;
   isActive: boolean;
   createdAt?: string;
+};
+
+export type ProductBomLine = {
+  id: string;
+  materialId: string;
+  qty: number;
+  sortOrder: number;
+  source: "direct" | "inner";
+  material: {
+    id: string;
+    name: string;
+    nameBn: string | null;
+    code: string | null;
+    kind: { code: string; nameEn: string; nameBn: string };
+    unit: { code: string; nameEn: string; nameBn: string };
+  };
+};
+
+export type ProductBomPayload = {
+  directLines: ProductBomLine[];
+  innerLines: ProductBomLine[];
+  effectiveLines: Array<ProductBomLine & { sources: string[] }>;
+  innerProduct: {
+    id: string;
+    name: string;
+    nameBn: string | null;
+    sku: string;
+    packType: string;
+    size: number | null;
+    unit: { code: string; nameEn: string; nameBn: string } | null;
+  } | null;
+  unitsPerPack: number | null;
 };
 
 export type GeoPlace = {
@@ -1026,6 +1066,13 @@ export const api = {
         `/api/v1/owner/products/${id}`,
         1,
         { method: "PATCH", body: JSON.stringify(body) },
+        true,
+      ),
+    productBom: (id: string) =>
+      getJson<{ ok: boolean; bom: ProductBomPayload }>(
+        `/api/v1/owner/products/${id}/bom`,
+        1,
+        undefined,
         true,
       ),
     deactivateProduct: (id: string) =>

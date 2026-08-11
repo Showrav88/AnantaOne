@@ -11,6 +11,11 @@ import { branchFilter, resolveBranchScope } from "../lib/branchScope.js";
 import { buildAutoSku, categorySkuPrefix } from "../lib/shortCodes.js";
 import { reconcileAllProductStock } from "../lib/productStock.js";
 import { getProductProductionStats } from "../lib/productStats.js";
+import {
+  loadProductBom,
+  syncProductBomLines,
+  validatePackLink,
+} from "../lib/productBom.js";
 
 export const ownerRouter = Router();
 
@@ -337,7 +342,10 @@ ownerRouter.get("/products", async (req, res) => {
   await reconcileAllProductStock(tid);
   const products = await prisma.product.findMany({
     where: { tenantId: tid },
-    include: { unit: true },
+    include: {
+      unit: true,
+      innerProduct: { select: { id: true, sku: true, name: true, nameBn: true } },
+    },
     orderBy: [{ isActive: "desc" }, { name: "asc" }],
   });
   res.json({ ok: true, products: products.map(serializeProduct) });
@@ -360,6 +368,11 @@ const PRODUCT_CATEGORIES = [
 
 const PACK_TYPES = ["BOTTLE", "SACHET", "JAR", "BOX", "OTHER"] as const;
 
+const bomLineSchema = z.object({
+  materialId: z.string().cuid(),
+  qty: z.coerce.number().positive(),
+});
+
 const productCreateSchema = z.object({
   name: z.string().min(2).max(120),
   nameBn: z.string().max(120).nullable().optional(),
@@ -367,6 +380,8 @@ const productCreateSchema = z.object({
   sku: z.string().max(64).optional(),
   category: z.enum(PRODUCT_CATEGORIES).default("DRINKING"),
   packType: z.enum(PACK_TYPES).default("BOTTLE"),
+  innerProductId: z.string().cuid().nullable().optional(),
+  unitsPerPack: z.coerce.number().int().positive().nullable().optional(),
   unitCode: z.string().min(2).max(32).default("BOTTLE"),
   size: z.coerce.number().positive().max(99999).nullable().optional(),
   priceBdt: z.coerce.number().nonnegative(),
@@ -374,6 +389,7 @@ const productCreateSchema = z.object({
   minStock: z.coerce.number().nonnegative().default(0),
   description: z.string().max(1000).nullable().optional(),
   materialsNote: z.string().max(2000).nullable().optional(),
+  bomLines: z.array(bomLineSchema).max(64).optional(),
   imageUrl: z.string().url().nullable().optional(),
   imagePublicId: z.string().max(240).nullable().optional(),
   isActive: z.boolean().optional(),
@@ -410,6 +426,16 @@ ownerRouter.get("/products/next-sku", requireOwnerOrManager, async (req, res) =>
   }
 });
 
+ownerRouter.get("/products/:id/bom", async (req, res) => {
+  const id = String(req.params.id);
+  const bom = await loadProductBom(id, tenantId(req));
+  if (!bom) {
+    res.status(404).json({ ok: false, message: "Product not found" });
+    return;
+  }
+  res.json({ ok: true, bom });
+});
+
 ownerRouter.post("/products", requireOwnerOnly, async (req, res) => {
   const parsed = productCreateSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -427,33 +453,64 @@ ownerRouter.post("/products", requireOwnerOnly, async (req, res) => {
 
   try {
     const tid = tenantId(req);
+    await validatePackLink({
+      tenantId: tid,
+      packType: parsed.data.packType,
+      innerProductId: parsed.data.innerProductId ?? null,
+      unitsPerPack: parsed.data.unitsPerPack ?? null,
+    });
+
     const manual = parsed.data.sku?.trim();
     const sku =
       manual && manual.length >= 2
         ? manual.toUpperCase()
         : await nextAutoSku(tid, parsed.data.category);
 
-    const product = await prisma.product.create({
-      data: {
-        tenantId: tid,
-        name: parsed.data.name,
-        nameBn: parsed.data.nameBn ?? null,
-        sku,
-        category: parsed.data.category,
-        packType: parsed.data.packType,
-        unitId: unit.id,
-        size: parsed.data.size ?? null,
-        priceBdt: parsed.data.priceBdt,
-        stockQty: 0,
-        minStock: parsed.data.minStock,
-        description: parsed.data.description ?? null,
-        materialsNote: parsed.data.materialsNote ?? null,
-        imageUrl: parsed.data.imageUrl ?? null,
-        imagePublicId: parsed.data.imagePublicId ?? null,
-        isActive: parsed.data.isActive ?? true,
-        createdBy: req.auth!.id,
-      },
-      include: { unit: true },
+    const { bomLines, ...productData } = parsed.data;
+
+    const product = await prisma.$transaction(async (tx) => {
+      const created = await tx.product.create({
+        data: {
+          tenantId: tid,
+          name: productData.name,
+          nameBn: productData.nameBn ?? null,
+          sku,
+          category: productData.category,
+          packType: productData.packType,
+          innerProductId:
+            productData.packType === "BOX"
+              ? (productData.innerProductId ?? null)
+              : null,
+          unitsPerPack:
+            productData.packType === "BOX"
+              ? (productData.unitsPerPack ?? null)
+              : null,
+          unitId: unit.id,
+          size: productData.size ?? null,
+          priceBdt: productData.priceBdt,
+          stockQty: 0,
+          minStock: productData.minStock,
+          description: productData.description ?? null,
+          materialsNote: productData.materialsNote ?? null,
+          imageUrl: productData.imageUrl ?? null,
+          imagePublicId: productData.imagePublicId ?? null,
+          isActive: productData.isActive ?? true,
+          createdBy: req.auth!.id,
+        },
+        include: {
+          unit: true,
+          innerProduct: { select: { id: true, sku: true, name: true, nameBn: true } },
+        },
+      });
+      if (bomLines?.length) {
+        await syncProductBomLines({
+          tenantId: tid,
+          productId: created.id,
+          lines: bomLines,
+          tx,
+        });
+      }
+      return created;
     });
     res.status(201).json({ ok: true, product: serializeProduct(product) });
   } catch (error) {
@@ -492,24 +549,64 @@ ownerRouter.patch("/products/:id", requireOwnerOnly, async (req, res) => {
     unitId = unit.id;
   }
 
-  const { unitCode: _unitCode, sku: skuRaw, stockQty: _stockQty, ...rest } =
+  const { unitCode: _unitCode, sku: skuRaw, stockQty: _stockQty, bomLines, ...rest } =
     parsed.data;
-  const sku =
-    skuRaw != null && skuRaw.trim().length >= 2
-      ? skuRaw.trim().toUpperCase()
-      : undefined;
-  const product = await prisma.product.update({
-    where: { id: existing.id },
-    data: {
-      ...rest,
-      ...(sku ? { sku } : {}),
-      ...(unitId ? { unitId } : {}),
-      updatedBy: req.auth!.id,
-    },
-    include: { unit: true },
-  });
 
-  res.json({ ok: true, product: serializeProduct(product) });
+  try {
+    const tid = tenantId(req);
+    const packType = rest.packType ?? existing.packType;
+    await validatePackLink({
+      tenantId: tid,
+      productId: existing.id,
+      packType,
+      innerProductId:
+        rest.innerProductId !== undefined
+          ? rest.innerProductId
+          : existing.innerProductId,
+      unitsPerPack:
+        rest.unitsPerPack !== undefined
+          ? rest.unitsPerPack
+          : existing.unitsPerPack,
+    });
+
+    const sku =
+      skuRaw != null && skuRaw.trim().length >= 2
+        ? skuRaw.trim().toUpperCase()
+        : undefined;
+
+    const product = await prisma.$transaction(async (tx) => {
+      const updated = await tx.product.update({
+        where: { id: existing.id },
+        data: {
+          ...rest,
+          ...(sku ? { sku } : {}),
+          ...(unitId ? { unitId } : {}),
+          ...(rest.packType && rest.packType !== "BOX"
+            ? { innerProductId: null, unitsPerPack: null }
+            : {}),
+          updatedBy: req.auth!.id,
+        },
+        include: {
+          unit: true,
+          innerProduct: { select: { id: true, sku: true, name: true, nameBn: true } },
+        },
+      });
+      if (bomLines !== undefined) {
+        await syncProductBomLines({
+          tenantId: tid,
+          productId: updated.id,
+          lines: bomLines,
+          tx,
+        });
+      }
+      return updated;
+    });
+
+    res.json({ ok: true, product: serializeProduct(product) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "update failed";
+    res.status(400).json({ ok: false, message });
+  }
 });
 
 ownerRouter.delete("/products/:id", requireOwnerOnly, async (req, res) => {
@@ -583,6 +680,14 @@ function serializeProduct(product: {
   sku: string;
   category: string;
   packType: string;
+  innerProductId?: string | null;
+  unitsPerPack?: number | null;
+  innerProduct?: {
+    id: string;
+    sku: string;
+    name: string;
+    nameBn: string | null;
+  } | null;
   unitId: string;
   size?: { toString(): string } | number | string | null;
   unit?: { code: string; nameEn: string; nameBn: string };
@@ -605,6 +710,16 @@ function serializeProduct(product: {
     sku: product.sku,
     category: product.category,
     packType: product.packType ?? "BOTTLE",
+    innerProductId: product.innerProductId ?? null,
+    unitsPerPack: product.unitsPerPack ?? null,
+    innerProduct: product.innerProduct
+      ? {
+          id: product.innerProduct.id,
+          sku: product.innerProduct.sku,
+          name: product.innerProduct.name,
+          nameBn: product.innerProduct.nameBn,
+        }
+      : null,
     unitId: product.unitId,
     size: product.size == null ? null : Number(product.size),
     unit: product.unit?.code ?? null,
