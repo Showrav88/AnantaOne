@@ -4035,6 +4035,34 @@ html[data-theme="night"] .owner-dialog-backdrop {
   background: rgba(0, 0, 0, 0.62);
 }
 
+.produce-batch-cell {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 9rem;
+}
+
+.produce-batch-cell .batch-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.produce-batch-fields {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.produce-batch-fields input {
+  width: 100%;
+  font: inherit;
+  padding: 0.25rem 0.4rem;
+}
+
+.shop-stock-chip.mto {
+  background: color-mix(in srgb, var(--accent, #e8b84a) 35%, transparent);
+  color: inherit;
+}
+
 .owner-dialog.catalog-modal {
   width: min(42rem, 96vw);
   max-height: 92vh;

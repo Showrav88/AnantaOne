@@ -65,10 +65,10 @@ export function PublicProductPage({ locale, onLocale }: Props) {
     } as CSSProperties;
   }, [shop]);
 
-  const available = (product?.stockQty ?? 0) >= 1;
+  const inStockNow = (product?.stockQty ?? 0) >= 1;
 
   function addToCart() {
-    if (!product || !available) return;
+    if (!product) return;
     const next = upsertCartLine(
       loadCart(companySlug),
       {
@@ -140,8 +140,8 @@ export function PublicProductPage({ locale, onLocale }: Props) {
         <div className="shop-product-detail-body">
           <div className="shop-detail-meta">
             <p className="shop-sku">{product.category}</p>
-            <span className={`shop-stock-chip ${available ? "ok" : "oos"}`}>
-              {available ? t.shop.available : t.shop.outOfStock}
+            <span className={`shop-stock-chip ${inStockNow ? "ok" : "mto"}`}>
+              {inStockNow ? t.shop.available : t.shop.shopMadeToOrder}
             </span>
           </div>
           <h1>{title}</h1>
@@ -151,49 +151,42 @@ export function PublicProductPage({ locale, onLocale }: Props) {
             <p className="shop-detail-desc">{product.description}</p>
           ) : null}
 
-          {available ? (
-            <label className="shop-qty">
-              {t.shop.qty}
-              <div className="shop-qty-stepper">
-                <button
-                  type="button"
-                  aria-label={t.shop.decreaseQty}
-                  onClick={() => setQty((q) => Math.max(1, q - 1))}
-                >
-                  −
-                </button>
-                <input
-                  type="number"
-                  min={1}
-                  max={product.stockQty ?? 999}
-                  value={qty}
-                  onChange={(e) =>
-                    setQty(Math.max(1, Number(e.target.value) || 1))
-                  }
-                />
-                <button
-                  type="button"
-                  aria-label={t.shop.increaseQty}
-                  onClick={() =>
-                    setQty((q) =>
-                      Math.min(product.stockQty ?? 999, q + 1),
-                    )
-                  }
-                >
-                  +
-                </button>
-              </div>
-            </label>
-          ) : null}
+          <label className="shop-qty">
+            {t.shop.qty}
+            <div className="shop-qty-stepper">
+              <button
+                type="button"
+                aria-label={t.shop.decreaseQty}
+                onClick={() => setQty((q) => Math.max(1, q - 1))}
+              >
+                −
+              </button>
+              <input
+                type="number"
+                min={1}
+                max={9999}
+                value={qty}
+                onChange={(e) =>
+                  setQty(Math.max(1, Number(e.target.value) || 1))
+                }
+              />
+              <button
+                type="button"
+                aria-label={t.shop.increaseQty}
+                onClick={() => setQty((q) => q + 1)}
+              >
+                +
+              </button>
+            </div>
+          </label>
 
           <div className="shop-cta-row">
             <button
               type="button"
               className="btn primary shop-cta"
-              disabled={!available}
               onClick={addToCart}
             >
-              {available ? t.shop.addToCart : t.shop.outOfStock}
+              {inStockNow ? t.shop.addToCart : t.shop.shopOrderAnyway}
             </button>
             {available ? (
               <button

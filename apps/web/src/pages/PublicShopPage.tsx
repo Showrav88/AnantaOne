@@ -79,7 +79,6 @@ export function PublicShopPage({ locale, onLocale }: Props) {
   function add(e: MouseEvent, p: PublicShop["products"][number]) {
     e.preventDefault();
     e.stopPropagation();
-    if (!inStock(p.stockQty)) return;
     const next = upsertCartLine(loadCart(companySlug), {
       productId: p.id,
       name: p.name,
@@ -194,13 +193,16 @@ export function PublicShopPage({ locale, onLocale }: Props) {
           <ul className="shop-product-grid">
             {shop.products.map((p) => {
               const available = inStock(p.stockQty);
+              const stockLabel = available
+                ? t.shop.available
+                : t.shop.shopMadeToOrder;
               const title =
                 locale === "bn" && p.nameBn ? p.nameBn : p.name;
               const detailPath = `/shop/${companySlug}/product/${p.id}`;
               return (
                 <li key={p.id}>
                   <article
-                    className={`shop-product-card ${available ? "" : "is-oos"}`}
+                    className={`shop-product-card ${available ? "" : "is-mto"}`}
                     role="link"
                     tabIndex={0}
                     onClick={() => void navigate(detailPath)}
@@ -221,9 +223,9 @@ export function PublicShopPage({ locale, onLocale }: Props) {
                         />
                       )}
                       <span
-                        className={`shop-stock-chip ${available ? "ok" : "oos"}`}
+                        className={`shop-stock-chip ${available ? "ok" : "mto"}`}
                       >
-                        {available ? t.shop.available : t.shop.outOfStock}
+                        {stockLabel}
                       </span>
                     </div>
                     <div className="shop-product-body">
@@ -239,10 +241,9 @@ export function PublicShopPage({ locale, onLocale }: Props) {
                         <button
                           type="button"
                           className="btn primary compact"
-                          disabled={!available}
                           onClick={(e) => add(e, p)}
                         >
-                          {available ? t.shop.addToCart : t.shop.outOfStock}
+                          {available ? t.shop.addToCart : t.shop.shopOrderAnyway}
                         </button>
                       </div>
                     </div>
