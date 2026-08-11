@@ -63,6 +63,15 @@ export const PRODUCT_PRESETS: ProductPreset[] = [
     unitCode: "MILLILITER",
   },
   {
+    id: "hw-sachet-250",
+    name: "250ml Hand Wash Sachet",
+    nameBn: "হ্যান্ড ওয়াশ ২৫০ মি.লি. স্যাচেট",
+    category: "HANDWASH",
+    packType: "SACHET",
+    size: 250,
+    unitCode: "MILLILITER",
+  },
+  {
     id: "ds-1l",
     name: "1L Dish Wash",
     nameBn: "ডিশ ওয়াশ ১ লিটার",

@@ -9,6 +9,7 @@ import { OwnerLayout } from "./pages/owner/OwnerLayout";
 import { OwnerDashboardPage } from "./pages/owner/OwnerDashboardPage";
 import { OwnerCompanyPage } from "./pages/owner/OwnerCompanyPage";
 import { OwnerProductsPage } from "./pages/owner/OwnerProductsPage";
+import { OwnerMaterialsPage } from "./pages/owner/OwnerMaterialsPage";
 import { OwnerBuyersPage } from "./pages/owner/OwnerBuyersPage";
 import { OwnerBranchesPage } from "./pages/owner/OwnerBranchesPage";
 import { OwnerStaffPage } from "./pages/owner/OwnerStaffPage";
@@ -106,6 +107,7 @@ export function App() {
           <Route path="wallet" element={<OwnerWalletPage locale={locale} />} />
           <Route path="payments" element={<OwnerPaymentsPage locale={locale} />} />
           <Route path="products" element={<OwnerProductsPage locale={locale} />} />
+          <Route path="materials" element={<OwnerMaterialsPage locale={locale} />} />
           <Route path="buyers" element={<OwnerBuyersPage locale={locale} />} />
           <Route
             path="online-orders"

@@ -526,37 +526,87 @@ ownerFinanceRouter.post(
   },
 );
 
-const materialSchema = z.object({
-  materialName: z.string().min(2).max(160),
-  kindCode: z
-    .enum([
-      "RAW_MATERIAL",
-      "BOTTLE",
-      "ACID",
-      "CAP",
-      "LABEL",
-      "OTHER",
-    ])
-    .default("OTHER"),
-  unitCode: z
-    .enum(["LITER", "BOTTLE", "DRUM", "PIECE", "KG", "PACK", "CAN"])
-    .default("PIECE"),
-  qty: z.coerce.number().positive(),
-  goodsAmountBdt: z.coerce.number().nonnegative(),
-  transportBdt: z.coerce.number().nonnegative().optional(),
-  driverBdt: z.coerce.number().nonnegative().optional(),
-  travelBdt: z.coerce.number().nonnegative().optional(),
-  /** @deprecated prefer goodsAmountBdt + extras; kept for older clients */
-  amountBdt: z.coerce.number().positive().optional(),
-  supplierName: z.string().max(160).nullable().optional(),
-  supplierPhone: z.string().max(40).nullable().optional(),
-  note: z.string().max(500).nullable().optional(),
-  purchasedAt: z.string().datetime().optional(),
-});
+const materialSchema = z
+  .object({
+    materialId: z.string().cuid().optional(),
+    materialName: z.string().min(2).max(160).optional(),
+    kindCode: z
+      .enum([
+        "RAW_MATERIAL",
+        "BOTTLE",
+        "ACID",
+        "CAP",
+        "LABEL",
+        "OTHER",
+      ])
+      .default("OTHER"),
+    unitCode: z
+      .enum(["LITER", "BOTTLE", "DRUM", "PIECE", "KG", "PACK", "CAN"])
+      .default("PIECE"),
+    qty: z.coerce.number().positive(),
+    goodsAmountBdt: z.coerce.number().nonnegative(),
+    transportBdt: z.coerce.number().nonnegative().optional(),
+    driverBdt: z.coerce.number().nonnegative().optional(),
+    travelBdt: z.coerce.number().nonnegative().optional(),
+    /** @deprecated prefer goodsAmountBdt + extras; kept for older clients */
+    amountBdt: z.coerce.number().positive().optional(),
+    supplierName: z.string().max(160).nullable().optional(),
+    supplierPhone: z.string().max(40).nullable().optional(),
+    note: z.string().max(500).nullable().optional(),
+    purchasedAt: z.string().datetime().optional(),
+  })
+  .refine(
+    (d) => d.materialId || (d.materialName && d.materialName.trim().length >= 2),
+    { message: "Material name or catalog item required" },
+  );
+
+async function resolvePurchaseMaterial(opts: {
+  tenantId: string;
+  materialId?: string;
+  materialName?: string;
+  kindCode: string;
+  unitCode: string;
+}) {
+  if (opts.materialId) {
+    const catalog = await prisma.material.findFirst({
+      where: {
+        id: opts.materialId,
+        tenantId: opts.tenantId,
+        isActive: true,
+      },
+      include: { kind: true, unit: true },
+    });
+    if (!catalog) {
+      throw new Error("Material not found in catalog");
+    }
+    return {
+      materialId: catalog.id,
+      materialName: opts.materialName?.trim() || catalog.name,
+      kind: catalog.kind,
+      unit: catalog.unit,
+    };
+  }
+  const kind = await prisma.supplyKindLookup.findUnique({
+    where: { code: opts.kindCode },
+  });
+  const unit = await prisma.unitLookup.findUnique({
+    where: { code: opts.unitCode },
+  });
+  if (!kind?.isActive || !unit?.isActive) {
+    throw new Error("Unknown supply kind or unit");
+  }
+  return {
+    materialId: null as string | null,
+    materialName: opts.materialName!.trim(),
+    kind,
+    unit,
+  };
+}
 
 function serializePurchase(p: {
   id: string;
   materialName: string;
+  materialId?: string | null;
   supplierName: string | null;
   supplierPhone: string | null;
   qty: { toString(): string } | number;
@@ -571,6 +621,11 @@ function serializePurchase(p: {
   reverseReason?: string | null;
   kind?: { code: string; nameEn: string; nameBn: string };
   unit?: { code: string; nameEn: string; nameBn: string };
+  catalogMaterial?: {
+    id: string;
+    name: string;
+    code: string | null;
+  } | null;
 }) {
   const qty = Number(p.qty);
   const goods = Number(p.goodsAmountBdt);
@@ -580,7 +635,15 @@ function serializePurchase(p: {
   const total = Number(p.amountBdt);
   return {
     id: p.id,
+    materialId: p.materialId ?? p.catalogMaterial?.id ?? null,
     materialName: p.materialName,
+    catalogMaterial: p.catalogMaterial
+      ? {
+          id: p.catalogMaterial.id,
+          name: p.catalogMaterial.name,
+          code: p.catalogMaterial.code,
+        }
+      : null,
     supplierName: p.supplierName,
     supplierPhone: p.supplierPhone,
     qty,
@@ -658,7 +721,7 @@ ownerFinanceRouter.get("/wallet/purchases", async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 50, 200);
   const purchases = await prisma.materialPurchase.findMany({
     where: { tenantId: tid(req) },
-    include: { kind: true, unit: true },
+    include: { kind: true, unit: true, catalogMaterial: true },
     orderBy: { purchasedAt: "desc" },
     take: limit,
   });
@@ -678,19 +741,14 @@ ownerFinanceRouter.post(
       return;
     }
     try {
-      const kind = await prisma.supplyKindLookup.findUnique({
-        where: { code: parsed.data.kindCode },
+      const resolved = await resolvePurchaseMaterial({
+        tenantId: tid(req),
+        materialId: parsed.data.materialId,
+        materialName: parsed.data.materialName,
+        kindCode: parsed.data.kindCode,
+        unitCode: parsed.data.unitCode,
       });
-      const unit = await prisma.unitLookup.findUnique({
-        where: { code: parsed.data.unitCode },
-      });
-      if (!kind?.isActive || !unit?.isActive) {
-        res.status(400).json({
-          ok: false,
-          message: "Unknown supply kind or unit",
-        });
-        return;
-      }
+      const { kind, unit } = resolved;
 
       const {
         goodsAmountBdt,
@@ -719,7 +777,7 @@ ownerFinanceRouter.post(
       const qtyLabel = `${parsed.data.qty} ${unit.code}`;
       const note =
         parsed.data.note ??
-        `${parsed.data.materialName} (${kind.code} · ${qtyLabel})${supplierBits ? ` — ${supplierBits}` : ""} · goods ৳${goodsAmountBdt}` +
+        `${resolved.materialName} (${kind.code} · ${qtyLabel})${supplierBits ? ` — ${supplierBits}` : ""} · goods ৳${goodsAmountBdt}` +
           (transportBdt || driverBdt || travelBdt
             ? ` + trip ৳${transportBdt + driverBdt + travelBdt}`
             : "");
@@ -735,7 +793,8 @@ ownerFinanceRouter.post(
       const purchase = await prisma.materialPurchase.create({
         data: {
           tenantId: tid(req),
-          materialName: parsed.data.materialName,
+          materialId: resolved.materialId,
+          materialName: resolved.materialName,
           kindId: kind.id,
           unitId: unit.id,
           qty: parsed.data.qty,
@@ -751,7 +810,7 @@ ownerFinanceRouter.post(
           cashTransactionId: result.transaction.id,
           createdBy: req.auth!.id,
         },
-        include: { kind: true, unit: true },
+        include: { kind: true, unit: true, catalogMaterial: true },
       });
       res.status(201).json({
         ok: true,
@@ -796,19 +855,14 @@ ownerFinanceRouter.patch(
     }
 
     try {
-      const kind = await prisma.supplyKindLookup.findUnique({
-        where: { code: parsed.data.kindCode },
+      const resolved = await resolvePurchaseMaterial({
+        tenantId: tid(req),
+        materialId: parsed.data.materialId,
+        materialName: parsed.data.materialName,
+        kindCode: parsed.data.kindCode,
+        unitCode: parsed.data.unitCode,
       });
-      const unit = await prisma.unitLookup.findUnique({
-        where: { code: parsed.data.unitCode },
-      });
-      if (!kind?.isActive || !unit?.isActive) {
-        res.status(400).json({
-          ok: false,
-          message: "Unknown supply kind or unit",
-        });
-        return;
-      }
+      const { kind, unit } = resolved;
 
       const {
         goodsAmountBdt,
@@ -838,7 +892,7 @@ ownerFinanceRouter.patch(
       const qtyLabel = `${parsed.data.qty} ${unit.code}`;
       const ledgerNote =
         parsed.data.note ??
-        `${parsed.data.materialName} (${kind.code} · ${qtyLabel})${supplierBits ? ` — ${supplierBits}` : ""} · goods ৳${goodsAmountBdt}` +
+        `${resolved.materialName} (${kind.code} · ${qtyLabel})${supplierBits ? ` — ${supplierBits}` : ""} · goods ৳${goodsAmountBdt}` +
           (transportBdt || driverBdt || travelBdt
             ? ` + trip ৳${transportBdt + driverBdt + travelBdt}`
             : "");
@@ -858,7 +912,8 @@ ownerFinanceRouter.patch(
         const purchase = await tx.materialPurchase.update({
           where: { id: existing.id },
           data: {
-            materialName: parsed.data.materialName,
+            materialId: resolved.materialId,
+            materialName: resolved.materialName,
             kindId: kind.id,
             unitId: unit.id,
             qty: parsed.data.qty,
@@ -873,7 +928,7 @@ ownerFinanceRouter.patch(
             purchasedAt,
             updatedBy: req.auth!.id,
           },
-          include: { kind: true, unit: true },
+          include: { kind: true, unit: true, catalogMaterial: true },
         });
 
         return {

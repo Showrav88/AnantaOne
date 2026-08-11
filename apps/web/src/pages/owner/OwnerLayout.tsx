@@ -318,6 +318,9 @@ export function OwnerLayout({ locale, onLocale }: Props) {
             <NavLink to="/owner/tags">{t.owner.navTags}</NavLink>
           ) : null}
           <NavLink to="/owner/products">{t.owner.navProducts}</NavLink>
+          {isOwner || isManager ? (
+            <NavLink to="/owner/materials">{t.owner.navMaterials}</NavLink>
+          ) : null}
           {isOwner ? (
             <NavLink to="/owner/buyers">{t.owner.navBuyers}</NavLink>
           ) : null}

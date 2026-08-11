@@ -436,6 +436,17 @@ export function OwnerProductsPage({ locale }: Props) {
                   </td>
                   <td data-label={t.owner.fieldPackType}>
                     {packTypeLabel(p.packType ?? "BOTTLE", packLabels)}
+                    {p.packType === "BOX" && p.unitsPerPack ? (
+                      <div className="muted tiny">
+                        {t.owner.packBoxLabel.replace(
+                          "{count}",
+                          String(p.unitsPerPack),
+                        )}
+                        {p.innerProduct
+                          ? ` · ${p.innerProduct.sku}`
+                          : null}
+                      </div>
+                    ) : null}
                   </td>
                   <td data-label={t.owner.fieldSize}>{formatSizeUnit(p)}</td>
                   <td data-label={t.owner.fieldPrice}>৳{p.priceBdt}</td>
@@ -486,6 +497,7 @@ export function OwnerProductsPage({ locale }: Props) {
         open={modalOpen}
         locale={locale}
         product={modalProduct ?? null}
+        products={products}
         units={units}
         onClose={closeModal}
         onSaved={onSaved}
