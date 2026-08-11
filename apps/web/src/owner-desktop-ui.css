@@ -3,13 +3,15 @@
 :root {
   --owner-content-max: 96rem;
   --owner-sidebar-w: 17rem;
-  --owner-label-size: 1rem;
+  --owner-label-size: 1.05rem;
   --owner-body-size: 1.05rem;
-  --owner-table-size: 1.02rem;
+  --owner-table-size: 1.05rem;
+  --owner-id-size: 1.12rem;
+  --owner-var-name-size: 1.12rem;
   --owner-stat-label: 1rem;
   --owner-stat-value: 2.15rem;
-  --owner-action-min-h: 2.5rem;
-  --owner-action-gap: 0.55rem;
+  --owner-action-min-h: 2.65rem;
+  --owner-action-gap: 0.65rem;
 }
 
 .owner-shell {
@@ -179,47 +181,120 @@
   }
 }
 
+/* ── Identifiers: SKU, codes, serials ── */
+.owner-page .cell-id,
+.owner-main .cell-id,
+.owner-dialog .cell-id {
+  font-size: var(--owner-id-size);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.owner-form input.sku-field,
+.owner-dialog input.sku-field {
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  min-height: 2.85rem;
+}
+
+/* Tag template field names (variable labels) */
+.owner-page .tag-field-row span,
+.owner-main .tag-field-row span,
+.owner-dialog .tag-field-row span {
+  font-size: var(--owner-var-name-size);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.owner-page .tag-field-list-title,
+.owner-main .tag-field-list-title,
+.owner-dialog .tag-field-list-title {
+  font-size: 1.05rem;
+}
+
+.owner-page .tag-field-row,
+.owner-main .tag-field-row,
+.owner-dialog .tag-field-row {
+  padding: 0.62rem 0.2rem;
+  column-gap: 0.85rem;
+}
+
+.owner-page .tag-field-row input[type="checkbox"],
+.owner-main .tag-field-row input[type="checkbox"],
+.owner-dialog .tag-field-row input[type="checkbox"] {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+/* BOM material lines */
+.owner-page .bom-line-row select,
+.owner-page .bom-line-row input,
+.owner-dialog .bom-line-row select,
+.owner-dialog .bom-line-row input {
+  font-size: 1.02rem;
+  min-height: 2.55rem;
+}
+
 /* ── Action buttons: separated, easier to tap ── */
 .owner-page .cell-actions,
-.owner-main .cell-actions {
+.owner-main .cell-actions,
+.owner-dialog .cell-actions,
+.owner-page .sell-col-action,
+.owner-main .sell-col-action {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--owner-action-gap);
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .owner-page button.linkish,
 .owner-main button.linkish,
+.owner-dialog button.linkish,
 .owner-page .cell-actions .linkish,
-.owner-main .cell-actions .linkish {
+.owner-main .cell-actions .linkish,
+.owner-dialog .cell-actions .linkish,
+.owner-page .sell-col-action .linkish,
+.owner-main .sell-col-action .linkish {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: var(--owner-action-min-h);
-  padding: 0.45rem 0.95rem;
+  min-width: 4.5rem;
+  padding: 0.5rem 1rem;
   margin: 0;
   border: 1px solid color-mix(in srgb, var(--tide) 35%, var(--line));
-  border-radius: 0.4rem;
+  border-radius: 0.45rem;
   background: var(--input-bg);
   color: var(--tide);
-  font-size: 0.98rem;
+  font-size: 1rem;
   font-weight: 700;
   text-decoration: none;
   line-height: 1.2;
-  transition: background 140ms ease, border-color 140ms ease;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--line) 80%, transparent);
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .owner-page button.linkish:hover,
-.owner-main button.linkish:hover {
+.owner-main button.linkish:hover,
+.owner-dialog button.linkish:hover {
   background: var(--ok-bg);
   border-color: var(--tide);
+  box-shadow: none;
 }
 
 .owner-page button.linkish.dangerish,
-.owner-main button.linkish.dangerish {
+.owner-main button.linkish.dangerish,
+.owner-dialog button.linkish.dangerish {
   color: var(--bd-red-deep);
   border-color: color-mix(in srgb, var(--bd-red) 40%, var(--line));
+  background: color-mix(in srgb, var(--bd-red) 6%, var(--input-bg));
 }
 
 .owner-page .form-actions,
