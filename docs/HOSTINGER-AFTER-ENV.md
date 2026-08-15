@@ -73,16 +73,16 @@ curl http://127.0.0.1:5000/health
 curl http://127.0.0.1:5000/health/db
 ```
 
-Default service uses `User=root` and `node --env-file=/var/www/anantaone/.env` (more reliable than systemd `EnvironmentFile`).
+Default service uses **tsx** (same as Render) — `node dist/index.js` crashes because workspace packages are TypeScript.
 
 If API won't start:
 
 ```bash
 sudo systemctl status anantaone-api
 sudo journalctl -u anantaone-api -n 40 --no-pager
-# Manual test:
 cd /var/www/anantaone
-node --env-file=.env apps/api/dist/index.js
+set -a && source .env && set +a
+./node_modules/.bin/tsx apps/api/src/index.ts
 ```
 
 Ctrl+C after you see "API listening".
