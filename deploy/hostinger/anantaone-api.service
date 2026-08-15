@@ -7,8 +7,10 @@ Type=simple
 User=root
 Group=root
 WorkingDirectory=/var/www/anantaone
-# Node 26 reads .env directly (systemd EnvironmentFile breaks on some values)
-ExecStart=/usr/bin/node --env-file=/var/www/anantaone/.env apps/api/dist/index.js
+# tsx (same as Render) — node dist/index.js fails on @anantaone/shared .ts imports
+ExecStart=/var/www/anantaone/node_modules/.bin/tsx apps/api/src/index.ts
+Environment=NODE_ENV=production
+EnvironmentFile=-/var/www/anantaone/.env
 Restart=always
 RestartSec=5
 StandardOutput=journal
