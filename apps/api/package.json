@@ -9,11 +9,11 @@
     "start": "node dist/index.js",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:migrate:deploy": "prisma migrate deploy",
-    "db:seed": "prisma db seed",
-    "db:studio": "prisma studio"
+    "db:generate": "node --env-file=../../.env --env-file=.env ./node_modules/.bin/prisma generate",
+    "db:migrate": "node --env-file=../../.env --env-file=.env ./node_modules/.bin/prisma migrate dev",
+    "db:migrate:deploy": "node --env-file=../../.env --env-file=.env ./node_modules/.bin/prisma migrate deploy",
+    "db:seed": "node --env-file=../../.env --env-file=.env ./node_modules/.bin/prisma db seed",
+    "db:studio": "node --env-file=../../.env --env-file=.env ./node_modules/.bin/prisma studio"
   },
   "dependencies": {
     "@anantaone/shared": "*",
