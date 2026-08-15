@@ -1,0 +1,17 @@
+[Unit]
+Description=AnantaOne API (Node.js)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/anantaone
+EnvironmentFile=/var/www/anantaone/.env
+ExecStart=/usr/bin/node apps/api/dist/index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

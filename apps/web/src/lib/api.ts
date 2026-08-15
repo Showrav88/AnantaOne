@@ -28,6 +28,10 @@ function resolveApiUrl(): string {
     if (host === "anantaone.onrender.com" || host.endsWith(".onrender.com")) {
       return "https://anantaoneapi.onrender.com";
     }
+    // VPS / nginx: API proxied on same host (see deploy/hostinger/nginx-anantaone.conf)
+    if (!fromEnv?.trim()) {
+      return window.location.origin;
+    }
   }
 
   return "http://localhost:5000";

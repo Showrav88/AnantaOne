@@ -188,6 +188,12 @@ Install Docker Desktop
 
 ---
 
+## Windows PC — what to skip
+
+See **`docs/HOSTINGER-VPS.md`** for full Hostinger KVM VPS deploy (nginx, systemd, local Postgres 18).
+
+---
+
 ## Render Postgres — daily backup on Windows (local PC)
 
 Scripts in `scripts/` back up your **Render external** database to your PC. Credentials stay in a **local-only** file (gitignored).
