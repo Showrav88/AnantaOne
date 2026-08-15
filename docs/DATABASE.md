@@ -185,3 +185,52 @@ Install Docker Desktop
   → npm run db:migrate:deploy
   → continue same project locally
 ```
+
+---
+
+## Render Postgres — daily backup on Windows (local PC)
+
+Scripts in `scripts/` back up your **Render external** database to your PC. Credentials stay in a **local-only** file (gitignored).
+
+### 1. Install PostgreSQL client tools
+
+Install [PostgreSQL for Windows](https://www.postgresql.org/download/windows/) (client tools only is enough). Ensure `pg_dump` is on PATH, e.g.:
+
+```
+C:\Program Files\PostgreSQL\18\bin
+```
+
+### 2. Create local env file (never commit)
+
+In PowerShell or Command Prompt, from the repo root:
+
+```bat
+copy scripts\backup-render-db.env.example scripts\backup-render-db.env
+notepad scripts\backup-render-db.env
+```
+
+Set `DATABASE_URL` to your Render **external** connection string. Append `?sslmode=require` if it is not already in the URL.
+
+### 3. Test backup manually
+
+```bat
+scripts\backup-render-db.bat
+```
+
+Backups are written to `%USERPROFILE%\AnantaOne\backups\postgres\` (override with `BACKUP_DIR` in the env file). Logs: `backups\logs\`. Old files older than 30 days are deleted automatically.
+
+### 4. Register Windows daily task
+
+```bat
+scripts\register-backup-daily-task.bat
+```
+
+Default run time: **03:00** daily. Task name: `AnantaOne Render DB Backup`.
+
+To remove the task:
+
+```bat
+schtasks /Delete /F /TN "AnantaOne Render DB Backup"
+```
+
+**Security:** Do not commit `scripts/backup-render-db.env`. If the database password was shared in chat or email, rotate it in the Render dashboard after setup.
