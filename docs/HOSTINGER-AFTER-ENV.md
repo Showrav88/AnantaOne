@@ -67,13 +67,25 @@ Skip `db:seed` on later deploys.
 
 ```bash
 sudo cp deploy/hostinger/anantaone-api.service /etc/systemd/system/
-# Edit User= if not www-data — match your SSH user
-sudo nano /etc/systemd/system/anantaone-api.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now anantaone-api
 curl http://127.0.0.1:5000/health
 curl http://127.0.0.1:5000/health/db
 ```
+
+Default service uses `User=root` and `node --env-file=/var/www/anantaone/.env` (more reliable than systemd `EnvironmentFile`).
+
+If API won't start:
+
+```bash
+sudo systemctl status anantaone-api
+sudo journalctl -u anantaone-api -n 40 --no-pager
+# Manual test:
+cd /var/www/anantaone
+node --env-file=.env apps/api/dist/index.js
+```
+
+Ctrl+C after you see "API listening".
 
 ### 4. nginx
 
