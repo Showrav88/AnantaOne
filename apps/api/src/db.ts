@@ -1,4 +1,5 @@
-import "dotenv/config";
+import { loadApiEnv } from "./loadEnv.js";
+loadApiEnv();
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "./generated/prisma/client";
 

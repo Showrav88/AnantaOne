@@ -34,6 +34,14 @@ source .env
 psql "$DATABASE_URL" -c "SELECT 1;"
 ```
 
+Link `.env` for Prisma (required before migrate):
+
+```bash
+ln -sf /var/www/anantaone/.env /var/www/anantaone/apps/api/.env
+```
+
+Or export vars for npm: `set -a && source .env && set +a`
+
 ### 2. Build + migrate + seed (first time only)
 
 ```bash

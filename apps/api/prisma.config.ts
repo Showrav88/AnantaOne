@@ -1,4 +1,5 @@
-import "dotenv/config";
+import { loadApiEnv } from "./src/loadEnv.js";
+loadApiEnv();
 import { defineConfig } from "prisma/config";
 
 const isGenerateOnly = process.argv.includes("generate");
