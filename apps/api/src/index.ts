@@ -1,4 +1,5 @@
-import "dotenv/config";
+import { loadApiEnv } from "./loadEnv.js";
+loadApiEnv();
 import cors from "cors";
 import express from "express";
 import { APP_NAME } from "@anantaone/shared";

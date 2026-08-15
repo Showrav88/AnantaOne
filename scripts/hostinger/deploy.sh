@@ -14,6 +14,9 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+# Prisma/npm workspaces run from apps/api — link root env
+ln -sf "$ROOT/.env" "$ROOT/apps/api/.env"
+
 # shellcheck disable=SC1091
 set -a
 source .env
