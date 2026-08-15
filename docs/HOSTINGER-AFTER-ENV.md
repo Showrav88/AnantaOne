@@ -40,7 +40,14 @@ Link `.env` for Prisma (required before migrate):
 ln -sf /var/www/anantaone/.env /var/www/anantaone/apps/api/.env
 ```
 
-Or export vars for npm: `set -a && source .env && set +a`
+If migrate still says DATABASE_URL missing, export then run:
+
+```bash
+set -a && source /var/www/anantaone/.env && set +a
+npm run db:migrate:deploy -w @anantaone/api
+```
+
+Or after `git pull`, npm scripts use `node --env-file=../../.env` automatically.
 
 ### 2. Build + migrate + seed (first time only)
 
