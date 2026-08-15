@@ -1,17 +1,18 @@
 [Unit]
 Description=AnantaOne API (Node.js)
-After=network.target postgresql.service
-Wants=postgresql.service
+After=network.target
 
 [Service]
 Type=simple
-User=www-data
-Group=www-data
+User=root
+Group=root
 WorkingDirectory=/var/www/anantaone
-EnvironmentFile=/var/www/anantaone/.env
-ExecStart=/usr/bin/node apps/api/dist/index.js
-Restart=on-failure
+# Node 26 reads .env directly (systemd EnvironmentFile breaks on some values)
+ExecStart=/usr/bin/node --env-file=/var/www/anantaone/.env apps/api/dist/index.js
+Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
