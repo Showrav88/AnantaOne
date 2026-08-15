@@ -61,6 +61,33 @@ When you add a domain later: use `nginx-anantaone.conf`, run `certbot`, set `APP
 
 ---
 
+## Reuse Render env on Hostinger (same database)
+
+You can keep **Render Postgres** and copy most env vars from the Render **Web Service** dashboard.  
+**Do not** copy `APP_URL` from Render — change it to your VPS address.
+
+| Render env | On Hostinger VPS |
+|---|---|
+| `DATABASE_URL` | ✅ Same (External URL + `?sslmode=require`, **no quotes**) |
+| `DIRECT_DATABASE_URL` | ✅ Same |
+| `JWT_SECRET` | ✅ Same |
+| `JWT_REFRESH_SECRET` | ✅ Same (from Render if set) |
+| `CLOUDINARY_URL` | ✅ Same |
+| `SUPER_ADMIN_*` | ✅ Same |
+| `APP_URL` | ❌ Change to `http://31.97.50.25` |
+| `VITE_API_URL` | ❌ Leave **empty** (nginx same-origin) |
+| `NODE_VERSION` | ❌ Not needed in `.env` on VPS |
+
+Template: `deploy/hostinger/env.production.render-db.example`
+
+**Skip** `scripts/hostinger/setup-postgres.sh` — no local Postgres needed.
+
+**Render services:** Can stay running. Same DB = same shops/products. For production, pick **one** public URL (VPS IP or Render) so users are not split across two sites.
+
+**Security:** Never commit `.env`. Rotate DB/Cloudinary passwords if they were shared in chat.
+
+---
+
 ## 1) VPS prerequisites
 
 SSH into the VPS as root or sudo user.
@@ -251,7 +278,8 @@ Local `.env` with `ananta:ananta123@localhost` only works with Docker Postgres �
 | Path | Purpose |
 |---|---|
 | `deploy/hostinger/nginx-anantaone-ip.conf` | nginx — **IP only** (no domain) |
-| `deploy/hostinger/env.production.ip.example` | env template for IP deploy |
+| `deploy/hostinger/env.production.ip.example` | env — local Postgres on VPS |
+| `deploy/hostinger/env.production.render-db.example` | env — **Render Postgres** (reuse Render secrets) |
 | `deploy/hostinger/nginx-anantaone.conf` | nginx — domain + SSL later |
 | `deploy/hostinger/anantaone-api.service` | systemd unit |
 | `deploy/hostinger/env.production.example` | env template (domain) |
