@@ -43,4 +43,4 @@ fi
 echo "==> Reload nginx"
 sudo nginx -t && sudo systemctl reload nginx
 
-echo "Done. Check: curl -sS http://127.0.0.1:5000/health && curl -sS https://YOUR_DOMAIN/health"
+echo "Done. Check: curl -sS http://127.0.0.1:\${PORT:-5000}/health"
