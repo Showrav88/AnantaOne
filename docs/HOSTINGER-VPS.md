@@ -6,16 +6,58 @@ You do **not** need a local Postgres on your PC. The `P1000 ananta` error on Win
 
 ---
 
-## Architecture (one domain)
+## Architecture (IP or domain)
 
 ```
-Browser  →  https://YOUR_DOMAIN
+Browser  →  http://YOUR_IP  or  https://YOUR_DOMAIN
               ├── /          →  static files (apps/web/dist)
               └── /api/*     →  nginx proxy → Node API :5000
 Postgres  →  127.0.0.1:5432/anantaone
 ```
 
-Same domain = no CORS issues. Web app auto-uses `window.location.origin` for API when `VITE_API_URL` is empty.
+Same host = no CORS issues. Web app auto-uses `window.location.origin` for API when `VITE_API_URL` is empty.
+
+---
+
+## IP only (no domain yet) — e.g. 31.97.50.25
+
+Use **`http://31.97.50.25`** until you connect a free domain. **HTTP only** (no HTTPS on bare IP).
+
+| | |
+|---|---|
+| Site | `http://31.97.50.25` |
+| Login | `http://31.97.50.25/#/login` |
+| Owner dashboard | `http://31.97.50.25/#/owner` |
+
+**nginx (on VPS after git pull):**
+
+```bash
+sudo cp deploy/hostinger/nginx-anantaone-ip.conf /etc/nginx/sites-available/anantaone
+sudo sed -i 's/YOUR_VPS_IP/31.97.50.25/g' /etc/nginx/sites-available/anantaone
+sudo ln -sf /etc/nginx/sites-available/anantaone /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**`.env` on VPS:**
+
+```bash
+sudo cp deploy/hostinger/env.production.ip.example /var/www/anantaone/.env
+sudo nano /var/www/anantaone/.env
+```
+
+Set DB password, `JWT_SECRET`, `JWT_REFRESH_SECRET`, admin password. Keep:
+
+```env
+APP_URL=http://31.97.50.25
+API_URL=http://31.97.50.25
+VITE_API_URL=
+```
+
+**Hostinger firewall:** open port **80** in the VPS security panel.
+
+**Another app already on port 80?** Use port **8080** — see comments in `nginx-anantaone-ip.conf` and set `APP_URL=http://31.97.50.25:8080`.
+
+When you add a domain later: use `nginx-anantaone.conf`, run `certbot`, set `APP_URL=https://yourdomain.com`.
 
 ---
 
@@ -208,8 +250,10 @@ Local `.env` with `ananta:ananta123@localhost` only works with Docker Postgres �
 
 | Path | Purpose |
 |---|---|
-| `deploy/hostinger/nginx-anantaone.conf` | nginx site |
+| `deploy/hostinger/nginx-anantaone-ip.conf` | nginx — **IP only** (no domain) |
+| `deploy/hostinger/env.production.ip.example` | env template for IP deploy |
+| `deploy/hostinger/nginx-anantaone.conf` | nginx — domain + SSL later |
 | `deploy/hostinger/anantaone-api.service` | systemd unit |
-| `deploy/hostinger/env.production.example` | env template |
+| `deploy/hostinger/env.production.example` | env template (domain) |
 | `scripts/hostinger/setup-postgres.sh` | create DB user/db |
 | `scripts/hostinger/deploy.sh` | build + migrate + restart |
