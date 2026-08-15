@@ -66,6 +66,10 @@ ios/Pods/
 postgres-data/
 redis-data/
 
+# Local DB backups (Windows scripts)
+backups/
+scripts/backup-render-db.env
+
 # Misc
 *.tsbuildinfo
 .turbo/
