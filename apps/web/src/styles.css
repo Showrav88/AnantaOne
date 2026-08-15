@@ -5051,3 +5051,86 @@ input[type="color"] {
     width: 100%;
   }
 }
+
+/* Owner: separated table actions + readable field names */
+.owner-main .cell-actions,
+.owner-page .cell-actions,
+.owner-main .sell-col-action,
+.owner-page .sell-col-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.owner-main .cell-actions button.linkish,
+.owner-page .cell-actions button.linkish,
+.owner-main .sell-col-action button.linkish,
+.owner-page .sell-col-action button.linkish {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.4rem;
+  padding: 0.4rem 0.9rem;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--tide) 35%, var(--line));
+  border-radius: 0.4rem;
+  background: var(--input-bg);
+  color: var(--tide);
+  font-weight: 700;
+  text-decoration: none;
+  line-height: 1.2;
+}
+
+.owner-main .cell-actions button.linkish:hover,
+.owner-page .cell-actions button.linkish:hover,
+.owner-main .sell-col-action button.linkish:hover,
+.owner-page .sell-col-action button.linkish:hover {
+  background: var(--ok-bg);
+  border-color: var(--tide);
+}
+
+.owner-main .cell-actions button.linkish.dangerish,
+.owner-page .cell-actions button.linkish.dangerish,
+.owner-main .sell-col-action button.linkish.dangerish,
+.owner-page .sell-col-action button.linkish.dangerish {
+  color: var(--bd-red-deep, #b91c1c);
+  border-color: color-mix(in srgb, var(--bd-red, #f42a41) 40%, var(--line));
+}
+
+.owner-page .cell-id,
+.owner-main .cell-id,
+.owner-dialog .cell-id {
+  font-size: 1.08rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.owner-form input.sku-field,
+.owner-dialog input.sku-field {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.owner-page .tag-field-row span,
+.owner-main .tag-field-row span,
+.owner-dialog .tag-field-row span {
+  font-size: 1.08rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.owner-page .tag-field-list-title,
+.owner-main .tag-field-list-title,
+.owner-dialog .tag-field-list-title {
+  font-size: 1.02rem;
+}
+
+.owner-page .owner-form label,
+.owner-main .owner-form label,
+.owner-dialog .owner-form label {
+  font-size: 0.98rem;
+  font-weight: 600;
+}
