@@ -316,7 +316,7 @@ export function OwnerMaterialsPage({ locale }: Props) {
                       <div className="muted tiny">{m.nameBn}</div>
                     ) : null}
                   </td>
-                  <td data-label={t.owner.fieldMaterialCode}>
+                  <td className="cell-id" data-label={t.owner.fieldMaterialCode}>
                     {m.code ?? "—"}
                   </td>
                   <td data-label={t.owner.fieldSupplyKind}>
