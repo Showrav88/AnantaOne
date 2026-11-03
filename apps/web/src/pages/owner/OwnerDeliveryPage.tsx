@@ -1,0 +1,667 @@
+import { useEffect, useState, useTransition, type FormEvent } from "react";
+import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import {
+  confirmDetails,
+  useConfirmAction,
+} from "../../components/ConfirmActionDialog";
+import { api } from "../../lib/api";
+import {
+  PRODUCT_CATEGORIES,
+  categoryLabel as productCategoryLabel,
+} from "../../lib/productCatalog";
+import { getStoredUser } from "../../lib/session";
+
+type Props = { locale: LocaleCode };
+
+export function OwnerDeliveryPage({ locale }: Props) {
+  const t = getMessages(locale);
+  const { confirm } = useConfirmAction();
+  const user = getStoredUser();
+  const canWrite = user?.role.code === "OWNER" || user?.role.code === "MANAGER";
+  const [branches, setBranches] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [branchId, setBranchId] = useState("");
+  const [wards, setWards] = useState<
+    Array<{
+      id: string;
+      name: string;
+      nameBn: string | null;
+      freeDelivery: boolean;
+      baseChargeBdt: number;
+      isActive: boolean;
+      branchId: string | null;
+    }>
+  >([]);
+  const [rates, setRates] = useState<
+    Array<{
+      id: string;
+      category: string;
+      chargePerUnitBdt: number;
+      note: string | null;
+    }>
+  >([]);
+  const [coupons, setCoupons] = useState<
+    Array<{
+      id: string;
+      code: string;
+      discountType: string;
+      discountValue: number;
+      usedCount: number;
+      isActive: boolean;
+    }>
+  >([]);
+  const [rateForm, setRateForm] = useState({
+    category: "DRINKING",
+    chargePerUnitBdt: "5",
+    note: "",
+  });
+  const [couponForm, setCouponForm] = useState({
+    code: "",
+    discountType: "PERCENT",
+    discountValue: "10",
+    minOrderBdt: "",
+  });
+  const [locationLabel, setLocationLabel] = useState("");
+  const [settings, setSettings] = useState({
+    outsideAreaChargeBdt: "80",
+    sameDistrictChargeBdt: "120",
+    otherDistrictChargeBdt: "250",
+    defaultWardCount: "15",
+    freeWardCount: "5",
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  async function load(selectedBranch?: string) {
+    const branchFilter = selectedBranch ?? branchId;
+    const [company, w, r, c, s] = await Promise.all([
+      api.owner.company(),
+      api.owner.deliveryWards(branchFilter || undefined),
+      api.owner.deliveryRates(),
+      api.owner.coupons(),
+      api.owner.deliverySettings(),
+    ]);
+    setBranches(company.company.branches.map((b) => ({ id: b.id, name: b.name })));
+    setWards(w.wards);
+    setRates(r.rates);
+    setCoupons(c.coupons);
+    setSettings({
+      outsideAreaChargeBdt: String(s.settings.outsideAreaChargeBdt),
+      sameDistrictChargeBdt: String(s.settings.sameDistrictChargeBdt),
+      otherDistrictChargeBdt: String(s.settings.otherDistrictChargeBdt),
+      defaultWardCount: String(s.settings.defaultWardCount),
+      freeWardCount: String(s.settings.freeWardCount),
+    });
+    const co = company.company;
+    const parts = [
+      locale === "bn" && co.upazila?.nameBn
+        ? co.upazila.nameBn
+        : co.upazila?.name,
+      locale === "bn" && co.district?.nameBn
+        ? co.district.nameBn
+        : co.district?.name,
+      locale === "bn" && co.division?.nameBn
+        ? co.division.nameBn
+        : co.division?.name,
+    ].filter(Boolean);
+    setLocationLabel(parts.join(" · ") || t.owner.setCompanyLocationFirst);
+  }
+
+  useEffect(() => {
+    startTransition(() => {
+      void load().catch((err) =>
+        setError(err instanceof Error ? err.message : "Failed"),
+      );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function branchLabel(id: string) {
+    if (!id) return t.owner.allBranches;
+    return branches.find((b) => b.id === id)?.name ?? id;
+  }
+
+  function wardLabel(id: string) {
+    const ward = wards.find((w) => w.id === id);
+    if (!ward) return id;
+    return locale === "bn" && ward.nameBn ? ward.nameBn : ward.name;
+  }
+
+  async function seedWards() {
+    setError(null);
+    const decision = await confirm({
+      title: t.common.confirmCreateTitle,
+      message: t.common.confirmCreateMessage,
+      tone: "create",
+      confirmLabel: t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.owner.fieldBranch, value: branchLabel(branchId) },
+          { label: t.owner.wardCount, value: Number(settings.defaultWardCount) || 15 },
+          { label: t.shop.freeDelivery, value: Number(settings.freeWardCount) || 5 },
+          { label: t.owner.fieldUpazila, value: locationLabel },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
+    try {
+      await api.owner.seedDeliveryArea({
+        branchId: branchId || null,
+        wardCount: Number(settings.defaultWardCount) || 15,
+        freeWardCount: Number(settings.freeWardCount) || 5,
+      });
+      setOkMsg(t.owner.wardsSeeded);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Seed failed");
+    }
+  }
+
+  async function saveSettings(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.owner.outsideAreaCharge, value: `৳${Number(settings.outsideAreaChargeBdt).toLocaleString()}` },
+          { label: t.owner.sameDistrictCharge, value: `৳${Number(settings.sameDistrictChargeBdt).toLocaleString()}` },
+          { label: t.owner.otherDistrictCharge, value: `৳${Number(settings.otherDistrictChargeBdt).toLocaleString()}` },
+          { label: t.owner.wardCount, value: settings.defaultWardCount },
+          { label: t.shop.freeDelivery, value: settings.freeWardCount },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
+    try {
+      await api.owner.updateDeliverySettings({
+        outsideAreaChargeBdt: Number(settings.outsideAreaChargeBdt),
+        sameDistrictChargeBdt: Number(settings.sameDistrictChargeBdt),
+        otherDistrictChargeBdt: Number(settings.otherDistrictChargeBdt),
+        defaultWardCount: Number(settings.defaultWardCount),
+        freeWardCount: Number(settings.freeWardCount),
+      });
+      setOkMsg(t.owner.saved);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    }
+  }
+
+  async function toggleFree(id: string, freeDelivery: boolean) {
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: id },
+          { label: t.owner.fieldWard, value: wardLabel(id) },
+          { label: t.shop.freeDelivery, value: freeDelivery ? "yes" : "no" },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
+    try {
+      await api.owner.updateDeliveryWard(id, { freeDelivery });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed");
+    }
+  }
+
+  async function saveBaseCharge(id: string, baseChargeBdt: number) {
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: id },
+          { label: t.owner.fieldWard, value: wardLabel(id) },
+          { label: t.owner.baseDeliveryCharge, value: `৳${baseChargeBdt.toLocaleString()}` },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
+    try {
+      await api.owner.updateDeliveryWard(id, { baseChargeBdt });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed");
+    }
+  }
+
+  async function saveRate(e: FormEvent) {
+    e.preventDefault();
+    const decision = await confirm({
+      title: t.common.confirmUpdateTitle,
+      message: t.common.confirmUpdateMessage,
+      tone: "update",
+      confirmLabel: t.common.confirmUpdate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.owner.fieldCategory, value: categoryLabel(rateForm.category) },
+          { label: t.owner.chargePerUnit, value: `৳${Number(rateForm.chargePerUnitBdt).toLocaleString()}` },
+          { label: t.owner.fieldNote, value: rateForm.note },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
+    try {
+      await api.owner.upsertDeliveryRate({
+        category: rateForm.category,
+        chargePerUnitBdt: Number(rateForm.chargePerUnitBdt),
+        note: rateForm.note || null,
+      });
+      setOkMsg(t.owner.saved);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    }
+  }
+
+  async function saveCoupon(e: FormEvent) {
+    e.preventDefault();
+    const decision = await confirm({
+      title: t.common.confirmCreateTitle,
+      message: t.common.confirmCreateMessage,
+      tone: "create",
+      confirmLabel: t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.shop.fieldCoupon, value: couponForm.code },
+          { label: t.owner.discountType, value: couponForm.discountType },
+          { label: t.owner.discountValue, value: couponForm.discountValue },
+          { label: t.owner.minOrder, value: couponForm.minOrderBdt ? `৳${Number(couponForm.minOrderBdt).toLocaleString()}` : undefined },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
+    try {
+      await api.owner.createCoupon({
+        code: couponForm.code,
+        discountType: couponForm.discountType,
+        discountValue: Number(couponForm.discountValue),
+        minOrderBdt: couponForm.minOrderBdt
+          ? Number(couponForm.minOrderBdt)
+          : null,
+      });
+      setCouponForm({
+        code: "",
+        discountType: "PERCENT",
+        discountValue: "10",
+        minOrderBdt: "",
+      });
+      setOkMsg(t.owner.saved);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    }
+  }
+
+  const catLabels = {
+    catMineral: t.owner.catMineral,
+    catDrinking: t.owner.catDrinking,
+    catDistilled: t.owner.catDistilled,
+    catBattery: t.owner.catBattery,
+    catHandwash: t.owner.catHandwash,
+    catDishwash: t.owner.catDishwash,
+    catCleaner: t.owner.catCleaner,
+    catOther: t.owner.catOther,
+  };
+
+  function categoryLabel(code: string) {
+    return productCategoryLabel(code, catLabels);
+  }
+
+  return (
+    <div className="owner-page">
+      <header className="owner-header">
+        <div>
+          <p className="eyebrow">{t.owner.navDelivery}</p>
+          <h1>{t.owner.deliveryTitle}</h1>
+          <p className="muted">{t.owner.deliveryHint}</p>
+        </div>
+        {canWrite ? (
+          <button type="button" className="btn primary" onClick={() => void seedWards()}>
+            {t.owner.seedWards}
+          </button>
+        ) : null}
+      </header>
+
+      {okMsg ? <p className="ok">{okMsg}</p> : null}
+      {error ? <p className="error">{error}</p> : null}
+      {pending && wards.length === 0 ? (
+        <p className="muted">{t.common.loading}</p>
+      ) : null}
+
+      <section className="panel-card">
+        <h2>{t.owner.deliveryZoneCharges}</h2>
+        <p className="muted tiny">{t.owner.deliveryZoneHint}</p>
+        <p className="muted tiny">{t.owner.deliveryZoneSteps}</p>
+        <p className="muted tiny">
+          {t.owner.fieldUpazila}: {locationLabel}
+        </p>
+        {canWrite ? (
+          <form className="owner-form compact" onSubmit={saveSettings}>
+            <label className="full">
+              {t.owner.outsideAreaCharge}
+              <span className="muted tiny">{t.owner.outsideAreaChargeHint}</span>
+              <input
+                type="number"
+                min={0}
+                value={settings.outsideAreaChargeBdt}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    outsideAreaChargeBdt: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <label className="full">
+              {t.owner.sameDistrictCharge}
+              <span className="muted tiny">{t.owner.sameDistrictChargeHint}</span>
+              <input
+                type="number"
+                min={0}
+                value={settings.sameDistrictChargeBdt}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    sameDistrictChargeBdt: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <label className="full">
+              {t.owner.otherDistrictCharge}
+              <span className="muted tiny">{t.owner.otherDistrictChargeHint}</span>
+              <input
+                type="number"
+                min={0}
+                value={settings.otherDistrictChargeBdt}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    otherDistrictChargeBdt: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              {t.owner.wardCount}
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={settings.defaultWardCount}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    defaultWardCount: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <button className="btn primary" type="submit">
+              {t.common.save}
+            </button>
+          </form>
+        ) : null}
+      </section>
+
+      <section className="panel-card">
+        <h2>{t.owner.wardsTitle}</h2>
+        <p className="muted tiny">{t.owner.wardsHint}</p>
+        {branches.length > 0 ? (
+          <label className="inline-field">
+            {t.owner.fieldBranch}
+            <select
+              value={branchId}
+              onChange={(e) => {
+                const next = e.target.value;
+                setBranchId(next);
+                void load(next).catch((err) =>
+                  setError(err instanceof Error ? err.message : "Failed"),
+                );
+              }}
+            >
+              <option value="">{t.owner.allBranches}</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>{t.owner.fieldWard}</th>
+                <th>{t.shop.freeDelivery}</th>
+                <th>{t.owner.baseDeliveryCharge}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {wards.map((w) => (
+                <tr key={w.id}>
+                  <td data-label={t.owner.fieldWard}>
+                    {locale === "bn" && w.nameBn ? w.nameBn : w.name}
+                  </td>
+                  <td data-label={t.shop.freeDelivery}>
+                    {canWrite ? (
+                      <label className="check">
+                        <input
+                          type="checkbox"
+                          checked={w.freeDelivery}
+                          onChange={(e) =>
+                            void toggleFree(w.id, e.target.checked)
+                          }
+                        />
+                        <span>
+                          {w.freeDelivery ? t.shop.freeDelivery : "—"}
+                        </span>
+                      </label>
+                    ) : w.freeDelivery ? (
+                      t.shop.freeDelivery
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td data-label={t.owner.baseDeliveryCharge}>
+                    {canWrite && !w.freeDelivery ? (
+                      <input
+                        className="inline-number"
+                        type="number"
+                        min={0}
+                        step="1"
+                        defaultValue={w.baseChargeBdt}
+                        key={`${w.id}-${w.baseChargeBdt}`}
+                        onBlur={(e) => {
+                          const next = Number(e.target.value);
+                          if (
+                            Number.isFinite(next) &&
+                            next !== w.baseChargeBdt
+                          ) {
+                            void saveBaseCharge(w.id, next);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <>৳{w.baseChargeBdt}</>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="panel-card">
+        <h2>{t.owner.categoryRatesTitle}</h2>
+        <p className="muted tiny">{t.owner.categoryRatesHint}</p>
+        {canWrite ? (
+          <form className="owner-form compact" onSubmit={saveRate}>
+            <label>
+              {t.owner.fieldCategory}
+              <select
+                value={rateForm.category}
+                onChange={(e) =>
+                  setRateForm({ ...rateForm, category: e.target.value })
+                }
+              >
+                {PRODUCT_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {categoryLabel(c)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              {t.owner.chargePerUnit}
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={rateForm.chargePerUnitBdt}
+                onChange={(e) =>
+                  setRateForm({ ...rateForm, chargePerUnitBdt: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              {t.owner.fieldNote}
+              <input
+                value={rateForm.note}
+                onChange={(e) =>
+                  setRateForm({ ...rateForm, note: e.target.value })
+                }
+              />
+            </label>
+            <button className="btn primary" type="submit">
+              {t.common.save}
+            </button>
+          </form>
+        ) : null}
+        <ul className="plain-list">
+          {rates.map((r) => (
+            <li key={r.id}>
+              <span>{categoryLabel(r.category)}</span>
+              <span>৳{r.chargePerUnitBdt} / unit</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="panel-card">
+        <h2>{t.owner.couponsTitle}</h2>
+        <p className="muted tiny">{t.owner.couponsHint}</p>
+        {canWrite ? (
+          <form className="owner-form compact" onSubmit={saveCoupon}>
+            <label>
+              {t.shop.fieldCoupon}
+              <input
+                required
+                value={couponForm.code}
+                onChange={(e) =>
+                  setCouponForm({ ...couponForm, code: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              {t.owner.discountType}
+              <select
+                value={couponForm.discountType}
+                onChange={(e) =>
+                  setCouponForm({
+                    ...couponForm,
+                    discountType: e.target.value,
+                  })
+                }
+              >
+                <option value="PERCENT">%</option>
+                <option value="FIXED">৳ fixed</option>
+              </select>
+            </label>
+            <label>
+              {t.owner.discountValue}
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                required
+                value={couponForm.discountValue}
+                onChange={(e) =>
+                  setCouponForm({
+                    ...couponForm,
+                    discountValue: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              {t.owner.minOrder}
+              <input
+                type="number"
+                min={0}
+                value={couponForm.minOrderBdt}
+                onChange={(e) =>
+                  setCouponForm({
+                    ...couponForm,
+                    minOrderBdt: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <button className="btn primary" type="submit">
+              {t.owner.addCoupon}
+            </button>
+          </form>
+        ) : null}
+        <ul className="plain-list">
+          {coupons.map((c) => (
+            <li key={c.id}>
+              <span>
+                {c.code} · {c.discountType} {c.discountValue}
+              </span>
+              <span>
+                used {c.usedCount}
+                {c.isActive ? "" : " · off"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  );
+}

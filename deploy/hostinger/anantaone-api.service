@@ -1,0 +1,20 @@
+[Unit]
+Description=AnantaOne API (Node.js)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/var/www/anantaone
+# tsx (same as Render) — node dist/index.js fails on @anantaone/shared .ts imports
+ExecStart=/var/www/anantaone/node_modules/.bin/tsx apps/api/src/index.ts
+Environment=NODE_ENV=production
+EnvironmentFile=-/var/www/anantaone/.env
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

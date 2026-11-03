@@ -43,6 +43,7 @@ coverage/
 # Prisma / DB
 *.db
 *.sqlite
+apps/api/src/generated/
 
 # Uploads & temp
 uploads/
@@ -64,6 +65,10 @@ ios/Pods/
 # Docker volumes (local data)
 postgres-data/
 redis-data/
+
+# Local DB backups (Windows scripts)
+backups/
+scripts/backup-render-db.env
 
 # Misc
 *.tsbuildinfo

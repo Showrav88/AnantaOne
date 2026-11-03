@@ -1,0 +1,1552 @@
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { getMessages, type LocaleCode } from "@anantaone/i18n";
+import {
+  api,
+  type CashExpenseRow,
+  type CashTransaction,
+  type MaterialRow,
+  type SupplyPurchase,
+  type WalletAnalytics,
+  type WalletSummary,
+} from "../../lib/api";
+import {
+  confirmDetails,
+  useConfirmAction,
+} from "../../components/ConfirmActionDialog";
+import { getStoredUser } from "../../lib/session";
+
+type Props = { locale: LocaleCode };
+
+type ExpenseCategory = {
+  code: string;
+  nameEn: string;
+  nameBn: string;
+  description: string | null;
+};
+
+type SupplyKind = {
+  code: string;
+  nameEn: string;
+  nameBn: string;
+  description: string | null;
+};
+
+type UnitOpt = { code: string; nameEn: string; nameBn: string };
+
+type Tab = "supply" | "utility" | "ledger" | "analytics";
+type Tone = "wallet" | "supply" | "utility" | "analytics";
+type AnalyticsPanel =
+  | "summary"
+  | "kinds"
+  | "expenses"
+  | "purchases"
+  | "txns"
+  | null;
+
+function parseWalletTab(raw: string | null): Tab {
+  if (raw === "supply" || raw === "utility" || raw === "ledger" || raw === "analytics") {
+    return raw;
+  }
+  if (raw === "record") return "supply";
+  return "ledger";
+}
+
+function CollapsePanel({
+  id,
+  title,
+  summary,
+  open,
+  onToggle,
+  tone,
+  children,
+}: {
+  id: string;
+  title: string;
+  summary?: string;
+  open: boolean;
+  onToggle: () => void;
+  tone?: Tone;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      className={`collapse-panel${open ? " open" : ""}${tone ? ` tone-${tone}` : ""}`}
+    >
+      <button
+        type="button"
+        className="collapse-head"
+        aria-expanded={open}
+        aria-controls={`panel-${id}`}
+        onClick={onToggle}
+      >
+        <span className="collapse-titles">
+          <strong>{title}</strong>
+          {!open && summary ? (
+            <span className="muted tiny">{summary}</span>
+          ) : null}
+        </span>
+        <span className="collapse-chevron" aria-hidden>
+          {open ? "▾" : "▸"}
+        </span>
+      </button>
+      {open ? (
+        <div className="collapse-body" id={`panel-${id}`}>
+          {children}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+export function OwnerWalletPage({ locale }: Props) {
+  const t = getMessages(locale);
+  const { confirm } = useConfirmAction();
+  const user = getStoredUser();
+  const canWrite =
+    user?.role.code === "OWNER" || user?.role.code === "MANAGER";
+  const isOwner = user?.role.code === "OWNER";
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = parseWalletTab(searchParams.get("tab"));
+  function setTab(next: Tab) {
+    setSearchParams(next === "ledger" ? {} : { tab: next }, { replace: true });
+  }
+  const [wallet, setWallet] = useState<WalletSummary | null>(null);
+  const [txns, setTxns] = useState<CashTransaction[]>([]);
+  const [categories, setCategories] = useState<ExpenseCategory[]>([]);
+  const [kinds, setKinds] = useState<SupplyKind[]>([]);
+  const [units, setUnits] = useState<UnitOpt[]>([]);
+  const [analytics, setAnalytics] = useState<WalletAnalytics | null>(null);
+  const [expandedTxn, setExpandedTxn] = useState<string | null>(null);
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [openAnalytics, setOpenAnalytics] =
+    useState<AnalyticsPanel>("summary");
+  const [tripOpen, setTripOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [purchases, setPurchases] = useState<SupplyPurchase[]>([]);
+  const [catalogMaterials, setCatalogMaterials] = useState<MaterialRow[]>([]);
+  const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(
+    null,
+  );
+  const [expenses, setExpenses] = useState<CashExpenseRow[]>([]);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [material, setMaterial] = useState({
+    materialId: "",
+    materialName: "",
+    kindCode: "RAW_MATERIAL",
+    unitCode: "LITER",
+    qty: "1",
+    goodsAmountBdt: "",
+    transportBdt: "",
+    driverBdt: "",
+    travelBdt: "",
+    supplierName: "",
+    supplierPhone: "",
+    note: "",
+  });
+  const [expense, setExpense] = useState({
+    categoryCode: "UTILITY",
+    title: "",
+    amountBdt: "",
+    contactName: "",
+    contactPhone: "",
+    note: "",
+  });
+  const [adjust, setAdjust] = useState({
+    typeCode: "OPENING" as
+      | "OPENING"
+      | "ADJUSTMENT_IN"
+      | "ADJUSTMENT_OUT"
+      | "OTHER_IN"
+      | "OTHER_OUT",
+    amountBdt: "",
+    note: "",
+  });
+
+  const materialTotal = useMemo(() => {
+    const goods = Number(material.goodsAmountBdt || 0);
+    const transport = Number(material.transportBdt || 0);
+    const driver = Number(material.driverBdt || 0);
+    const travel = Number(material.travelBdt || 0);
+    return goods + transport + driver + travel;
+  }, [material]);
+
+  const landedHint = useMemo(() => {
+    const qty = Number(material.qty || 0);
+    if (!(qty > 0) || !(materialTotal > 0)) return null;
+    return materialTotal / qty;
+  }, [material.qty, materialTotal]);
+
+  function blankMaterial(kindCode?: string, unitCode?: string) {
+    return {
+      materialId: "",
+      materialName: "",
+      kindCode: kindCode ?? "RAW_MATERIAL",
+      unitCode: unitCode ?? "LITER",
+      qty: "1",
+      goodsAmountBdt: "",
+      transportBdt: "",
+      driverBdt: "",
+      travelBdt: "",
+      supplierName: "",
+      supplierPhone: "",
+      note: "",
+    };
+  }
+
+  function applyCatalogMaterial(materialId: string) {
+    if (!materialId) {
+      setMaterial((m) => ({ ...m, materialId: "" }));
+      return;
+    }
+    const row = catalogMaterials.find((x) => x.id === materialId);
+    if (!row) return;
+    setMaterial((m) => ({
+      ...m,
+      materialId: row.id,
+      materialName: row.name,
+      kindCode: row.kind.code,
+      unitCode: row.unit.code,
+    }));
+  }
+
+  function blankExpense(categoryCode?: string) {
+    return {
+      categoryCode: categoryCode ?? "UTILITY",
+      title: "",
+      amountBdt: "",
+      contactName: "",
+      contactPhone: "",
+      note: "",
+    };
+  }
+
+  function fillMaterialFromPurchase(p: SupplyPurchase) {
+    setMaterial({
+      materialId: p.materialId ?? p.catalogMaterial?.id ?? "",
+      materialName: p.materialName,
+      kindCode: p.kind?.code ?? "RAW_MATERIAL",
+      unitCode: p.unit?.code ?? "LITER",
+      qty: String(p.qty),
+      goodsAmountBdt: String(p.goodsAmountBdt),
+      transportBdt: p.transportBdt ? String(p.transportBdt) : "",
+      driverBdt: p.driverBdt ? String(p.driverBdt) : "",
+      travelBdt: p.travelBdt ? String(p.travelBdt) : "",
+      supplierName: p.supplierName ?? "",
+      supplierPhone: p.supplierPhone ?? "",
+      note: p.note ?? "",
+    });
+    setTripOpen(
+      p.transportBdt > 0 || p.driverBdt > 0 || p.travelBdt > 0,
+    );
+  }
+
+  function fillExpenseFromRow(row: CashExpenseRow) {
+    setExpense({
+      categoryCode: row.category.code,
+      title: row.title,
+      amountBdt: String(row.amountBdt),
+      contactName: row.contactName ?? "",
+      contactPhone: row.contactPhone ?? "",
+      note: row.note ?? "",
+    });
+  }
+
+  function unitLabel(code: string) {
+    const unit = units.find((u) => u.code === code);
+    if (!unit) return code;
+    return `${locale === "bn" ? unit.nameBn : unit.nameEn} (${unit.code})`;
+  }
+
+  function kindLabel(code: string) {
+    const kind = kinds.find((k) => k.code === code);
+    if (!kind) return code;
+    return labelKind(kind);
+  }
+
+  function txnTypeLabel(code: typeof adjust.typeCode) {
+    if (code === "OPENING") return t.owner.txnOpening;
+    if (code === "ADJUSTMENT_IN") return t.owner.txnAdjIn;
+    if (code === "ADJUSTMENT_OUT") return t.owner.txnAdjOut;
+    if (code === "OTHER_IN") return t.owner.txnOtherIn;
+    if (code === "OTHER_OUT") return t.owner.txnOtherOut;
+    return code;
+  }
+
+  async function load() {
+    const [walletRes, catRes, metaRes, purchaseRes, expenseRes, catalogRes] =
+      await Promise.all([
+      api.owner.wallet(),
+      api.owner
+        .expenseCategories()
+        .catch(() => ({ categories: [] as ExpenseCategory[] })),
+      api.owner.supplyMeta().catch(() => ({
+        kinds: [] as SupplyKind[],
+        units: [] as UnitOpt[],
+      })),
+      api.owner.supplyPurchases().catch(() => ({ purchases: [] as SupplyPurchase[] })),
+      api.owner.listExpenses().catch(() => ({ expenses: [] as CashExpenseRow[] })),
+      api.owner.materials(true).catch(() => ({ materials: [] as MaterialRow[] })),
+    ]);
+    setWallet(walletRes.wallet);
+    setTxns(walletRes.transactions);
+    setCategories(catRes.categories);
+    setKinds(metaRes.kinds);
+    setUnits(metaRes.units);
+    setPurchases(purchaseRes.purchases);
+    setExpenses(expenseRes.expenses);
+    setCatalogMaterials(catalogRes.materials);
+    if (metaRes.kinds[0]) {
+      setMaterial((m) =>
+        metaRes.kinds.some((k) => k.code === m.kindCode)
+          ? m
+          : { ...m, kindCode: metaRes.kinds[0]!.code },
+      );
+    }
+  }
+
+  async function loadAnalytics() {
+    const res = await api.owner.walletAnalytics(90);
+    setAnalytics(res);
+  }
+
+  useEffect(() => {
+    startTransition(() => {
+      void load().catch((err) =>
+        setError(err instanceof Error ? err.message : "Failed"),
+      );
+    });
+  }, []);
+
+  useEffect(() => {
+    if (tab !== "analytics") return;
+    startTransition(() => {
+      void loadAnalytics().catch((err) =>
+        setError(err instanceof Error ? err.message : "Failed"),
+      );
+    });
+  }, [tab]);
+
+  async function onMaterial(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setOkMsg(null);
+    const body = {
+      ...(material.materialId ? { materialId: material.materialId } : {}),
+      materialName: material.materialName,
+      kindCode: material.kindCode,
+      unitCode: material.unitCode,
+      qty: Number(material.qty),
+      goodsAmountBdt: Number(material.goodsAmountBdt || 0),
+      transportBdt: Number(material.transportBdt || 0),
+      driverBdt: Number(material.driverBdt || 0),
+      travelBdt: Number(material.travelBdt || 0),
+      supplierName: material.supplierName || null,
+      supplierPhone: material.supplierPhone || null,
+      note: material.note || null,
+    };
+    const decision = await confirm({
+      title: editingPurchaseId
+        ? t.common.confirmUpdateTitle
+        : t.common.confirmCreateTitle,
+      message: editingPurchaseId
+        ? t.common.confirmUpdateMessage
+        : t.common.confirmCreateMessage,
+      tone: editingPurchaseId ? "update" : "create",
+      confirmLabel: editingPurchaseId
+        ? t.common.confirmUpdate
+        : t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          ...(editingPurchaseId
+            ? [{ label: t.common.fieldId, value: editingPurchaseId }]
+            : []),
+          { label: t.owner.fieldMaterial, value: body.materialName },
+          { label: t.owner.fieldSupplyKind, value: kindLabel(body.kindCode) },
+          { label: t.owner.fieldQty, value: `${body.qty} ${unitLabel(body.unitCode)}` },
+          { label: t.owner.costGoods, value: `৳${body.goodsAmountBdt.toLocaleString()}` },
+          { label: t.owner.costTransport, value: `৳${body.transportBdt.toLocaleString()}` },
+          { label: t.owner.costDriver, value: `৳${body.driverBdt.toLocaleString()}` },
+          { label: t.owner.costTravel, value: `৳${body.travelBdt.toLocaleString()}` },
+          { label: t.owner.costTotal, value: `৳${materialTotal.toLocaleString()}` },
+          { label: t.owner.fieldSupplier, value: body.supplierName },
+          { label: t.owner.fieldSupplierPhone, value: body.supplierPhone },
+          { label: t.owner.fieldNote, value: body.note },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
+    try {
+      if (editingPurchaseId) {
+        await api.owner.updateMaterial(editingPurchaseId, body);
+        setEditingPurchaseId(null);
+        setOkMsg(t.owner.supplyUpdated);
+      } else {
+        await api.owner.recordMaterial(body);
+        setOkMsg(t.owner.expenseDebited);
+      }
+      setMaterial(blankMaterial(material.kindCode, material.unitCode));
+      setTripOpen(false);
+      await load();
+      if (tab === "analytics") await loadAnalytics();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
+  async function onReverseMaterial(p: SupplyPurchase) {
+    setError(null);
+    setOkMsg(null);
+    const decision = await confirm({
+      title: t.common.confirmDeleteTitle,
+      message: t.owner.reverseSupplyHint,
+      tone: "danger",
+      confirmLabel: t.owner.confirmReverseSupply,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.common.fieldId, value: p.id },
+          { label: t.owner.fieldMaterial, value: p.materialName },
+          {
+            label: t.owner.fieldSupplyKind,
+            value: p.kind ? (locale === "bn" ? p.kind.nameBn : p.kind.nameEn) : undefined,
+          },
+          {
+            label: t.owner.fieldQty,
+            value: `${p.qty} ${p.unit ? (locale === "bn" ? p.unit.nameBn : p.unit.nameEn) : ""}`,
+          },
+          { label: t.owner.costTotal, value: `৳${p.amountBdt.toLocaleString()}` },
+          { label: t.owner.fieldSupplier, value: p.supplierName },
+        ],
+        { skipEmpty: true },
+      ),
+      reasonLabel: t.owner.reverseSupplyReason,
+      reasonMinLength: 5,
+    });
+    if (!decision.ok) return;
+
+    try {
+      await api.owner.reverseMaterial(p.id, decision.reason ?? "");
+      setOkMsg(t.owner.supplyReversed);
+      if (editingPurchaseId === p.id) {
+        setEditingPurchaseId(null);
+        setMaterial(blankMaterial(material.kindCode, material.unitCode));
+      }
+      await load();
+      if (tab === "analytics") await loadAnalytics();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
+  function startEditPurchase(p: SupplyPurchase) {
+    if (p.isReversed) return;
+    setEditingPurchaseId(p.id);
+    fillMaterialFromPurchase(p);
+    setTab("supply");
+    setError(null);
+    setOkMsg(null);
+  }
+
+  function startEditExpense(row: CashExpenseRow) {
+    setEditingExpenseId(row.id);
+    fillExpenseFromRow(row);
+    setTab("utility");
+    setError(null);
+    setOkMsg(null);
+  }
+
+  function cancelEditExpense() {
+    setEditingExpenseId(null);
+    setExpense(blankExpense(expense.categoryCode));
+  }
+
+  async function onExpense(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setOkMsg(null);
+    const amount = Number(expense.amountBdt);
+    const category = categories.find((c) => c.code === expense.categoryCode);
+    const body = {
+      categoryCode: expense.categoryCode,
+      title: expense.title,
+      amountBdt: amount,
+      contactName: expense.contactName || null,
+      contactPhone: expense.contactPhone || null,
+      note: expense.note || null,
+    };
+    const decision = await confirm({
+      title: editingExpenseId
+        ? t.common.confirmUpdateTitle
+        : t.common.confirmCreateTitle,
+      message: editingExpenseId
+        ? t.common.confirmUpdateMessage
+        : t.common.confirmCreateMessage,
+      tone: editingExpenseId ? "update" : "create",
+      confirmLabel: editingExpenseId
+        ? t.common.confirmUpdate
+        : t.common.confirmCreate,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          ...(editingExpenseId
+            ? [{ label: t.common.fieldId, value: editingExpenseId }]
+            : []),
+          {
+            label: t.owner.fieldExpenseCategory,
+            value: category
+              ? locale === "bn"
+                ? category.nameBn
+                : category.nameEn
+              : body.categoryCode,
+          },
+          { label: t.owner.fieldExpenseTitle, value: body.title },
+          { label: t.owner.fieldAmount, value: `৳${amount.toLocaleString()}` },
+          { label: t.owner.fieldContactName, value: body.contactName },
+          { label: t.owner.fieldContactPhone, value: body.contactPhone },
+          { label: t.owner.fieldNote, value: body.note },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
+    try {
+      if (editingExpenseId) {
+        await api.owner.updateExpense(editingExpenseId, body);
+        setEditingExpenseId(null);
+        setOkMsg(t.owner.expenseUpdated);
+      } else {
+        await api.owner.recordExpense(body);
+        setOkMsg(t.owner.expenseDebited);
+      }
+      setExpense(blankExpense(expense.categoryCode));
+      await load();
+      if (tab === "analytics") await loadAnalytics();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
+  async function onAdjust(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setOkMsg(null);
+    const amount = Number(adjust.amountBdt);
+    const decision = await confirm({
+      title: t.common.confirmActionTitle,
+      message: t.common.confirmActionMessage,
+      tone: "info",
+      confirmLabel: t.common.confirmProceed,
+      cancelLabel: t.common.cancel,
+      details: confirmDetails(
+        [
+          { label: t.owner.fieldTxnType, value: txnTypeLabel(adjust.typeCode) },
+          { label: t.owner.fieldAmount, value: `৳${amount.toLocaleString()}` },
+          { label: t.owner.fieldNote, value: adjust.note },
+        ],
+        { skipEmpty: true },
+      ),
+    });
+    if (!decision.ok) return;
+
+    try {
+      await api.owner.adjustWallet({
+        typeCode: adjust.typeCode,
+        amountBdt: Number(adjust.amountBdt),
+        note: adjust.note || null,
+      });
+      setAdjust({ ...adjust, amountBdt: "", note: "" });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
+  function labelKind(k: { nameEn: string; nameBn: string }) {
+    return locale === "bn" ? k.nameBn : k.nameEn;
+  }
+
+  function renderPurchaseBreakdown(
+    p: SupplyPurchase,
+    opts?: { showActions?: boolean },
+  ) {
+    const showActions = opts?.showActions !== false && canWrite;
+    return (
+      <div className="cost-breakdown">
+        <p>
+          <strong>{p.materialName}</strong>
+          {p.isReversed ? (
+            <span className="muted tiny"> · {t.owner.supplyReversedBadge}</span>
+          ) : null}
+          <span className="muted tiny">
+            {" "}
+            · {p.qty}{" "}
+            {p.unit
+              ? locale === "bn"
+                ? p.unit.nameBn
+                : p.unit.nameEn
+              : ""}
+            {p.kind
+              ? ` · ${locale === "bn" ? p.kind.nameBn : p.kind.nameEn}`
+              : ""}
+          </span>
+        </p>
+        <ul className="breakdown-list">
+          <li>
+            {t.owner.costGoods}: ৳{p.goodsAmountBdt.toLocaleString()}
+          </li>
+          <li>
+            {t.owner.costTransport}: ৳{p.transportBdt.toLocaleString()}
+          </li>
+          <li>
+            {t.owner.costDriver}: ৳{p.driverBdt.toLocaleString()}
+          </li>
+          <li>
+            {t.owner.costTravel}: ৳{p.travelBdt.toLocaleString()}
+          </li>
+          <li className="total">
+            {t.owner.costTotal}: ৳{p.amountBdt.toLocaleString()}
+          </li>
+          {p.landedUnitCostBdt != null ? (
+            <li className="landed">
+              {t.owner.landedUnitCost}: ৳
+              {p.landedUnitCostBdt.toLocaleString(undefined, {
+                maximumFractionDigits: 2,
+              })}
+              /{p.unit?.code ?? "u"}
+            </li>
+          ) : null}
+        </ul>
+        {p.supplierName || p.supplierPhone ? (
+          <p className="muted tiny">
+            {p.supplierName}
+            {p.supplierPhone ? ` · ${p.supplierPhone}` : ""}
+          </p>
+        ) : null}
+        {p.isReversed && p.reverseReason ? (
+          <p className="muted tiny">{p.reverseReason}</p>
+        ) : null}
+        {showActions && !p.isReversed ? (
+          <div className="media-actions">
+            <button
+              type="button"
+              className="btn ghost compact"
+              onClick={() => startEditPurchase(p)}
+            >
+              {t.owner.editSupplyPurchase}
+            </button>
+            <button
+              type="button"
+              className="btn ghost compact dark"
+              onClick={() => void onReverseMaterial(p)}
+            >
+              {t.owner.reverseSupply}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="owner-page">
+      <header className="owner-header">
+        <div>
+          <p className="eyebrow">{t.owner.navWallet}</p>
+          <h1>{t.owner.walletTitle}</h1>
+          <p className="muted tiny">{t.owner.walletHint}</p>
+          <p className="wallet-areas-guide">{t.owner.walletAreasGuide}</p>
+          <p className="muted tiny">
+            {t.owner.walletSaleNote}{" "}
+            <Link to="/owner/sell">{t.owner.navSell}</Link>
+          </p>
+        </div>
+        <div className="wallet-balance tone-wallet">
+          <p className="eyebrow">{t.owner.cashBalance}</p>
+          <p className="wallet-amount">
+            ৳{(wallet?.balanceBdt ?? 0).toLocaleString()}
+          </p>
+        </div>
+      </header>
+
+      <div className="wallet-tabs" role="tablist">
+        {(
+          [
+            ["supply", t.owner.walletTabSupply, "supply"],
+            ["utility", t.owner.walletTabUtility, "utility"],
+            ["ledger", t.owner.walletTabLedger, "wallet"],
+            ["analytics", t.owner.walletTabAnalytics, "analytics"],
+          ] as const
+        ).map(([id, label, tone]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            className={[
+              "wallet-tab",
+              `tone-${tone}`,
+              tab === id ? "active" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            onClick={() => setTab(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {error ? <p className="error-banner">{error}</p> : null}
+      {okMsg ? <p className="ok-banner">{okMsg}</p> : null}
+
+      {tab === "supply" ? (
+        canWrite ? (
+          <section className="wallet-section tone-supply">
+            <h2 className="section-title">{t.owner.materialDebit}</h2>
+            <p className="muted tiny">{t.owner.collapseSupplyHint}</p>
+              <form className="owner-form compact" onSubmit={onMaterial}>
+                <p className="muted tiny full">{t.owner.materialDebitHint}</p>
+                {editingPurchaseId ? (
+                  <p className="ok-banner tiny full">
+                    {t.owner.editSupplyPurchase}
+                  </p>
+                ) : null}
+                <label className="full">
+                  {t.owner.fieldCatalogMaterial}
+                  <select
+                    value={material.materialId}
+                    onChange={(e) => applyCatalogMaterial(e.target.value)}
+                  >
+                    <option value="">{t.owner.catalogMaterialNone}</option>
+                    {catalogMaterials.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.code ? `${m.code} · ` : ""}
+                        {locale === "bn" && m.nameBn ? m.nameBn : m.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="muted tiny">{t.owner.catalogMaterialHint}</span>
+                </label>
+                <label>
+                  {t.owner.fieldMaterial}
+                  <input
+                    required
+                    value={material.materialName}
+                    onChange={(e) =>
+                      setMaterial({
+                        ...material,
+                        materialId: "",
+                        materialName: e.target.value,
+                      })
+                    }
+                    placeholder={t.owner.supplyNameHint}
+                  />
+                </label>
+                <label>
+                  {t.owner.fieldSupplyKind}
+                  <select
+                    value={material.kindCode}
+                    onChange={(e) =>
+                      setMaterial({ ...material, kindCode: e.target.value })
+                    }
+                  >
+                    {(kinds.length
+                      ? kinds
+                      : [
+                          { code: "RAW_MATERIAL", nameEn: "Raw", nameBn: "কাঁচা" },
+                          { code: "BOTTLE", nameEn: "Bottle", nameBn: "বোতল" },
+                          { code: "ACID", nameEn: "Acid", nameBn: "অ্যাসিড" },
+                        ]
+                    ).map((k) => (
+                      <option key={k.code} value={k.code}>
+                        {labelKind(k)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t.owner.fieldQty}
+                  <input
+                    required
+                    type="number"
+                    min={0.001}
+                    step="any"
+                    value={material.qty}
+                    onChange={(e) =>
+                      setMaterial({ ...material, qty: e.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  {t.owner.fieldUnit}
+                  <select
+                    value={material.unitCode}
+                    onChange={(e) =>
+                      setMaterial({ ...material, unitCode: e.target.value })
+                    }
+                  >
+                    {(units.length
+                      ? units
+                      : [
+                          { code: "LITER", nameEn: "Liter", nameBn: "লিটার" },
+                          { code: "BOTTLE", nameEn: "Bottle", nameBn: "বোতল" },
+                          { code: "PIECE", nameEn: "Piece", nameBn: "পিস" },
+                          { code: "KG", nameEn: "Kg", nameBn: "কেজি" },
+                        ]
+                    ).map((u) => (
+                      <option key={u.code} value={u.code}>
+                        {locale === "bn" ? u.nameBn : u.nameEn} ({u.code})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t.owner.costGoods}
+                  <input
+                    required
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={material.goodsAmountBdt}
+                    onChange={(e) =>
+                      setMaterial({
+                        ...material,
+                        goodsAmountBdt: e.target.value,
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  {t.owner.fieldSupplier}
+                  <input
+                    value={material.supplierName}
+                    onChange={(e) =>
+                      setMaterial({ ...material, supplierName: e.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  {t.owner.fieldSupplierPhone}
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    value={material.supplierPhone}
+                    onChange={(e) =>
+                      setMaterial({
+                        ...material,
+                        supplierPhone: e.target.value,
+                      })
+                    }
+                    placeholder="01XXXXXXXXX"
+                  />
+                </label>
+
+                <div className="nested-collapse full">
+                  <button
+                    type="button"
+                    className="collapse-head nested"
+                    aria-expanded={tripOpen}
+                    onClick={() => setTripOpen((v) => !v)}
+                  >
+                    <span>
+                      <strong>{t.owner.tripCosts}</strong>
+                      <span className="muted tiny">
+                        {" "}
+                        · ৳
+                        {(
+                          Number(material.transportBdt || 0) +
+                          Number(material.driverBdt || 0) +
+                          Number(material.travelBdt || 0)
+                        ).toLocaleString()}
+                      </span>
+                    </span>
+                    <span aria-hidden>{tripOpen ? "▾" : "▸"}</span>
+                  </button>
+                  {tripOpen ? (
+                    <div className="owner-form compact nested-body">
+                      <label>
+                        {t.owner.costTransport}
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          inputMode="decimal"
+                          autoComplete="off"
+                          value={material.transportBdt}
+                          placeholder={t.owner.numberZeroIfEmptyHint}
+                          onChange={(e) =>
+                            setMaterial({
+                              ...material,
+                              transportBdt: e.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        {t.owner.costDriver}
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          inputMode="decimal"
+                          autoComplete="off"
+                          value={material.driverBdt}
+                          placeholder={t.owner.numberZeroIfEmptyHint}
+                          onChange={(e) =>
+                            setMaterial({
+                              ...material,
+                              driverBdt: e.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        {t.owner.costTravel}
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          inputMode="decimal"
+                          autoComplete="off"
+                          value={material.travelBdt}
+                          placeholder={t.owner.numberZeroIfEmptyHint}
+                          onChange={(e) =>
+                            setMaterial({
+                              ...material,
+                              travelBdt: e.target.value,
+                            })
+                          }
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                </div>
+
+                <label className="full">
+                  {t.owner.fieldNote}
+                  <input
+                    value={material.note}
+                    onChange={(e) =>
+                      setMaterial({ ...material, note: e.target.value })
+                    }
+                  />
+                </label>
+                <p className="muted tiny full">
+                  {t.owner.costTotal}: ৳{materialTotal.toLocaleString()}
+                  {landedHint != null
+                    ? ` · ${t.owner.landedUnitCost}: ৳${landedHint.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                    : ""}
+                </p>
+                <div className="media-actions full">
+                  <button
+                    type="submit"
+                    className="cta"
+                    disabled={pending || !(materialTotal > 0)}
+                  >
+                    {editingPurchaseId
+                      ? t.owner.saveSupplyPurchase
+                      : t.owner.addMaterial}
+                  </button>
+                  {editingPurchaseId ? (
+                    <button
+                      type="button"
+                      className="btn ghost compact"
+                      onClick={() => {
+                        setEditingPurchaseId(null);
+                        setMaterial(
+                          blankMaterial(material.kindCode, material.unitCode),
+                        );
+                        setTripOpen(false);
+                      }}
+                    >
+                      {t.owner.cancelEditSupply}
+                    </button>
+                  ) : null}
+                </div>
+              </form>
+              <div className="purchase-cards" style={{ marginTop: "1rem" }}>
+                <p className="muted tiny">{t.owner.supplyPurchasesRecent}</p>
+                {purchases.length === 0 ? (
+                  <p className="muted tiny">{t.owner.analyticsEmpty}</p>
+                ) : (
+                  purchases.slice(0, 12).map((p) => (
+                    <article key={p.id} className="panel-card">
+                      <p className="muted tiny">
+                        {new Date(p.purchasedAt).toLocaleString()}
+                      </p>
+                      {renderPurchaseBreakdown(p)}
+                    </article>
+                  ))
+                )}
+              </div>
+          </section>
+        ) : (
+          <p className="muted">{t.owner.readOnlyHint}</p>
+        )
+      ) : null}
+
+      {tab === "utility" ? (
+        canWrite ? (
+          <section className="wallet-section tone-utility">
+            <h2 className="section-title">{t.owner.expenseDebit}</h2>
+            <p className="muted tiny">{t.owner.collapseExpenseHint}</p>
+              <form className="owner-form compact" onSubmit={onExpense}>
+                <p className="muted tiny full">{t.owner.expenseDebitHint}</p>
+                {editingExpenseId ? (
+                  <p className="ok-banner tiny full">{t.owner.editExpense}</p>
+                ) : null}
+                <label>
+                  {t.owner.fieldExpenseCategory}
+                  <select
+                    value={expense.categoryCode}
+                    onChange={(e) =>
+                      setExpense({ ...expense, categoryCode: e.target.value })
+                    }
+                  >
+                    {(categories.length
+                      ? categories
+                      : [
+                          {
+                            code: "UTILITY",
+                            nameEn: "Utility",
+                            nameBn: "ইউটিলিটি",
+                          },
+                          {
+                            code: "TRANSPORT",
+                            nameEn: "Transport",
+                            nameBn: "পরিবহন",
+                          },
+                          {
+                            code: "DRIVER",
+                            nameEn: "Driver",
+                            nameBn: "ড্রাইভার",
+                          },
+                          {
+                            code: "TRAVEL",
+                            nameEn: "Travel",
+                            nameBn: "ভ্রমণ",
+                          },
+                        ]
+                    ).map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {locale === "bn" ? c.nameBn : c.nameEn}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t.owner.fieldExpenseTitle}
+                  <input
+                    required
+                    value={expense.title}
+                    onChange={(e) =>
+                      setExpense({ ...expense, title: e.target.value })
+                    }
+                    placeholder={t.owner.expenseTitleHint}
+                  />
+                </label>
+                <label>
+                  {t.owner.fieldAmount}
+                  <input
+                    required
+                    type="number"
+                    min={0.01}
+                    step="0.01"
+                    value={expense.amountBdt}
+                    onChange={(e) =>
+                      setExpense({ ...expense, amountBdt: e.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  {t.owner.fieldContactName}
+                  <input
+                    value={expense.contactName}
+                    onChange={(e) =>
+                      setExpense({ ...expense, contactName: e.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  {t.owner.fieldContactPhone}
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    value={expense.contactPhone}
+                    onChange={(e) =>
+                      setExpense({ ...expense, contactPhone: e.target.value })
+                    }
+                  />
+                </label>
+                <label className="full">
+                  {t.owner.fieldNote}
+                  <input
+                    value={expense.note}
+                    onChange={(e) =>
+                      setExpense({ ...expense, note: e.target.value })
+                    }
+                  />
+                </label>
+                <div className="media-actions full">
+                  <button type="submit" className="cta" disabled={pending}>
+                    {editingExpenseId ? t.common.save : t.owner.addExpense}
+                  </button>
+                  {editingExpenseId ? (
+                    <button
+                      type="button"
+                      className="btn ghost compact"
+                      onClick={cancelEditExpense}
+                    >
+                      {t.common.cancel}
+                    </button>
+                  ) : null}
+                </div>
+              </form>
+              <div className="purchase-cards" style={{ marginTop: "1rem" }}>
+                <p className="muted tiny">{t.owner.expensesRecent}</p>
+                {expenses.length === 0 ? (
+                  <p className="muted tiny">{t.owner.analyticsEmpty}</p>
+                ) : (
+                  expenses.slice(0, 12).map((row) => (
+                    <article key={row.id} className="panel-card">
+                      <p className="muted tiny">
+                        {new Date(row.occurredAt).toLocaleString()}
+                      </p>
+                      <div className="cost-breakdown">
+                        <p>
+                          <strong>{row.title}</strong>
+                          <span className="muted tiny">
+                            {" "}
+                            ·{" "}
+                            {locale === "bn"
+                              ? row.category.nameBn
+                              : row.category.nameEn}
+                          </span>
+                        </p>
+                        <ul className="breakdown-list">
+                          <li className="total">
+                            {t.owner.fieldAmount}: ৳
+                            {row.amountBdt.toLocaleString()}
+                          </li>
+                        </ul>
+                        {row.contactName || row.contactPhone ? (
+                          <p className="muted tiny">
+                            {[row.contactName, row.contactPhone]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                        ) : null}
+                        {row.note ? (
+                          <p className="muted tiny">{row.note}</p>
+                        ) : null}
+                        <div className="media-actions">
+                          <button
+                            type="button"
+                            className="btn ghost compact"
+                            onClick={() => startEditExpense(row)}
+                          >
+                            {t.common.edit}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  ))
+                )}
+              </div>
+          </section>
+        ) : (
+          <p className="muted">{t.owner.readOnlyHint}</p>
+        )
+      ) : null}
+
+      {tab === "ledger" ? (
+        <section className="wallet-section tone-wallet">
+          <h2 className="section-title">{t.owner.ledgerTitle}</h2>
+          {isOwner ? (
+            <CollapsePanel
+              id="adjust"
+              title={t.owner.adjustCash}
+              summary={t.owner.collapseAdjustHint}
+              open={adjustOpen}
+              onToggle={() => setAdjustOpen((v) => !v)}
+              tone="wallet"
+            >
+              <form className="owner-form compact" onSubmit={onAdjust}>
+                <label>
+                  {t.owner.fieldTxnType}
+                  <select
+                    value={adjust.typeCode}
+                    onChange={(e) =>
+                      setAdjust({
+                        ...adjust,
+                        typeCode: e.target.value as typeof adjust.typeCode,
+                      })
+                    }
+                  >
+                    <option value="OPENING">{t.owner.txnOpening}</option>
+                    <option value="ADJUSTMENT_IN">{t.owner.txnAdjIn}</option>
+                    <option value="ADJUSTMENT_OUT">{t.owner.txnAdjOut}</option>
+                    <option value="OTHER_IN">{t.owner.txnOtherIn}</option>
+                    <option value="OTHER_OUT">{t.owner.txnOtherOut}</option>
+                  </select>
+                </label>
+                <label>
+                  {t.owner.fieldAmount}
+                  <input
+                    required
+                    type="number"
+                    min={0.01}
+                    step="0.01"
+                    value={adjust.amountBdt}
+                    onChange={(e) =>
+                      setAdjust({ ...adjust, amountBdt: e.target.value })
+                    }
+                  />
+                </label>
+                <label className="full">
+                  {t.owner.fieldNote}
+                  <input
+                    value={adjust.note}
+                    onChange={(e) =>
+                      setAdjust({ ...adjust, note: e.target.value })
+                    }
+                  />
+                </label>
+                <button type="submit" className="cta" disabled={pending}>
+                  {t.owner.applyAdjust}
+                </button>
+              </form>
+            </CollapsePanel>
+          ) : null}
+          <div className="owner-table-wrap">
+            <table className="owner-table">
+              <thead>
+                <tr>
+                  <th>{t.owner.fieldDate}</th>
+                  <th>{t.owner.fieldTxnType}</th>
+                  <th>{t.owner.fieldDirection}</th>
+                  <th>{t.owner.fieldAmount}</th>
+                  <th>{t.owner.fieldBalanceAfter}</th>
+                  <th>{t.owner.fieldNote}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {txns.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="muted">
+                      {t.owner.ledgerEmpty}
+                    </td>
+                  </tr>
+                ) : (
+                  txns.map((txn) => (
+                    <tr key={txn.id}>
+                      <td data-label={t.owner.fieldDate}>
+                        {new Date(txn.occurredAt).toLocaleString()}
+                      </td>
+                      <td data-label={t.owner.fieldTxnType}>
+                        {locale === "bn"
+                          ? (txn.type?.nameBn ?? txn.type?.code)
+                          : (txn.type?.nameEn ?? txn.type?.code)}
+                      </td>
+                      <td
+                        data-label={t.owner.fieldDirection}
+                        className={
+                          txn.type?.direction === "credit"
+                            ? "credit"
+                            : "debit"
+                        }
+                      >
+                        {txn.type?.direction === "credit"
+                          ? t.owner.credit
+                          : t.owner.debit}
+                      </td>
+                      <td data-label={t.owner.fieldAmount}>
+                        ৳{txn.amountBdt.toLocaleString()}
+                      </td>
+                      <td data-label={t.owner.fieldBalanceAfter}>
+                        ৳{txn.balanceAfter.toLocaleString()}
+                      </td>
+                      <td data-label={t.owner.fieldNote}>{txn.note ?? "—"}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
+      {tab === "analytics" && analytics ? (
+        <div className="wallet-analytics wallet-accordion wallet-section tone-analytics">
+          <p className="muted tiny">
+            {t.owner.analyticsHint} ({analytics.days} {t.owner.days})
+          </p>
+
+          <CollapsePanel
+            id="summary"
+            title={t.owner.analyticsSummary}
+            summary={`৳${analytics.totals.netCashFlowBdt.toLocaleString()} ${t.owner.statNetFlow}`}
+            open={openAnalytics === "summary"}
+            onToggle={() =>
+              setOpenAnalytics((v) => (v === "summary" ? null : "summary"))
+            }
+            tone="analytics"
+          >
+            <div className="stat-grid analytics-stats">
+              <article>
+                <p>{t.owner.statSalesIn}</p>
+                <strong className="credit">
+                  ৳{analytics.totals.salesCreditBdt.toLocaleString()}
+                </strong>
+              </article>
+              <article>
+                <p>{t.owner.statMaterialOut}</p>
+                <strong className="debit">
+                  ৳{analytics.totals.materialTotalBdt.toLocaleString()}
+                </strong>
+              </article>
+              <article>
+                <p>{t.owner.costGoods}</p>
+                <strong>
+                  ৳{analytics.totals.materialGoodsBdt.toLocaleString()}
+                </strong>
+              </article>
+              <article>
+                <p>{t.owner.costTransport}</p>
+                <strong>
+                  ৳
+                  {(
+                    analytics.totals.materialTransportBdt +
+                    analytics.totals.standaloneTransportBdt
+                  ).toLocaleString()}
+                </strong>
+              </article>
+              <article>
+                <p>{t.owner.costDriver}</p>
+                <strong>
+                  ৳{analytics.totals.materialDriverBdt.toLocaleString()}
+                </strong>
+              </article>
+              <article>
+                <p>{t.owner.costTravel}</p>
+                <strong>
+                  ৳{analytics.totals.materialTravelBdt.toLocaleString()}
+                </strong>
+              </article>
+              <article>
+                <p>{t.owner.statUtility}</p>
+                <strong>
+                  ৳{analytics.totals.utilityBdt.toLocaleString()}
+                </strong>
+              </article>
+              <article>
+                <p>{t.owner.statNetFlow}</p>
+                <strong
+                  className={
+                    analytics.totals.netCashFlowBdt >= 0 ? "credit" : "debit"
+                  }
+                >
+                  ৳{analytics.totals.netCashFlowBdt.toLocaleString()}
+                </strong>
+              </article>
+            </div>
+          </CollapsePanel>
+
+          <CollapsePanel
+            id="kinds"
+            title={t.owner.bySupplyKind}
+            summary={`${analytics.bySupplyKind.length}`}
+            open={openAnalytics === "kinds"}
+            onToggle={() =>
+              setOpenAnalytics((v) => (v === "kinds" ? null : "kinds"))
+            }
+          >
+            <ul className="plain-list">
+              {analytics.bySupplyKind.length === 0 ? (
+                <li className="muted">{t.owner.analyticsEmpty}</li>
+              ) : (
+                analytics.bySupplyKind.map((k) => (
+                  <li key={k.code}>
+                    <span>
+                      {locale === "bn" ? k.nameBn : k.nameEn}
+                      <div className="muted tiny">
+                        {t.owner.fieldQty}: {k.qty}
+                      </div>
+                    </span>
+                    <span>৳{k.totalBdt.toLocaleString()}</span>
+                  </li>
+                ))
+              )}
+            </ul>
+          </CollapsePanel>
+
+          <CollapsePanel
+            id="expenses"
+            title={t.owner.byExpenseCategory}
+            summary={`${analytics.byExpenseCategory.length}`}
+            open={openAnalytics === "expenses"}
+            onToggle={() =>
+              setOpenAnalytics((v) => (v === "expenses" ? null : "expenses"))
+            }
+          >
+            <ul className="plain-list">
+              {analytics.byExpenseCategory.length === 0 ? (
+                <li className="muted">{t.owner.analyticsEmpty}</li>
+              ) : (
+                analytics.byExpenseCategory.map((c) => (
+                  <li key={c.code}>
+                    <span>
+                      {locale === "bn" ? c.nameBn : c.nameEn}
+                      <div className="muted tiny">{c.count}×</div>
+                    </span>
+                    <span>৳{c.totalBdt.toLocaleString()}</span>
+                  </li>
+                ))
+              )}
+            </ul>
+          </CollapsePanel>
+
+          <CollapsePanel
+            id="purchases"
+            title={t.owner.supplyPurchases}
+            summary={`${analytics.purchases.length}`}
+            open={openAnalytics === "purchases"}
+            onToggle={() =>
+              setOpenAnalytics((v) =>
+                v === "purchases" ? null : "purchases",
+              )
+            }
+          >
+            <p className="muted tiny">{t.owner.landedCostHint}</p>
+            <div className="purchase-cards">
+              {analytics.purchases.length === 0 ? (
+                <p className="muted">{t.owner.analyticsEmpty}</p>
+              ) : (
+                analytics.purchases.map((p) => (
+                  <article key={p.id} className="panel-card">
+                    <p className="muted tiny">
+                      {new Date(p.purchasedAt).toLocaleString()}
+                    </p>
+                    {renderPurchaseBreakdown(p)}
+                  </article>
+                ))
+              )}
+            </div>
+          </CollapsePanel>
+
+          <CollapsePanel
+            id="txns"
+            title={t.owner.txnBreakdown}
+            summary={`${analytics.transactions.length}`}
+            open={openAnalytics === "txns"}
+            onToggle={() =>
+              setOpenAnalytics((v) => (v === "txns" ? null : "txns"))
+            }
+          >
+            <ul className="txn-breakdown-list">
+              {analytics.transactions.map((txn) => {
+                const open = expandedTxn === txn.id;
+                const detail = txn.detail as SupplyPurchase | null;
+                return (
+                  <li key={txn.id}>
+                    <button
+                      type="button"
+                      className="history-item"
+                      onClick={() =>
+                        setExpandedTxn(open ? null : txn.id)
+                      }
+                    >
+                      <span>
+                        {locale === "bn"
+                          ? (txn.type?.nameBn ?? txn.type?.code)
+                          : (txn.type?.nameEn ?? txn.type?.code)}
+                        <div className="muted tiny">
+                          {new Date(txn.occurredAt).toLocaleString()}
+                          {txn.detailType === "material"
+                            ? ` · ${t.owner.tapForBreakdown}`
+                            : ""}
+                        </div>
+                      </span>
+                      <span
+                        className={
+                          txn.type?.direction === "credit"
+                            ? "credit"
+                            : "debit"
+                        }
+                      >
+                        ৳{txn.amountBdt.toLocaleString()}
+                      </span>
+                    </button>
+                    {open && txn.detailType === "material" && detail ? (
+                      <div className="txn-detail panel-card">
+                        {renderPurchaseBreakdown(detail)}
+                      </div>
+                    ) : null}
+                    {open && txn.detailType === "expense" && txn.detail ? (
+                      <div className="txn-detail panel-card">
+                        {(() => {
+                          const d = txn.detail as {
+                            title: string;
+                            amountBdt: number;
+                            contactName?: string | null;
+                            contactPhone?: string | null;
+                            category?: {
+                              code: string;
+                              nameEn: string;
+                              nameBn: string;
+                            };
+                          };
+                          return (
+                            <>
+                              <p>
+                                <strong>{d.title}</strong>
+                                {d.category ? (
+                                  <span className="muted tiny">
+                                    {" "}
+                                    ·{" "}
+                                    {locale === "bn"
+                                      ? d.category.nameBn
+                                      : d.category.nameEn}
+                                  </span>
+                                ) : null}
+                              </p>
+                              <p className="muted tiny">
+                                ৳{d.amountBdt.toLocaleString()}
+                                {d.contactName || d.contactPhone
+                                  ? ` · ${[d.contactName, d.contactPhone].filter(Boolean).join(" · ")}`
+                                  : ""}
+                              </p>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </CollapsePanel>
+        </div>
+      ) : null}
+
+      {tab === "analytics" && !analytics ? (
+        <p className="muted">{pending ? "…" : t.owner.analyticsEmpty}</p>
+      ) : null}
+    </div>
+  );
+}

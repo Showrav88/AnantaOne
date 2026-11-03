@@ -1,0 +1,955 @@
+import { Router } from "express";
+import { z } from "zod";
+import { prisma } from "../db.js";
+import { requireAuth } from "../middleware/auth.js";
+import {
+  requireCompanyStaff,
+  requireOwnerOrManager,
+} from "../middleware/companyAccess.js";
+import { normalizeCategory } from "../lib/delivery.js";
+import {
+  ensureBdGeoSeeded,
+  getOrCreateDeliverySettings,
+  seedWardsForCompanyLocation,
+} from "../lib/bdGeo.js";
+import {
+  acceptOnlineOrder,
+  serializeOnlineOrder,
+  setOnlineOrderStatus,
+} from "../lib/onlineOrder.js";
+import {
+  branchFilter,
+  canAccessBranch,
+  resolveBranchScope,
+} from "../lib/branchScope.js";
+
+export const ownerCommerceRouter = Router();
+ownerCommerceRouter.use(requireAuth, requireCompanyStaff);
+
+function tid(req: { auth?: { tenantId: string | null } }) {
+  return req.auth!.tenantId!;
+}
+
+function serializeBuyer(b: {
+  id: string;
+  shopName: string;
+  contactName: string | null;
+  phone: string;
+  address: string | null;
+  wardId: string | null;
+  locale: string;
+  isActive: boolean;
+  ward?: { id: string; name: string; nameBn: string | null } | null;
+  _count?: { salesOrders: number };
+  orderStats?: { orderCount: number; totalSpentBdt: number };
+}) {
+  return {
+    id: b.id,
+    shopName: b.shopName,
+    contactName: b.contactName,
+    phone: b.phone,
+    address: b.address,
+    wardId: b.wardId,
+    ward: b.ward
+      ? { id: b.ward.id, name: b.ward.name, nameBn: b.ward.nameBn }
+      : null,
+    locale: b.locale,
+    isActive: b.isActive,
+    orderCount: b.orderStats?.orderCount ?? b._count?.salesOrders ?? 0,
+    totalSpentBdt: b.orderStats?.totalSpentBdt ?? 0,
+  };
+}
+
+const buyerSchema = z.object({
+  shopName: z.string().min(2).max(160),
+  contactName: z.string().max(120).nullable().optional(),
+  phone: z.string().min(6).max(32),
+  address: z.string().max(240).nullable().optional(),
+  wardId: z.string().cuid().nullable().optional(),
+  locale: z.enum(["bn", "en"]).optional(),
+  isActive: z.boolean().optional(),
+});
+
+ownerCommerceRouter.get("/buyers", async (req, res) => {
+  const buyers = await prisma.buyer.findMany({
+    where: { tenantId: tid(req) },
+    include: {
+      ward: true,
+      salesOrders: {
+        where: { status: { code: { notIn: ["CANCELLED", "REVERSED"] } } },
+        select: { totalBdt: true },
+      },
+    },
+    orderBy: { shopName: "asc" },
+  });
+
+  res.json({
+    ok: true,
+    buyers: buyers.map((b) =>
+      serializeBuyer({
+        ...b,
+        orderStats: {
+          orderCount: b.salesOrders.length,
+          totalSpentBdt: b.salesOrders.reduce(
+            (s, o) => s + Number(o.totalBdt),
+            0,
+          ),
+        },
+      }),
+    ),
+  });
+});
+
+const buyerCountedStatuses = [
+  "ACCEPTED",
+  "CONFIRMED",
+  "OUT_FOR_DELIVERY",
+  "DELIVERED",
+] as const;
+
+ownerCommerceRouter.get("/buyers/analytics", async (req, res) => {
+  const buyers = await prisma.buyer.findMany({
+    where: { tenantId: tid(req), isActive: true },
+    include: {
+      ward: true,
+      salesOrders: {
+        where: {
+          status: { code: { in: [...buyerCountedStatuses] } },
+        },
+        select: {
+          totalBdt: true,
+          subtotalBdt: true,
+          orderedAt: true,
+          source: { select: { code: true } },
+        },
+      },
+    },
+  });
+
+  const rows = buyers
+    .map((b) => {
+      const totalSpentBdt = b.salesOrders.reduce(
+        (s, o) => s + Number(o.totalBdt),
+        0,
+      );
+      const onlineSpentBdt = b.salesOrders
+        .filter((o) => o.source.code === "ONLINE")
+        .reduce((s, o) => s + Number(o.totalBdt), 0);
+      return {
+        id: b.id,
+        shopName: b.shopName,
+        contactName: b.contactName,
+        phone: b.phone,
+        ward: b.ward
+          ? { id: b.ward.id, name: b.ward.name, nameBn: b.ward.nameBn }
+          : null,
+        orderCount: b.salesOrders.length,
+        totalSpentBdt,
+        onlineSpentBdt,
+        lastOrderAt: b.salesOrders.length
+          ? [...b.salesOrders].sort(
+              (a, c) => c.orderedAt.getTime() - a.orderedAt.getTime(),
+            )[0]!.orderedAt
+          : null,
+      };
+    })
+    .sort((a, b) => b.totalSpentBdt - a.totalSpentBdt);
+
+  res.json({
+    ok: true,
+    analytics: {
+      buyerCount: rows.length,
+      totalRevenueBdt: rows.reduce((s, r) => s + r.totalSpentBdt, 0),
+      buyers: rows,
+    },
+  });
+});
+
+ownerCommerceRouter.get("/buyers/:id/analytics", async (req, res) => {
+  const buyer = await prisma.buyer.findFirst({
+    where: { id: String(req.params.id), tenantId: tid(req) },
+    include: {
+      ward: true,
+      salesOrders: {
+        where: {
+          status: { code: { in: [...buyerCountedStatuses] } },
+        },
+        include: {
+          source: true,
+          status: true,
+          lines: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  nameBn: true,
+                  sku: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { orderedAt: "desc" },
+      },
+    },
+  });
+  if (!buyer) {
+    res.status(404).json({ ok: false, message: "Buyer not found" });
+    return;
+  }
+
+  const productMap = new Map<
+    string,
+    {
+      productId: string;
+      name: string;
+      nameBn: string | null;
+      sku: string;
+      qty: number;
+      lineTotalBdt: number;
+      orderCount: number;
+    }
+  >();
+
+  let totalSpentBdt = 0;
+  let onlineSpentBdt = 0;
+  let counterSpentBdt = 0;
+
+  for (const order of buyer.salesOrders) {
+    const orderTotal = Number(order.totalBdt);
+    totalSpentBdt += orderTotal;
+    if (order.source.code === "ONLINE") onlineSpentBdt += orderTotal;
+    else counterSpentBdt += orderTotal;
+
+    const seenInOrder = new Set<string>();
+    for (const line of order.lines) {
+      const productId = line.productId;
+      const prev = productMap.get(productId) ?? {
+        productId,
+        name: line.product?.name ?? productId,
+        nameBn: line.product?.nameBn ?? null,
+        sku: line.product?.sku ?? "",
+        qty: 0,
+        lineTotalBdt: 0,
+        orderCount: 0,
+      };
+      prev.qty += Number(line.qty);
+      prev.lineTotalBdt += Number(line.lineTotalBdt);
+      if (!seenInOrder.has(productId)) {
+        prev.orderCount += 1;
+        seenInOrder.add(productId);
+      }
+      productMap.set(productId, prev);
+    }
+  }
+
+  const products = [...productMap.values()].sort(
+    (a, b) => b.lineTotalBdt - a.lineTotalBdt,
+  );
+
+  const recentOrders = buyer.salesOrders.slice(0, 30).map((o) => ({
+    id: o.id,
+    invoiceCode: o.invoiceCode,
+    orderedAt: o.orderedAt,
+    totalBdt: Number(o.totalBdt),
+    subtotalBdt: Number(o.subtotalBdt),
+    source: o.source
+      ? { code: o.source.code, nameEn: o.source.nameEn, nameBn: o.source.nameBn }
+      : null,
+    status: o.status
+      ? { code: o.status.code, nameEn: o.status.nameEn, nameBn: o.status.nameBn }
+      : null,
+    lines: o.lines.map((l) => ({
+      productId: l.productId,
+      qty: Number(l.qty),
+      unitPriceBdt: Number(l.unitPriceBdt),
+      lineTotalBdt: Number(l.lineTotalBdt),
+      product: l.product
+        ? {
+            id: l.product.id,
+            name: l.product.name,
+            nameBn: l.product.nameBn,
+            sku: l.product.sku,
+          }
+        : null,
+    })),
+  }));
+
+  res.json({
+    ok: true,
+    buyer: serializeBuyer(buyer),
+    analytics: {
+      orderCount: buyer.salesOrders.length,
+      totalSpentBdt,
+      onlineSpentBdt,
+      counterSpentBdt,
+      lastOrderAt: buyer.salesOrders[0]?.orderedAt ?? null,
+      products,
+      recentOrders,
+    },
+  });
+});
+
+ownerCommerceRouter.post("/buyers", requireOwnerOrManager, async (req, res) => {
+  const parsed = buyerSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, message: parsed.error.message });
+    return;
+  }
+  try {
+    const buyer = await prisma.buyer.create({
+      data: {
+        tenantId: tid(req),
+        shopName: parsed.data.shopName,
+        contactName: parsed.data.contactName ?? null,
+        phone: parsed.data.phone.trim(),
+        address: parsed.data.address ?? null,
+        wardId: parsed.data.wardId ?? null,
+        locale: parsed.data.locale ?? "bn",
+        isActive: parsed.data.isActive ?? true,
+      },
+      include: { ward: true },
+    });
+    res.status(201).json({ ok: true, buyer: serializeBuyer(buyer) });
+  } catch (err) {
+    res.status(400).json({
+      ok: false,
+      message: err instanceof Error ? err.message : "Create failed",
+    });
+  }
+});
+
+ownerCommerceRouter.patch(
+  "/buyers/:id",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const parsed = buyerSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: parsed.error.message });
+      return;
+    }
+    const existing = await prisma.buyer.findFirst({
+      where: { id: String(req.params.id), tenantId: tid(req) },
+    });
+    if (!existing) {
+      res.status(404).json({ ok: false, message: "Buyer not found" });
+      return;
+    }
+    const buyer = await prisma.buyer.update({
+      where: { id: existing.id },
+      data: {
+        ...parsed.data,
+        phone: parsed.data.phone?.trim(),
+      },
+      include: { ward: true },
+    });
+    res.json({ ok: true, buyer: serializeBuyer(buyer) });
+  },
+);
+
+/* —— Delivery wards —— */
+ownerCommerceRouter.get("/delivery/wards", async (req, res) => {
+  const scope = resolveBranchScope(req);
+  const requested = req.query.branchId ? String(req.query.branchId) : undefined;
+  const branchId =
+    req.auth!.roleCode === "OWNER"
+      ? requested ?? (scope.mode === "one" ? scope.branchId ?? undefined : undefined)
+      : scope.branchId ?? undefined;
+  const wards = await prisma.deliveryWard.findMany({
+    where: {
+      tenantId: tid(req),
+      ...(branchId ? { OR: [{ branchId: null }, { branchId }] } : {}),
+    },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
+  res.json({
+    ok: true,
+    wards: wards.map((w) => ({
+      id: w.id,
+      branchId: w.branchId,
+      districtId: w.districtId,
+      upazilaId: w.upazilaId,
+      name: w.name,
+      nameBn: w.nameBn,
+      sortOrder: w.sortOrder,
+      freeDelivery: w.freeDelivery,
+      baseChargeBdt: Number(w.baseChargeBdt),
+      isActive: w.isActive,
+    })),
+  });
+});
+
+const wardSchema = z.object({
+  name: z.string().min(1).max(80),
+  nameBn: z.string().max(80).nullable().optional(),
+  branchId: z.string().cuid().nullable().optional(),
+  sortOrder: z.coerce.number().int().optional(),
+  freeDelivery: z.boolean().optional(),
+  baseChargeBdt: z.coerce.number().nonnegative().optional(),
+  isActive: z.boolean().optional(),
+});
+
+ownerCommerceRouter.post(
+  "/delivery/wards",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const parsed = wardSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: parsed.error.message });
+      return;
+    }
+    const ward = await prisma.deliveryWard.create({
+      data: {
+        tenantId: tid(req),
+        name: parsed.data.name,
+        nameBn: parsed.data.nameBn ?? null,
+        branchId: parsed.data.branchId ?? null,
+        sortOrder: parsed.data.sortOrder ?? 0,
+        freeDelivery: parsed.data.freeDelivery ?? false,
+        baseChargeBdt: parsed.data.baseChargeBdt ?? 0,
+        isActive: parsed.data.isActive ?? true,
+      },
+    });
+    res.status(201).json({
+      ok: true,
+      ward: {
+        ...ward,
+        baseChargeBdt: Number(ward.baseChargeBdt),
+      },
+    });
+  },
+);
+
+ownerCommerceRouter.patch(
+  "/delivery/wards/:id",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const parsed = wardSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: parsed.error.message });
+      return;
+    }
+    const existing = await prisma.deliveryWard.findFirst({
+      where: { id: String(req.params.id), tenantId: tid(req) },
+    });
+    if (!existing) {
+      res.status(404).json({ ok: false, message: "Ward not found" });
+      return;
+    }
+    const ward = await prisma.deliveryWard.update({
+      where: { id: existing.id },
+      data: parsed.data,
+    });
+    res.json({
+      ok: true,
+      ward: { ...ward, baseChargeBdt: Number(ward.baseChargeBdt) },
+    });
+  },
+);
+
+ownerCommerceRouter.post(
+  "/delivery/wards/seed-area",
+  requireOwnerOrManager,
+  async (req, res) => {
+    await ensureBdGeoSeeded();
+    const tenantId = tid(req);
+    const company = await prisma.company.findUniqueOrThrow({
+      where: { id: tenantId },
+    });
+    const body = z
+      .object({
+        branchId: z.string().cuid().nullable().optional(),
+        districtId: z.string().cuid().optional(),
+        upazilaId: z.string().cuid().optional(),
+        wardCount: z.coerce.number().int().min(1).max(50).optional(),
+        freeWardCount: z.coerce.number().int().min(0).max(50).optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) {
+      res.status(400).json({ ok: false, message: body.error.message });
+      return;
+    }
+
+    const districtId = body.data.districtId ?? company.districtId;
+    const upazilaId = body.data.upazilaId ?? company.upazilaId;
+    if (!districtId || !upazilaId) {
+      res.status(400).json({
+        ok: false,
+        message:
+          "Set company division → district → upazila first (Company page)",
+      });
+      return;
+    }
+
+    const created = await seedWardsForCompanyLocation({
+      tenantId,
+      branchId: body.data.branchId ?? null,
+      districtId,
+      upazilaId,
+      wardCount: body.data.wardCount,
+      freeWardCount: body.data.freeWardCount,
+    });
+
+    res.json({
+      ok: true,
+      wards: created.map((w) => ({
+        ...w,
+        baseChargeBdt: Number(w.baseChargeBdt),
+      })),
+    });
+  },
+);
+
+/** @deprecated alias — use seed-area */
+ownerCommerceRouter.post(
+  "/delivery/wards/seed-lakshmipur",
+  requireOwnerOrManager,
+  async (req, res) => {
+    await ensureBdGeoSeeded();
+    const tenantId = tid(req);
+    let company = await prisma.company.findUniqueOrThrow({
+      where: { id: tenantId },
+    });
+
+    if (!company.upazilaId) {
+      const upazila = await prisma.bdUpazila.findFirst({
+        where: { code: "lakshmipur-01" },
+        include: { district: true },
+      });
+      if (upazila) {
+        company = await prisma.company.update({
+          where: { id: tenantId },
+          data: {
+            divisionId: upazila.district.divisionId,
+            districtId: upazila.districtId,
+            upazilaId: upazila.id,
+          },
+        });
+      }
+    }
+
+    if (!company.districtId || !company.upazilaId) {
+      res.status(400).json({
+        ok: false,
+        message: "Could not resolve Lakshmipur Sadar — set company location",
+      });
+      return;
+    }
+
+    const created = await seedWardsForCompanyLocation({
+      tenantId,
+      branchId:
+        typeof req.body?.branchId === "string" ? req.body.branchId : null,
+      districtId: company.districtId,
+      upazilaId: company.upazilaId,
+      wardCount: 15,
+      freeWardCount: 5,
+    });
+
+    res.json({
+      ok: true,
+      wards: created.map((w) => ({
+        ...w,
+        baseChargeBdt: Number(w.baseChargeBdt),
+      })),
+    });
+  },
+);
+
+ownerCommerceRouter.get("/delivery/settings", async (req, res) => {
+  const settings = await getOrCreateDeliverySettings(tid(req));
+  res.json({
+    ok: true,
+    settings: {
+      outsideAreaChargeBdt: Number(settings.outsideAreaChargeBdt),
+      sameDistrictChargeBdt: Number(settings.sameDistrictChargeBdt),
+      otherDistrictChargeBdt: Number(settings.otherDistrictChargeBdt),
+      defaultWardCount: settings.defaultWardCount,
+      freeWardCount: settings.freeWardCount,
+    },
+  });
+});
+
+ownerCommerceRouter.patch(
+  "/delivery/settings",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const parsed = z
+      .object({
+        outsideAreaChargeBdt: z.coerce.number().nonnegative().optional(),
+        sameDistrictChargeBdt: z.coerce.number().nonnegative().optional(),
+        otherDistrictChargeBdt: z.coerce.number().nonnegative().optional(),
+        defaultWardCount: z.coerce.number().int().min(1).max(50).optional(),
+        freeWardCount: z.coerce.number().int().min(0).max(50).optional(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: parsed.error.message });
+      return;
+    }
+    await getOrCreateDeliverySettings(tid(req));
+    const settings = await prisma.deliverySettings.update({
+      where: { tenantId: tid(req) },
+      data: parsed.data,
+    });
+    res.json({
+      ok: true,
+      settings: {
+        outsideAreaChargeBdt: Number(settings.outsideAreaChargeBdt),
+        sameDistrictChargeBdt: Number(settings.sameDistrictChargeBdt),
+        otherDistrictChargeBdt: Number(settings.otherDistrictChargeBdt),
+        defaultWardCount: settings.defaultWardCount,
+        freeWardCount: settings.freeWardCount,
+      },
+    });
+  },
+);
+
+/* —— Category delivery rates —— */
+ownerCommerceRouter.get("/delivery/rates", async (req, res) => {
+  const rates = await prisma.deliveryCategoryRate.findMany({
+    where: { tenantId: tid(req) },
+    orderBy: { category: "asc" },
+  });
+  res.json({
+    ok: true,
+    rates: rates.map((r) => ({
+      id: r.id,
+      category: r.category,
+      chargePerUnitBdt: Number(r.chargePerUnitBdt),
+      note: r.note,
+      isActive: r.isActive,
+    })),
+  });
+});
+
+const rateSchema = z.object({
+  category: z.string().min(1).max(32),
+  chargePerUnitBdt: z.coerce.number().nonnegative(),
+  note: z.string().max(200).nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+ownerCommerceRouter.post(
+  "/delivery/rates",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const parsed = rateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: parsed.error.message });
+      return;
+    }
+    const category = normalizeCategory(parsed.data.category);
+    const rate = await prisma.deliveryCategoryRate.upsert({
+      where: {
+        tenantId_category: { tenantId: tid(req), category },
+      },
+      create: {
+        tenantId: tid(req),
+        category,
+        chargePerUnitBdt: parsed.data.chargePerUnitBdt,
+        note: parsed.data.note ?? null,
+        isActive: parsed.data.isActive ?? true,
+      },
+      update: {
+        chargePerUnitBdt: parsed.data.chargePerUnitBdt,
+        note: parsed.data.note ?? null,
+        isActive: parsed.data.isActive ?? true,
+      },
+    });
+    res.json({
+      ok: true,
+      rate: {
+        ...rate,
+        chargePerUnitBdt: Number(rate.chargePerUnitBdt),
+      },
+    });
+  },
+);
+
+/* —— Coupons —— */
+ownerCommerceRouter.get("/coupons", async (req, res) => {
+  const coupons = await prisma.coupon.findMany({
+    where: { tenantId: tid(req) },
+    orderBy: { createdAt: "desc" },
+  });
+  res.json({
+    ok: true,
+    coupons: coupons.map((c) => ({
+      id: c.id,
+      code: c.code,
+      discountType: c.discountType,
+      discountValue: Number(c.discountValue),
+      minOrderBdt: c.minOrderBdt != null ? Number(c.minOrderBdt) : null,
+      maxDiscountBdt:
+        c.maxDiscountBdt != null ? Number(c.maxDiscountBdt) : null,
+      startsAt: c.startsAt,
+      endsAt: c.endsAt,
+      usageLimit: c.usageLimit,
+      usedCount: c.usedCount,
+      isActive: c.isActive,
+    })),
+  });
+});
+
+const couponSchema = z.object({
+  code: z.string().min(2).max(40),
+  discountType: z.enum(["PERCENT", "FIXED"]),
+  discountValue: z.coerce.number().positive(),
+  minOrderBdt: z.coerce.number().nonnegative().nullable().optional(),
+  maxDiscountBdt: z.coerce.number().nonnegative().nullable().optional(),
+  startsAt: z.string().datetime().nullable().optional(),
+  endsAt: z.string().datetime().nullable().optional(),
+  usageLimit: z.coerce.number().int().positive().nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+ownerCommerceRouter.post("/coupons", requireOwnerOrManager, async (req, res) => {
+  const parsed = couponSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, message: parsed.error.message });
+    return;
+  }
+  const coupon = await prisma.coupon.create({
+    data: {
+      tenantId: tid(req),
+      code: parsed.data.code.trim().toUpperCase(),
+      discountType: parsed.data.discountType,
+      discountValue: parsed.data.discountValue,
+      minOrderBdt: parsed.data.minOrderBdt ?? null,
+      maxDiscountBdt: parsed.data.maxDiscountBdt ?? null,
+      startsAt: parsed.data.startsAt ? new Date(parsed.data.startsAt) : null,
+      endsAt: parsed.data.endsAt ? new Date(parsed.data.endsAt) : null,
+      usageLimit: parsed.data.usageLimit ?? null,
+      isActive: parsed.data.isActive ?? true,
+    },
+  });
+  res.status(201).json({
+    ok: true,
+    coupon: {
+      ...coupon,
+      discountValue: Number(coupon.discountValue),
+      minOrderBdt:
+        coupon.minOrderBdt != null ? Number(coupon.minOrderBdt) : null,
+      maxDiscountBdt:
+        coupon.maxDiscountBdt != null ? Number(coupon.maxDiscountBdt) : null,
+    },
+  });
+});
+
+ownerCommerceRouter.patch(
+  "/coupons/:id",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const parsed = couponSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, message: parsed.error.message });
+      return;
+    }
+    const existing = await prisma.coupon.findFirst({
+      where: { id: String(req.params.id), tenantId: tid(req) },
+    });
+    if (!existing) {
+      res.status(404).json({ ok: false, message: "Coupon not found" });
+      return;
+    }
+    const coupon = await prisma.coupon.update({
+      where: { id: existing.id },
+      data: {
+        ...parsed.data,
+        code: parsed.data.code?.trim().toUpperCase(),
+        startsAt:
+          parsed.data.startsAt !== undefined
+            ? parsed.data.startsAt
+              ? new Date(parsed.data.startsAt)
+              : null
+            : undefined,
+        endsAt:
+          parsed.data.endsAt !== undefined
+            ? parsed.data.endsAt
+              ? new Date(parsed.data.endsAt)
+              : null
+            : undefined,
+      },
+    });
+    res.json({
+      ok: true,
+      coupon: {
+        ...coupon,
+        discountValue: Number(coupon.discountValue),
+        minOrderBdt:
+          coupon.minOrderBdt != null ? Number(coupon.minOrderBdt) : null,
+        maxDiscountBdt:
+          coupon.maxDiscountBdt != null ? Number(coupon.maxDiscountBdt) : null,
+      },
+    });
+  },
+);
+
+/* —— Online orders —— */
+ownerCommerceRouter.get("/online-orders", async (req, res) => {
+  const status = req.query.status ? String(req.query.status) : undefined;
+  const scope = resolveBranchScope(req);
+  const orders = await prisma.salesOrder.findMany({
+    where: {
+      tenantId: tid(req),
+      source: { code: "ONLINE" },
+      ...branchFilter(scope),
+      ...(status ? { status: { code: status } } : {}),
+    },
+    include: {
+      source: true,
+      status: true,
+      buyer: true,
+      ward: true,
+      coupon: true,
+      lines: { include: { product: true, batch: true } },
+    },
+    orderBy: { orderedAt: "desc" },
+    take: 100,
+  });
+  res.json({
+    ok: true,
+    orders: orders.map(serializeOnlineOrder),
+  });
+});
+
+ownerCommerceRouter.get("/online-orders/:id", async (req, res) => {
+  const scope = resolveBranchScope(req);
+  const order = await prisma.salesOrder.findFirst({
+    where: {
+      id: String(req.params.id),
+      tenantId: tid(req),
+      source: { code: "ONLINE" },
+    },
+    include: {
+      source: true,
+      status: true,
+      buyer: true,
+      ward: true,
+      coupon: true,
+      lines: { include: { product: true, batch: true } },
+    },
+  });
+  if (!order) {
+    res.status(404).json({ ok: false, message: "Order not found" });
+    return;
+  }
+  if (!canAccessBranch(scope, order.branchId)) {
+    res.status(403).json({ ok: false, message: "Order belongs to another branch" });
+    return;
+  }
+  res.json({ ok: true, order: serializeOnlineOrder(order) });
+});
+
+ownerCommerceRouter.post(
+  "/online-orders/:id/accept",
+  requireOwnerOrManager,
+  async (req, res) => {
+    try {
+      const scope = resolveBranchScope(req);
+      const existing = await prisma.salesOrder.findFirst({
+        where: { id: String(req.params.id), tenantId: tid(req) },
+        select: { branchId: true },
+      });
+      if (!existing) {
+        res.status(404).json({ ok: false, message: "Order not found" });
+        return;
+      }
+      if (!canAccessBranch(scope, existing.branchId)) {
+        res.status(403).json({ ok: false, message: "Order belongs to another branch" });
+        return;
+      }
+      const lineSchema = z.object({
+        productId: z.string().min(1),
+        qty: z.coerce.number().positive(),
+        unitPriceBdt: z.coerce.number().nonnegative().optional(),
+        batchId: z.string().cuid().nullable().optional(),
+        produceBatch: z
+          .object({
+            batchCode: z.string().min(1).max(64).nullable().optional(),
+            manufacturedAt: z
+              .string()
+              .datetime()
+              .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/))
+              .optional(),
+            expiresAt: z
+              .string()
+              .datetime()
+              .or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/))
+              .nullable()
+              .optional(),
+            generateUnitTags: z.boolean().optional(),
+            note: z.string().max(500).nullable().optional(),
+          })
+          .nullable()
+          .optional(),
+      });
+      const body = z
+        .object({
+          creditWallet: z.boolean().optional(),
+          lines: z.array(lineSchema).optional(),
+        })
+        .safeParse(req.body ?? {});
+      if (!body.success) {
+        res.status(400).json({ ok: false, message: body.error.message });
+        return;
+      }
+      const order = await acceptOnlineOrder({
+        tenantId: tid(req),
+        orderId: String(req.params.id),
+        userId: req.auth!.id,
+        creditWallet: body.data.creditWallet !== false,
+        lines: body.data.lines,
+      });
+      res.json({ ok: true, order });
+    } catch (err) {
+      res.status(400).json({
+        ok: false,
+        message: err instanceof Error ? err.message : "Accept failed",
+      });
+    }
+  },
+);
+
+ownerCommerceRouter.post(
+  "/online-orders/:id/status",
+  requireOwnerOrManager,
+  async (req, res) => {
+    const statusCode = String(req.body?.statusCode ?? "");
+    if (
+      !["OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"].includes(statusCode)
+    ) {
+      res.status(400).json({ ok: false, message: "Invalid statusCode" });
+      return;
+    }
+    try {
+      const scope = resolveBranchScope(req);
+      const existing = await prisma.salesOrder.findFirst({
+        where: { id: String(req.params.id), tenantId: tid(req) },
+        select: { branchId: true },
+      });
+      if (!existing) {
+        res.status(404).json({ ok: false, message: "Order not found" });
+        return;
+      }
+      if (!canAccessBranch(scope, existing.branchId)) {
+        res.status(403).json({ ok: false, message: "Order belongs to another branch" });
+        return;
+      }
+      const order = await setOnlineOrderStatus({
+        tenantId: tid(req),
+        orderId: String(req.params.id),
+        userId: req.auth!.id,
+        statusCode: statusCode as "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED",
+      });
+      res.json({ ok: true, order });
+    } catch (err) {
+      res.status(400).json({
+        ok: false,
+        message: err instanceof Error ? err.message : "Update failed",
+      });
+    }
+  },
+);

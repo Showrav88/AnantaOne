@@ -1,0 +1,870 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Platform + tenant roles live in a lookup table (not Postgres enums).
+model RoleLookup {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  nameEn      String
+  nameBn      String
+  scope       String // platform | tenant
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users User[]
+}
+
+/// Product units live in a lookup table (not Postgres enums).
+model UnitLookup {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  nameEn    String
+  nameBn    String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products           Product[]
+  materialPurchases  MaterialPurchase[]
+  materials          Material[]
+}
+
+/// Bangladesh division (বিভাগ) — shared reference data.
+model BdDivision {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  nameBn    String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  districts BdDistrict[]
+  companies Company[]
+}
+
+/// Bangladesh district / zila (জেলা).
+model BdDistrict {
+  id         String   @id @default(cuid())
+  divisionId String
+  code       String   @unique
+  name       String
+  nameBn     String?
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  division  BdDivision  @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  upazilas  BdUpazila[]
+  companies Company[]
+  wards     DeliveryWard[]
+  orders    SalesOrder[]
+
+  @@index([divisionId])
+}
+
+/// Bangladesh upazila (উপজেলা).
+model BdUpazila {
+  id         String   @id @default(cuid())
+  districtId String
+  code       String   @unique
+  name       String
+  nameBn     String?
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  district  BdDistrict    @relation(fields: [districtId], references: [id], onDelete: Cascade)
+  companies Company[]
+  wards     DeliveryWard[]
+  orders    SalesOrder[]
+
+  @@index([districtId])
+}
+
+model Company {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  locale      String   @default("bn")
+  phone       String?
+  address     String?
+  /// Structured BD location for delivery area setup.
+  divisionId  String?
+  districtId  String?
+  upazilaId   String?
+  tagline     String?
+  description String?
+  /// Public shop branding (Cloudinary URLs + theme).
+  logoUrl           String?
+  logoPublicId      String?
+  heroImageUrl      String?
+  heroImagePublicId String?
+  heroVideoUrl      String?
+  heroVideoPublicId String?
+  brandPrimary      String?  @default("#0f6b4c")
+  brandAccent       String?  @default("#f42a41")
+  brandBg           String?  @default("#06281f")
+  brandFont         String?  @default("source-sans")
+  siteHeadline      String?
+  siteSubhead       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  branches           Branch[]
+  users              User[]
+  buyers             Buyer[]
+  materials          Material[]
+  products           Product[]
+  cashWallet         CashWallet?
+  cashTransactions   CashTransaction[]
+  salaryPayments     SalaryPayment[]
+  sales              Sale[]
+  materialPurchases  MaterialPurchase[]
+  cashExpenses       CashExpense[]
+  productionBatches  ProductionBatch[]
+  productUnits       ProductUnit[]
+  salesOrders        SalesOrder[]
+  tagTemplates       TagTemplate[]
+  mediaAssets        MediaAsset[]
+  deliveryWards      DeliveryWard[]
+  deliveryRates      DeliveryCategoryRate[]
+  deliverySettings   DeliverySettings?
+  coupons            Coupon[]
+  division           BdDivision? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+  district           BdDistrict? @relation(fields: [districtId], references: [id], onDelete: SetNull)
+  upazila            BdUpazila?  @relation(fields: [upazilaId], references: [id], onDelete: SetNull)
+
+  @@index([divisionId])
+  @@index([districtId])
+  @@index([upazilaId])
+}
+
+/// Tenant media library — images/videos in Cloudinary folder anantaone/{slug}/...
+model MediaAsset {
+  id           String   @id @default(cuid())
+  tenantId     String
+  kind         String // IMAGE | VIDEO
+  url          String
+  publicId     String
+  folder       String
+  format       String?
+  bytes        Int?
+  width        Int?
+  height       Int?
+  durationSec  Float?
+  originalName String?
+  label        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company Company @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, publicId])
+  @@index([tenantId])
+  @@index([tenantId, kind])
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  address   String?
+  phone     String?
+  isActive  Boolean  @default(true)
+  /// Designated branch manager (company staff user).
+  managerId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company       Company        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  manager       User?          @relation("BranchManager", fields: [managerId], references: [id], onDelete: SetNull)
+  users         User[]         @relation("UserBranch")
+  deliveryWards DeliveryWard[]
+  salesOrders   SalesOrder[]
+
+  @@index([tenantId])
+  @@index([managerId])
+}
+
+/// Tenant delivery pricing settings (outside area / zila charges).
+model DeliverySettings {
+  id                     String   @id @default(cuid())
+  tenantId               String   @unique
+  /// Same upazila but not in a listed free/local ward (fallback).
+  outsideAreaChargeBdt   Decimal  @default(80) @db.Decimal(12, 2)
+  /// Same district (zila), different upazila.
+  sameDistrictChargeBdt  Decimal  @default(120) @db.Decimal(12, 2)
+  /// Other district (zila) delivery charge.
+  otherDistrictChargeBdt Decimal  @default(250) @db.Decimal(12, 2)
+  /// Default ward count when auto-seeding company upazila.
+  defaultWardCount       Int      @default(15)
+  /// How many nearest wards are free by default when seeding.
+  freeWardCount          Int      @default(5)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  company Company @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+/// Ward / local area for delivery pricing under a company upazila.
+model DeliveryWard {
+  id              String   @id @default(cuid())
+  tenantId        String
+  /// Null = company-wide; set for per-branch free-delivery zones.
+  branchId        String?
+  districtId      String?
+  upazilaId       String?
+  name            String
+  nameBn          String?
+  sortOrder       Int      @default(0)
+  /// Nearest wards can offer free delivery.
+  freeDelivery    Boolean  @default(false)
+  /// Flat base charge when not free (BDT).
+  baseChargeBdt   Decimal  @default(0) @db.Decimal(12, 2)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company  Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch   Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  district BdDistrict? @relation(fields: [districtId], references: [id], onDelete: SetNull)
+  upazila  BdUpazila?  @relation(fields: [upazilaId], references: [id], onDelete: SetNull)
+  buyers   Buyer[]
+  orders   SalesOrder[]
+
+  @@index([tenantId])
+  @@index([tenantId, branchId])
+  @@index([tenantId, upazilaId])
+  @@index([branchId])
+  @@index([districtId])
+  @@index([upazilaId])
+}
+
+/// Per-category delivery rate (e.g. drinking water charged by qty/weight).
+model DeliveryCategoryRate {
+  id               String   @id @default(cuid())
+  tenantId         String
+  /// MINERAL | DRINKING | DISTILLED | BATTERY | OTHER | * (fallback)
+  category         String
+  /// Charge added per unit qty when ward is not free.
+  chargePerUnitBdt Decimal  @default(0) @db.Decimal(12, 2)
+  note             String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  company Company @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, category])
+  @@index([tenantId])
+}
+
+model Coupon {
+  id             String    @id @default(cuid())
+  tenantId       String
+  code           String
+  /// PERCENT | FIXED — applied to merchandise subtotal.
+  discountType   String
+  discountValue  Decimal   @db.Decimal(12, 2)
+  minOrderBdt    Decimal?  @db.Decimal(12, 2)
+  maxDiscountBdt Decimal?  @db.Decimal(12, 2)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  usageLimit     Int?
+  usedCount      Int       @default(0)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  company Company      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders  SalesOrder[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+model User {
+  id           String    @id @default(cuid())
+  /// Null only for SUPER_ADMIN (SaaS platform owner).
+  tenantId     String?
+  branchId     String?
+  email        String    @unique
+  phone        String?
+  name         String
+  passwordHash String
+  roleId       String
+  /// Staff HR fields (managers / employees).
+  employeeCode String?
+  designation  String?
+  joiningDate  DateTime?
+  salaryBdt    Decimal?  @db.Decimal(12, 2)
+  imageUrl      String?
+  imagePublicId String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  createdBy    String?
+  updatedBy    String?
+
+  company         Company?         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch          Branch?          @relation("UserBranch", fields: [branchId], references: [id], onDelete: SetNull)
+  managedBranches Branch[]         @relation("BranchManager")
+  role            RoleLookup       @relation(fields: [roleId], references: [id])
+  refreshTokens   RefreshToken[]
+  salaryPayments  SalaryPayment[]
+
+  @@unique([tenantId, employeeCode])
+  @@index([tenantId])
+  @@index([branchId])
+  @@index([roleId])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Buyer {
+  id          String   @id @default(cuid())
+  tenantId    String
+  shopName    String
+  /// Contact person name (client name).
+  contactName String?
+  phone       String
+  address     String?
+  wardId      String?
+  locale      String   @default("bn")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ward        DeliveryWard? @relation(fields: [wardId], references: [id], onDelete: SetNull)
+  salesOrders SalesOrder[]
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+  @@index([wardId])
+}
+
+/// Tenant raw-material / supply catalog (bottle, cap, acid, RO water…).
+model Material {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  nameBn    String?
+  /// Optional short code unique per tenant (e.g. BT500).
+  code      String?
+  kindId    String
+  unitId    String
+  minStock  Decimal? @db.Decimal(14, 3)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+  updatedBy String?
+
+  company   Company          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kind      SupplyKindLookup   @relation(fields: [kindId], references: [id])
+  unit      UnitLookup         @relation(fields: [unitId], references: [id])
+  purchases MaterialPurchase[]
+  bomLines  ProductBomLine[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([tenantId, isActive])
+  @@index([kindId])
+  @@index([unitId])
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  nameBn      String?
+  sku         String
+  category    String   @default("DRINKING")
+  /// BOTTLE | SACHET | JAR | BOX | OTHER
+  packType    String   @default("BOTTLE")
+  /// When packType=BOX: single sachet/bottle/jar SKU inside the outer pack.
+  innerProductId String?
+  /// When packType=BOX: how many inner units in one sold box (12, 24, 48…).
+  unitsPerPack   Int?
+  unitId      String
+  /// How much one item is (e.g. 5 with unit Liter = 5L bottle). Free 100ml–20L+.
+  size        Decimal? @db.Decimal(12, 3)
+  priceBdt    Decimal  @db.Decimal(12, 2)
+  stockQty    Decimal  @default(0) @db.Decimal(12, 2)
+  minStock    Decimal  @default(0) @db.Decimal(12, 2)
+  description String?
+  /// Free-text recipe / BOM placeholder until material master (bottle, cap, label…).
+  materialsNote String?
+  imageUrl      String?
+  imagePublicId String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String?
+  updatedBy   String?
+
+  company  Company           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  unit     UnitLookup        @relation(fields: [unitId], references: [id])
+  innerProduct Product?      @relation("ProductOuterPack", fields: [innerProductId], references: [id], onDelete: SetNull)
+  outerPacks   Product[]     @relation("ProductOuterPack")
+  bomLines     ProductBomLine[]
+  batches  ProductionBatch[]
+  orderLines OrderLine[]
+  units    ProductUnit[]
+
+  @@unique([tenantId, sku])
+  @@index([tenantId])
+  @@index([tenantId, isActive])
+  @@index([unitId])
+  @@index([innerProductId])
+}
+
+/// Material qty consumed per 1 sold unit of a product (sachet, bottle, or box).
+model ProductBomLine {
+  id         String   @id @default(cuid())
+  tenantId   String
+  productId  String
+  materialId String
+  qty        Decimal  @db.Decimal(14, 6)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  material Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+
+  @@unique([productId, materialId])
+  @@index([productId])
+  @@index([materialId])
+  @@index([tenantId])
+}
+
+/// Order intake channel (phone / online / walk-in / counter).
+model OrderSourceLookup {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  nameEn    String
+  nameBn    String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders SalesOrder[]
+}
+
+model OrderStatusLookup {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  nameEn    String
+  nameBn    String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders SalesOrder[]
+}
+
+/// One production run of a SKU — FEFO sell allocates from here.
+model ProductionBatch {
+  id             String    @id @default(cuid())
+  tenantId       String
+  productId      String
+  batchCode      String
+  manufacturedAt DateTime
+  expiresAt      DateTime?
+  qtyProduced    Decimal   @db.Decimal(12, 2)
+  qtyRemaining   Decimal   @db.Decimal(12, 2)
+  /// Inclusive serial range for unique unit tags (e.g. 1–100, then 101–500).
+  serialStart    Int?
+  serialEnd      Int?
+  note           String?
+  isActive       Boolean   @default(true)
+  /// Set when unused production stock is fully reversed.
+  reversedAt     DateTime?
+  reverseReason  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdBy      String?
+
+  company    Company     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderLines OrderLine[]
+  units      ProductUnit[]
+
+  @@unique([tenantId, batchCode])
+  @@index([tenantId, productId])
+  @@index([productId, expiresAt])
+}
+
+/// One physical bottle / item with a unique QR tag.
+model ProductUnit {
+  id          String    @id @default(cuid())
+  tenantId    String
+  productId   String
+  batchId     String
+  /// Running number per product (1, 2, … across batches).
+  serialNo    Int
+  /// Public QR code, unique per company.
+  serialCode  String
+  /// IN_STOCK | SOLD | VOID | DEFECT
+  status      String    @default("IN_STOCK")
+  orderLineId String?
+  soldAt      DateTime?
+  defectReason String?
+  defectAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  company Company         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  batch   ProductionBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  orderLine OrderLine?    @relation(fields: [orderLineId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, serialCode])
+  @@unique([tenantId, productId, serialNo])
+  @@index([tenantId, batchId, status])
+  @@index([orderLineId])
+  @@index([status])
+}
+
+/// B2B / counter / online sales order.
+model SalesOrder {
+  id             String    @id @default(cuid())
+  tenantId       String
+  branchId       String?
+  /// Stable printable / QR-searchable invoice code (unique per company).
+  invoiceCode    String
+  buyerId        String?
+  buyerName      String?
+  /// Online checkout contact fields.
+  clientName     String?
+  shopName       String?
+  phone          String?
+  address        String?
+  districtId     String?
+  upazilaId      String?
+  wardId         String?
+  couponId       String?
+  couponCode     String?
+  subtotalBdt    Decimal   @default(0) @db.Decimal(14, 2)
+  deliveryBdt    Decimal   @default(0) @db.Decimal(12, 2)
+  discountBdt    Decimal   @default(0) @db.Decimal(12, 2)
+  sourceId       String
+  statusId       String
+  totalBdt       Decimal   @default(0) @db.Decimal(14, 2)
+  note           String?
+  orderedAt      DateTime  @default(now())
+  confirmedAt    DateTime?
+  saleId         String?   @unique
+  reverseReason  String?
+  reversedAt     DateTime?
+  reversedBy     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  createdBy      String?
+  updatedBy      String?
+
+  company  Company           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch   Branch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  buyer    Buyer?            @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  district BdDistrict?       @relation(fields: [districtId], references: [id], onDelete: SetNull)
+  upazila  BdUpazila?        @relation(fields: [upazilaId], references: [id], onDelete: SetNull)
+  ward     DeliveryWard?     @relation(fields: [wardId], references: [id], onDelete: SetNull)
+  coupon  Coupon?           @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  source  OrderSourceLookup @relation(fields: [sourceId], references: [id])
+  status  OrderStatusLookup @relation(fields: [statusId], references: [id])
+  sale    Sale?             @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  lines   OrderLine[]
+
+  @@unique([tenantId, invoiceCode])
+  @@index([tenantId, orderedAt])
+  @@index([statusId])
+  @@index([sourceId])
+  @@index([invoiceCode])
+  @@index([wardId])
+  @@index([branchId])
+  @@index([districtId])
+  @@index([upazilaId])
+}
+
+model OrderLine {
+  id             String  @id @default(cuid())
+  orderId        String
+  productId      String
+  /// Null while online order is pending (allocated on accept).
+  batchId        String?
+  qty            Decimal @db.Decimal(12, 2)
+  /// Catalog list price at the moment of sale (reference).
+  catalogPriceBdt Decimal @db.Decimal(12, 2)
+  /// Actual unit price charged (may differ from catalog).
+  unitPriceBdt   Decimal @db.Decimal(12, 2)
+  lineTotalBdt   Decimal @db.Decimal(14, 2)
+
+  order   SalesOrder       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product          @relation(fields: [productId], references: [id])
+  batch   ProductionBatch? @relation(fields: [batchId], references: [id])
+  units   ProductUnit[]
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([batchId])
+}
+
+/// Printable product tag layout — size + which fields appear.
+model TagTemplate {
+  id               String  @id @default(cuid())
+  tenantId         String
+  name             String
+  widthMm          Int     @default(50)
+  heightMm         Int     @default(30)
+  showSku          Boolean @default(true)
+  showPrice        Boolean @default(true)
+  showDescription  Boolean @default(true)
+  showMfgDate      Boolean @default(true)
+  showExpDate      Boolean @default(true)
+  showBatch        Boolean @default(true)
+  showQr           Boolean @default(true)
+  showCompany      Boolean @default(true)
+  /// Extra text always printed on the tag (independent of catalog).
+  tagDescription   String?
+  isDefault        Boolean @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  company Company @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+/// Wallet transaction kinds (credit = money in, debit = money out).
+model WalletTxnTypeLookup {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  nameEn      String
+  nameBn      String
+  /// credit | debit
+  direction   String
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transactions CashTransaction[]
+}
+
+/// Company cash drawer / wallet — one per tenant.
+model CashWallet {
+  id         String   @id @default(cuid())
+  tenantId   String   @unique
+  balanceBdt Decimal  @default(0) @db.Decimal(14, 2)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  company      Company           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  transactions CashTransaction[]
+}
+
+/// Full cash ledger — every credit (sale) and debit (materials, salary, etc.).
+model CashTransaction {
+  id           String   @id @default(cuid())
+  tenantId     String
+  walletId     String
+  typeId       String
+  amountBdt    Decimal  @db.Decimal(14, 2)
+  balanceAfter Decimal  @db.Decimal(14, 2)
+  note         String?
+  reference    String?
+  occurredAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  createdBy    String?
+  updatedBy    String?
+
+  company           Company              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  wallet            CashWallet           @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  type              WalletTxnTypeLookup  @relation(fields: [typeId], references: [id])
+  salaryPayment      SalaryPayment?       @relation("SalaryPayTxn")
+  salaryReverseOf    SalaryPayment?       @relation("SalaryReverseTxn")
+  sale               Sale?
+  materialPurchase   MaterialPurchase?    @relation("MaterialBuyTxn")
+  materialReverseOf  MaterialPurchase?    @relation("MaterialReverseTxn")
+  cashExpense        CashExpense?
+
+  @@index([tenantId, occurredAt])
+  @@index([walletId])
+  @@index([typeId])
+}
+
+model SalaryPayment {
+  id                        String    @id @default(cuid())
+  tenantId                  String
+  userId                    String
+  amountBdt                 Decimal   @db.Decimal(12, 2)
+  periodLabel               String?
+  note                      String?
+  paidAt                    DateTime  @default(now())
+  cashTransactionId         String    @unique
+  reverseReason             String?
+  reversedAt                DateTime?
+  reversedBy                String?
+  reverseCashTransactionId  String?   @unique
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  createdBy                 String?
+
+  company                Company          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user                   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cashTransaction        CashTransaction  @relation("SalaryPayTxn", fields: [cashTransactionId], references: [id], onDelete: Cascade)
+  reverseCashTransaction CashTransaction? @relation("SalaryReverseTxn", fields: [reverseCashTransactionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, paidAt])
+  @@index([userId])
+}
+
+/// Sale cash-in — credits the company wallet after sell.
+model Sale {
+  id                String   @id @default(cuid())
+  tenantId          String
+  buyerId           String?
+  buyerName         String?
+  amountBdt         Decimal  @db.Decimal(14, 2)
+  note              String?
+  soldAt            DateTime @default(now())
+  cashTransactionId String   @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String?
+
+  company         Company         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cashTransaction CashTransaction @relation(fields: [cashTransactionId], references: [id], onDelete: Cascade)
+  salesOrder      SalesOrder?
+
+  @@index([tenantId, soldAt])
+}
+
+/// Material / supply purchase — debits the company wallet (goods + trip costs).
+model MaterialPurchase {
+  id                       String    @id @default(cuid())
+  tenantId                 String
+  supplierName             String?
+  supplierPhone            String?
+  materialName             String
+  materialId               String?
+  kindId                   String
+  unitId                   String
+  /// How many units bought (L, pcs, kg…).
+  qty                      Decimal   @db.Decimal(14, 3)
+  /// Supplier invoice for the goods only.
+  goodsAmountBdt           Decimal   @db.Decimal(14, 2)
+  /// Trip extras — used for landed cost / consumer pricing.
+  transportBdt             Decimal   @default(0) @db.Decimal(14, 2)
+  driverBdt                Decimal   @default(0) @db.Decimal(14, 2)
+  travelBdt                Decimal   @default(0) @db.Decimal(14, 2)
+  /// Total cash debit = goods + transport + driver + travel.
+  amountBdt                Decimal   @db.Decimal(14, 2)
+  note                     String?
+  purchasedAt              DateTime  @default(now())
+  cashTransactionId        String    @unique
+  reverseReason            String?
+  reversedAt               DateTime?
+  reversedBy               String?
+  reverseCashTransactionId String?   @unique
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  createdBy                String?
+  updatedBy                String?
+
+  company                Company          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  catalogMaterial        Material?        @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  kind                   SupplyKindLookup @relation(fields: [kindId], references: [id])
+  unit                   UnitLookup       @relation(fields: [unitId], references: [id])
+  cashTransaction        CashTransaction  @relation("MaterialBuyTxn", fields: [cashTransactionId], references: [id], onDelete: Cascade)
+  reverseCashTransaction CashTransaction? @relation("MaterialReverseTxn", fields: [reverseCashTransactionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, purchasedAt])
+  @@index([kindId])
+  @@index([unitId])
+  @@index([materialId])
+}
+
+/// What kind of supply was bought (bottle, acid, raw water…).
+model SupplyKindLookup {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  nameEn      String
+  nameBn      String
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  purchases MaterialPurchase[]
+  materials Material[]
+}
+
+/// Expense categories for utility and other cash-out (not counter sales).
+model ExpenseCategoryLookup {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  nameEn      String
+  nameBn      String
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  expenses CashExpense[]
+}
+
+/// Utility / family / lawsuit / gesture / other — auto-debits cash drawer.
+model CashExpense {
+  id                String   @id @default(cuid())
+  tenantId          String
+  categoryId        String
+  title             String
+  amountBdt         Decimal  @db.Decimal(14, 2)
+  contactName       String?
+  contactPhone      String?
+  note              String?
+  occurredAt        DateTime @default(now())
+  cashTransactionId String   @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String?
+
+  company         Company               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category        ExpenseCategoryLookup @relation(fields: [categoryId], references: [id])
+  cashTransaction CashTransaction       @relation(fields: [cashTransactionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, occurredAt])
+  @@index([categoryId])
+}
