@@ -4,6 +4,7 @@ export type ProductPreset = {
   name: string;
   nameBn: string;
   category:
+    | "MINERAL"
     | "DRINKING"
     | "DISTILLED"
     | "BATTERY"
@@ -21,6 +22,15 @@ export const PRODUCT_PRESETS: ProductPreset[] = [
     id: "mw-1l",
     name: "1L Mineral Water",
     nameBn: "মিনারেল ওয়াটার ১ লিটার",
+    category: "MINERAL",
+    packType: "BOTTLE",
+    size: 1,
+    unitCode: "LITER",
+  },
+  {
+    id: "dr-1l",
+    name: "1L Drinking Water",
+    nameBn: "ড্রিংকিং ওয়াটার ১ লিটার",
     category: "DRINKING",
     packType: "BOTTLE",
     size: 1,

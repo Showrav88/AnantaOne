@@ -164,7 +164,8 @@ export async function seedWardsForCompanyLocation(opts: {
   }
 
   const rateDefaults = [
-    { category: "DRINKING", chargePerUnitBdt: 5, note: "Per bottle/jar by weight" },
+    { category: "MINERAL", chargePerUnitBdt: 5, note: "Mineral water delivery" },
+    { category: "DRINKING", chargePerUnitBdt: 5, note: "Drinking water delivery" },
     { category: "DISTILLED", chargePerUnitBdt: 8, note: "Distilled water delivery" },
     { category: "BATTERY", chargePerUnitBdt: 10, note: "Battery water delivery" },
     { category: "OTHER", chargePerUnitBdt: 6, note: "Fallback" },

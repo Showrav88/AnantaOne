@@ -32,14 +32,14 @@ export function normalizeSkuPart(sku: string, max = 5): string {
 
 /**
  * Two-letter prefix from product type words:
- * Distilled Water → DW, Mineral Water → MW, Battery Water → BW
- * (Category code DRINKING = Mineral Water in the UI.)
+ * Mineral Water → MW, Drinking Water → PK, Distilled → DW, Battery → BW
  */
 export function categorySkuPrefix(category: string): string {
   switch (category.toUpperCase()) {
-    case "DRINKING":
     case "MINERAL":
       return "MW";
+    case "DRINKING":
+      return "PK";
     case "DISTILLED":
       return "DW";
     case "BATTERY":

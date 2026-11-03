@@ -357,6 +357,7 @@ ownerRouter.get("/products/stats", async (req, res) => {
 });
 
 const PRODUCT_CATEGORIES = [
+  "MINERAL",
   "DRINKING",
   "DISTILLED",
   "BATTERY",
