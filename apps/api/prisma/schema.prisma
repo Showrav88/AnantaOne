@@ -256,7 +256,7 @@ model DeliveryWard {
 model DeliveryCategoryRate {
   id               String   @id @default(cuid())
   tenantId         String
-  /// DRINKING | DISTILLED | BATTERY | OTHER | * (fallback)
+  /// MINERAL | DRINKING | DISTILLED | BATTERY | OTHER | * (fallback)
   category         String
   /// Charge added per unit qty when ward is not free.
   chargePerUnitBdt Decimal  @default(0) @db.Decimal(12, 2)

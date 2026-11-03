@@ -6,13 +6,10 @@ type Tx = Prisma.TransactionClient | typeof prisma;
 
 export function normalizeCategory(category: string | null | undefined) {
   const raw = (category ?? "OTHER").trim().toUpperCase();
-  if (
-    raw === "WATER" ||
-    raw === "DRINKING_WATER" ||
-    raw === "DRINKING" ||
-    raw === "MINERAL" ||
-    raw === "MINERAL_WATER"
-  ) {
+  if (raw === "MINERAL" || raw === "MINERAL_WATER") {
+    return "MINERAL";
+  }
+  if (raw === "WATER" || raw === "DRINKING_WATER" || raw === "DRINKING") {
     return "DRINKING";
   }
   if (raw === "DISTILLED" || raw === "RO" || raw === "R/O") return "DISTILLED";

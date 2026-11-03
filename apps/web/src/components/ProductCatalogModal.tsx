@@ -79,6 +79,7 @@ export function ProductCatalogModal({
 
   const isCustom = form.presetId === "custom";
   const catLabels = {
+    catMineral: t.owner.catMineral,
     catDrinking: t.owner.catDrinking,
     catDistilled: t.owner.catDistilled,
     catBattery: t.owner.catBattery,

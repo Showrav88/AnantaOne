@@ -1,5 +1,6 @@
 /** Product catalog categories — SKU prefix comes from shortCodes.categorySkuPrefix */
 export const PRODUCT_CATEGORIES = [
+  "MINERAL",
   "DRINKING",
   "DISTILLED",
   "BATTERY",
@@ -18,6 +19,7 @@ export type PackType = (typeof PACK_TYPES)[number];
 export function categoryLabel(
   code: string,
   t: {
+    catMineral: string;
     catDrinking: string;
     catDistilled: string;
     catBattery: string;
@@ -28,6 +30,8 @@ export function categoryLabel(
   },
 ): string {
   switch (code) {
+    case "MINERAL":
+      return t.catMineral;
     case "DRINKING":
       return t.catDrinking;
     case "DISTILLED":

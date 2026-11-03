@@ -5,6 +5,10 @@ import {
   useConfirmAction,
 } from "../../components/ConfirmActionDialog";
 import { api } from "../../lib/api";
+import {
+  PRODUCT_CATEGORIES,
+  categoryLabel as productCategoryLabel,
+} from "../../lib/productCatalog";
 import { getStoredUser } from "../../lib/session";
 
 type Props = { locale: LocaleCode };
@@ -321,12 +325,19 @@ export function OwnerDeliveryPage({ locale }: Props) {
     }
   }
 
+  const catLabels = {
+    catMineral: t.owner.catMineral,
+    catDrinking: t.owner.catDrinking,
+    catDistilled: t.owner.catDistilled,
+    catBattery: t.owner.catBattery,
+    catHandwash: t.owner.catHandwash,
+    catDishwash: t.owner.catDishwash,
+    catCleaner: t.owner.catCleaner,
+    catOther: t.owner.catOther,
+  };
+
   function categoryLabel(code: string) {
-    if (code === "DRINKING") return t.owner.catDrinking;
-    if (code === "DISTILLED") return t.owner.catDistilled;
-    if (code === "BATTERY") return t.owner.catBattery;
-    if (code === "OTHER") return t.owner.catOther;
-    return code;
+    return productCategoryLabel(code, catLabels);
   }
 
   return (
@@ -529,10 +540,11 @@ export function OwnerDeliveryPage({ locale }: Props) {
                   setRateForm({ ...rateForm, category: e.target.value })
                 }
               >
-                <option value="DRINKING">{t.owner.catDrinking}</option>
-                <option value="DISTILLED">{t.owner.catDistilled}</option>
-                <option value="BATTERY">{t.owner.catBattery}</option>
-                <option value="OTHER">{t.owner.catOther}</option>
+                {PRODUCT_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {categoryLabel(c)}
+                  </option>
+                ))}
               </select>
             </label>
             <label>

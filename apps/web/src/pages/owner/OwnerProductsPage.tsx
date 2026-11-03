@@ -59,6 +59,7 @@ export function OwnerProductsPage({ locale }: Props) {
   );
 
   const catLabels = {
+    catMineral: t.owner.catMineral,
     catDrinking: t.owner.catDrinking,
     catDistilled: t.owner.catDistilled,
     catBattery: t.owner.catBattery,
